@@ -43,7 +43,9 @@ struct WelcomeView: View {
                 .font(.largeTitle)
                 .bold()
 
-            Text("Corridor Key Toolbox is installed.\nYou can find Corridor Key Toolbox in the Effects Browser.")
+            (Text("You can find ")
+                + Text("Corridor Key Toolbox").bold()
+                + Text(" in Final Cut Pro's Effects Browser."))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 40)

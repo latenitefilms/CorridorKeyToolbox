@@ -12,7 +12,7 @@
 		221345E42F98BC6800CF734C /* corridorkey_mlx_bridge_768.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 221345DD2F98BC6800CF734C /* corridorkey_mlx_bridge_768.mlxfn */; };
 		221345E52F98BC6800CF734C /* corridorkey_mlx_bridge_1024.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 221345DE2F98BC6800CF734C /* corridorkey_mlx_bridge_1024.mlxfn */; };
 		221345E62F98BC6800CF734C /* corridorkey_mlx_bridge_2048.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 221345E02F98BC6800CF734C /* corridorkey_mlx_bridge_2048.mlxfn */; };
-		22D097722F986F5E0096E749 /* Template Icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 22D097712F986F5E0096E749 /* Template Icon.icon */; };
+		221345E82F99948900CF734C /* VFX Toolbox.icon in Resources */ = {isa = PBXBuildFile; fileRef = 221345E72F99948900CF734C /* VFX Toolbox.icon */; };
 		22D097FF2F9887BD0096E749 /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = 22D097FE2F9887BD0096E749 /* Credits.rtf */; };
 		22D0980E2F988FB70096E749 /* Motion Template in Resources */ = {isa = PBXBuildFile; fileRef = 22D0980D2F988FB70096E749 /* Motion Template */; };
 		CK0100000000000000000001 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000001 /* main.swift */; };
@@ -100,7 +100,7 @@
 		221345DE2F98BC6800CF734C /* corridorkey_mlx_bridge_1024.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_1024.mlxfn; sourceTree = "<group>"; };
 		221345DF2F98BC6800CF734C /* corridorkey_mlx_bridge_1536.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_1536.mlxfn; sourceTree = "<group>"; };
 		221345E02F98BC6800CF734C /* corridorkey_mlx_bridge_2048.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_2048.mlxfn; sourceTree = "<group>"; };
-		22D097712F986F5E0096E749 /* Template Icon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; name = "Template Icon.icon"; path = "CorridorKeyToolbox/WrapperApp/Template Icon.icon"; sourceTree = "<group>"; };
+		221345E72F99948900CF734C /* VFX Toolbox.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "VFX Toolbox.icon"; sourceTree = "<group>"; };
 		22D097FE2F9887BD0096E749 /* Credits.rtf */ = {isa = PBXFileReference; lastKnownFileType = text.rtf; name = Credits.rtf; path = CorridorKeyToolbox/WrapperApp/Credits.rtf; sourceTree = "<group>"; };
 		22D0980D2F988FB70096E749 /* Motion Template */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "Motion Template"; path = "CorridorKeyToolbox/WrapperApp/Resources/Motion Template"; sourceTree = "<group>"; };
 		CK0200000000000000000001 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = main.swift; path = CorridorKeyToolbox/Plugin/main.swift; sourceTree = "<group>"; };
@@ -262,7 +262,7 @@
 			children = (
 				221345E12F98BC6800CF734C /* MLX Models */,
 				22D097FE2F9887BD0096E749 /* Credits.rtf */,
-				22D097712F986F5E0096E749 /* Template Icon.icon */,
+				221345E72F99948900CF734C /* VFX Toolbox.icon */,
 				CK0200000000000000000015 /* CorridorKeyToolboxApp.swift */,
 				CK0200000000000000000016 /* WelcomeView.swift */,
 				CK020000000000000000002A /* MotionTemplateInstaller.swift */,
@@ -446,10 +446,10 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				22D097722F986F5E0096E749 /* Template Icon.icon in Resources */,
 				22D097FF2F9887BD0096E749 /* Credits.rtf in Resources */,
 				22D0980E2F988FB70096E749 /* Motion Template in Resources */,
 				CK0100000000000000000017 /* InfoPlist.strings in Resources */,
+				221345E82F99948900CF734C /* VFX Toolbox.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -678,7 +678,7 @@
 			baseConfigurationReference = CK0200000000000000000026 /* Shared.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_APPICON_NAME = "Template Icon";
+				ASSETCATALOG_COMPILER_APPICON_NAME = "VFX Toolbox";
 				CODE_SIGN_ENTITLEMENTS = CorridorKeyToolbox/WrapperApp/WrapperApp.entitlements;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
@@ -709,7 +709,7 @@
 			baseConfigurationReference = CK0200000000000000000026 /* Shared.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_APPICON_NAME = "Template Icon";
+				ASSETCATALOG_COMPILER_APPICON_NAME = "VFX Toolbox";
 				CODE_SIGN_ENTITLEMENTS = CorridorKeyToolbox/WrapperApp/WrapperApp.entitlements;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
