@@ -15,42 +15,42 @@
 import PackageDescription
 
 let package = Package(
-    name: "CorridorKeyProLogic",
+    name: "CorridorKeyToolboxLogic",
     defaultLocalization: "en",
     platforms: [
         .macOS(.v15)
     ],
     products: [
         .library(
-            name: "CorridorKeyProLogic",
-            targets: ["CorridorKeyProLogic"]
+            name: "CorridorKeyToolboxLogic",
+            targets: ["CorridorKeyToolboxLogic"]
         )
     ],
     targets: [
         .target(
-            name: "CorridorKeyProLogic",
-            path: "CorridorKeyPro/Plugin",
+            name: "CorridorKeyToolboxLogic",
+            path: "CorridorKeyToolbox/Plugin",
             // Keep the FxPlug-dependent files, the Xcode-managed resources,
             // and the shaders out of the SPM build — they only compile inside
             // the Xcode target.
             exclude: [
                 "Info.plist",
-                "CorridorKeyPro.entitlements",
+                "CorridorKeyToolbox.entitlements",
                 "PluginLog.swift",
                 "main.swift",
-                "CorridorKeyProPlugIn.swift",
-                "CorridorKeyProPlugIn+Properties.swift",
-                "CorridorKeyProPlugIn+Render.swift",
-                "CorridorKeyProPlugIn+RenderRects.swift",
-                "CorridorKeyProPlugIn+PluginState.swift",
-                "CorridorKeyProPlugIn+FxAnalyzer.swift",
-                "Parameters/CorridorKeyProPlugIn+Parameters.swift",
+                "CorridorKeyToolboxPlugIn.swift",
+                "CorridorKeyToolboxPlugIn+Properties.swift",
+                "CorridorKeyToolboxPlugIn+Render.swift",
+                "CorridorKeyToolboxPlugIn+RenderRects.swift",
+                "CorridorKeyToolboxPlugIn+PluginState.swift",
+                "CorridorKeyToolboxPlugIn+FxAnalyzer.swift",
+                "Parameters/CorridorKeyToolboxPlugIn+Parameters.swift",
                 "Parameters/ParameterIdentifiers.swift",
                 "Inference/InferenceCoordinator.swift",
                 "Inference/KeyingInferenceEngine.swift",
                 "Inference/MLXKeyingEngine.swift",
                 "Inference/RoughMatteKeyingEngine.swift",
-                "Inspector/CorridorKeyProPlugIn+CustomViews.swift",
+                "Inspector/CorridorKeyToolboxPlugIn+CustomViews.swift",
                 "Inspector/CorridorKeyInspectorBridge.swift",
                 "Inspector/CorridorKeyHeaderView.swift",
                 "Render",
@@ -71,9 +71,9 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "CorridorKeyProLogicTests",
-            dependencies: ["CorridorKeyProLogic"],
-            path: "Tests/CorridorKeyProLogicTests",
+            name: "CorridorKeyToolboxLogicTests",
+            dependencies: ["CorridorKeyToolboxLogic"],
+            path: "Tests/CorridorKeyToolboxLogicTests",
             swiftSettings: [
                 .swiftLanguageMode(.v6)
             ]

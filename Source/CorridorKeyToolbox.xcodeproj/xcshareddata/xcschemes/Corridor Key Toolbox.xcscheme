@@ -17,7 +17,7 @@
                BlueprintIdentifier = "CK0700000000000000000001"
                BuildableName = "Corridor Key Toolbox.app"
                BlueprintName = "Corridor Key Toolbox"
-               ReferencedContainer = "container:CorridorKeyPro.xcodeproj">
+               ReferencedContainer = "container:CorridorKeyToolbox.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
          <BuildActionEntry
@@ -31,7 +31,7 @@
                BlueprintIdentifier = "CK0700000000000000000002"
                BuildableName = "Corridor Key Toolbox Renderer.pluginkit"
                BlueprintName = "Corridor Key Toolbox Renderer"
-               ReferencedContainer = "container:CorridorKeyPro.xcodeproj">
+               ReferencedContainer = "container:CorridorKeyToolbox.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -61,7 +61,7 @@
             BlueprintIdentifier = "CK0700000000000000000001"
             BuildableName = "Corridor Key Toolbox.app"
             BlueprintName = "Corridor Key Toolbox"
-            ReferencedContainer = "container:CorridorKeyPro.xcodeproj">
+            ReferencedContainer = "container:CorridorKeyToolbox.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -78,7 +78,7 @@
             BlueprintIdentifier = "CK0700000000000000000001"
             BuildableName = "Corridor Key Toolbox.app"
             BlueprintName = "Corridor Key Toolbox"
-            ReferencedContainer = "container:CorridorKeyPro.xcodeproj">
+            ReferencedContainer = "container:CorridorKeyToolbox.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
