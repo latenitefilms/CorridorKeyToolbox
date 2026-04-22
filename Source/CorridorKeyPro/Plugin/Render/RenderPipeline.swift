@@ -46,6 +46,13 @@ final class RenderPipeline: @unchecked Sendable {
     private let deviceCache: MetalDeviceCache
     let inferenceCoordinator: InferenceCoordinator
 
+    /// Set after the first successful render so we can emit a one-shot log of
+    /// the tile origins FxPlug handed us — the only way to confirm whether
+    /// FCP surfaces TOP_LEFT or BOTTOM_LEFT when our plug-in is driven by a
+    /// Motion Template.
+    private let hasLoggedOrientationLock = NSLock()
+    private var hasLoggedOrientation = false
+
     init(
         deviceCache: MetalDeviceCache = .shared,
         inferenceCoordinator: InferenceCoordinator = InferenceCoordinator()
@@ -57,6 +64,10 @@ final class RenderPipeline: @unchecked Sendable {
     /// Executes the full render for one tile. Returns a `RenderReport` so the
     /// FxPlug layer can update the runtime status fields.
     func render(_ request: RenderRequest) throws -> RenderReport {
+        logOrientationIfNeeded(
+            sourceOrigin: request.sourceImage.imageOrigin,
+            destinationOrigin: request.destinationImage.imageOrigin
+        )
         let context = try makeDeviceContext(for: request)
         defer { context.entry.returnCommandQueue(context.commandQueue) }
 
@@ -421,6 +432,7 @@ final class RenderPipeline: @unchecked Sendable {
             matte: refinedMatte,
             destination: context.destinationTexture,
             destinationTile: request.destinationImage,
+            sourceOrigin: CorridorKeyImageOrigin(fxOrigin: request.sourceImage.imageOrigin),
             state: request.state,
             pixelFormat: context.pixelFormat,
             entry: context.entry,
@@ -445,6 +457,29 @@ final class RenderPipeline: @unchecked Sendable {
             return nil
         }
         return decoded
+    }
+
+    private func logOrientationIfNeeded(
+        sourceOrigin: FxImageOrigin,
+        destinationOrigin: FxImageOrigin
+    ) {
+        hasLoggedOrientationLock.lock()
+        let alreadyLogged = hasLoggedOrientation
+        if !alreadyLogged {
+            hasLoggedOrientation = true
+        }
+        hasLoggedOrientationLock.unlock()
+        guard !alreadyLogged else { return }
+
+        let sourceEnum = CorridorKeyImageOrigin(fxOrigin: sourceOrigin)
+        let destinationEnum = CorridorKeyImageOrigin(fxOrigin: destinationOrigin)
+        let flipV = OrientationHelper.composeNeedsVerticalFlip(
+            sourceOrigin: sourceEnum,
+            destinationOrigin: destinationEnum
+        )
+        PluginLog.notice(
+            "Orientation: source=\(OrientationHelper.describe(sourceEnum)) dest=\(OrientationHelper.describe(destinationEnum)) composeFlipV=\(flipV)."
+        )
     }
 
     private func uploadCachedAlpha(
@@ -847,6 +882,7 @@ final class RenderPipeline: @unchecked Sendable {
         matte: any MTLTexture,
         destination: any MTLTexture,
         destinationTile: FxImageTile,
+        sourceOrigin: CorridorKeyImageOrigin,
         state: PluginStateData,
         pixelFormat: MTLPixelFormat,
         entry: MetalDeviceCacheEntry,
@@ -870,14 +906,19 @@ final class RenderPipeline: @unchecked Sendable {
         let halfW = outputWidth * 0.5
         let halfH = outputHeight * 0.5
 
-        // Motion hands us IOSurfaces with bottom-left origin, Final Cut Pro
-        // with top-left. Because our intermediate textures (MLX output, etc.)
-        // are plain Metal allocations without an intrinsic origin, we key the
-        // compose quad's V coordinate off the destination tile so the final
-        // image lands the right way up in both hosts. Motion Templates loaded
-        // inside FCP surface the Motion convention, which is why this matters
-        // even when the user is "in" Final Cut Pro.
-        let flipV = destinationTile.imageOrigin == FxImageOrigin(kFxImageOrigin_BOTTOM_LEFT)
+        // Metal clip-space maps +y to row 0 of its render target — i.e. the
+        // top of the framebuffer in Metal's convention. Final Cut Pro reads
+        // back the resulting IOSurface bytes as y-up, so Metal's "top row"
+        // ends up displayed at the bottom of the host's viewer. We match
+        // FxBrightnessAnalysis' behaviour by rendering the non-MLX source
+        // (which is IOSurface-backed and inherits the host's orientation)
+        // 1:1 through the pipeline, and by flipping the V coordinate used
+        // for our Metal-native intermediates when the source tile reports
+        // TOP_LEFT origin — the Final Cut Pro default.
+        let flipV = OrientationHelper.composeNeedsVerticalFlip(
+            sourceOrigin: sourceOrigin,
+            destinationOrigin: CorridorKeyImageOrigin(fxOrigin: destinationTile.imageOrigin)
+        )
         let topV: Float = flipV ? 1 : 0
         let bottomV: Float = flipV ? 0 : 1
         var vertices: [CKVertex2D] = [
