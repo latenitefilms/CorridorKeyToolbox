@@ -453,8 +453,30 @@ final class RenderPipeline: @unchecked Sendable {
         ) else {
             throw MetalDeviceCacheError.textureAllocationFailed
         }
+        // The bundled `.mlxfn` bridges output their tensor in `y-up` layout
+        // — row 0 is the visual bottom, matching the CorridorKey-Runtime
+        // OFX convention the bridges were exported against. The rest of
+        // our pipeline (source IOSurface, compose shader) is `y-down`, so
+        // we flip rows here so `matteTexture.sample(uv)` lines up pixel-
+        // for-pixel with `sourceTexture.sample(uv)` in compose. Rough-matte
+        // (pass-through) doesn't touch this path, so the non-MLX render
+        // stays untouched.
+        var flipped = [Float](repeating: 0, count: width * height)
+        flipped.withUnsafeMutableBufferPointer { destPointer in
+            alpha.withUnsafeBufferPointer { srcPointer in
+                guard let destBase = destPointer.baseAddress,
+                      let srcBase = srcPointer.baseAddress
+                else { return }
+                for row in 0..<height {
+                    let srcRow = height - 1 - row
+                    destBase
+                        .advanced(by: row * width)
+                        .update(from: srcBase.advanced(by: srcRow * width), count: width)
+                }
+            }
+        }
         let bytesPerRow = width * MemoryLayout<Float>.size
-        alpha.withUnsafeBufferPointer { pointer in
+        flipped.withUnsafeBufferPointer { pointer in
             if let base = pointer.baseAddress {
                 texture.replace(
                     region: MTLRegionMake2D(0, 0, width, height),
