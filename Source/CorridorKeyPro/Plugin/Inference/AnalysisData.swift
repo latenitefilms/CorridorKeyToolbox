@@ -38,9 +38,12 @@ enum AnalysisDataKey {
 struct AnalysisData: Sendable {
 
     /// Bump when the stored layout changes in a way that's incompatible with
-    /// older plug-in versions. Readers treat mismatched versions as "no cache"
-    /// and fall back to live MLX.
-    static let currentSchemaVersion: Int = 1
+    /// older plug-in versions. Readers treat mismatched versions as "no
+    /// cache" so Analyse Clip has to rebuild. Bumped to `2` after the
+    /// MLX-write orientation fix — matte bytes captured under the old rule
+    /// would render upside-down against the corrected compose path, so we
+    /// force those clips to re-analyse cleanly.
+    static let currentSchemaVersion: Int = 2
 
     let schemaVersion: Int
     let frameDuration: CMTime
