@@ -26,6 +26,7 @@ extension CorridorKeyProPlugIn {
         }
 
         try addKeySetupGroup(create: create)
+        try addAnalysisGroup(create: create)
         try addInteriorDetailGroup(create: create)
         try addMatteGroup(create: create)
         try addEdgeAndSpillGroup(create: create)
@@ -33,6 +34,29 @@ extension CorridorKeyProPlugIn {
         try addPerformanceGroup(create: create)
         try addHelpGroup(create: create)
         PluginLog.notice("Parameters registered with Final Cut Pro.")
+    }
+
+    // MARK: - Custom parameter serialisation
+
+    /// Tells FxPlug which Foundation classes may appear inside our hidden
+    /// custom parameter so the host can safely decode it through
+    /// `NSSecureCoding`. The analysis dictionary is a tree of NSDictionary /
+    /// NSString / NSNumber / NSData nodes — listing any additional classes
+    /// here would open the plug-in to decoding attacker-supplied payloads.
+    func classes(forCustomParameterID parameterID: UInt32) -> Set<AnyHashable> {
+        switch parameterID {
+        case ParameterIdentifier.analysisData:
+            let classes: [AnyClass] = [
+                NSDictionary.self,
+                NSString.self,
+                NSNumber.self,
+                NSData.self
+            ]
+            let set = NSSet(array: classes)
+            return (set as? Set<AnyHashable>) ?? []
+        default:
+            return []
+        }
     }
 
     // MARK: - Groups
@@ -58,6 +82,41 @@ extension CorridorKeyProPlugIn {
             defaultValue: UInt32(QualityMode.automatic.rawValue),
             menuEntries: QualityMode.allCases.map(\.displayName),
             parameterFlags: CorridorKeyParameterFlags.default.fxFlags
+        )
+
+        create.endParameterSubGroup()
+    }
+
+    private func addAnalysisGroup(create: any FxParameterCreationAPI_v5) throws {
+        create.startParameterSubGroup(
+            "Analyse",
+            parameterID: ParameterIdentifier.analysisGroup,
+            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
+        )
+
+        create.addPushButton(
+            withName: "Analyse Clip",
+            parameterID: ParameterIdentifier.analyzeClip,
+            selector: #selector(handleAnalyzeClip),
+            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
+        )
+
+        create.addPushButton(
+            withName: "Reset Analysis",
+            parameterID: ParameterIdentifier.resetAnalysis,
+            selector: #selector(handleResetAnalysis),
+            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
+        )
+
+        let hiddenFlags = CorridorKeyParameterFlags(
+            rawValue: CorridorKeyParameterFlags.hidden.rawValue |
+                      CorridorKeyParameterFlags.notAnimatable.rawValue
+        )
+        create.addCustomParameter(
+            withName: "Analysis Data",
+            parameterID: ParameterIdentifier.analysisData,
+            defaultValue: NSDictionary(),
+            parameterFlags: hiddenFlags.fxFlags
         )
 
         create.endParameterSubGroup()
@@ -281,6 +340,18 @@ extension CorridorKeyProPlugIn {
     @objc func handleOpenUserGuide() {
         guard let url = URL(string: "https://corridordigital.com/corridor-key-pro") else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    /// Inspector button that kicks off a forward-analysis pass. The host
+    /// drives the per-frame callbacks defined in `CorridorKeyProPlugIn+FxAnalyzer`.
+    @objc func handleAnalyzeClip() {
+        startForwardAnalysisPass()
+    }
+
+    /// Inspector button that clears the persisted analysis cache so the next
+    /// "Analyse Clip" invocation starts from scratch.
+    @objc func handleResetAnalysis() {
+        clearAnalysisCache()
     }
 
     // MARK: - Parameter change notifications

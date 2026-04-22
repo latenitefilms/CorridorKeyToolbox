@@ -43,9 +43,13 @@ let package = Package(
                 "CorridorKeyProPlugIn+Render.swift",
                 "CorridorKeyProPlugIn+RenderRects.swift",
                 "CorridorKeyProPlugIn+PluginState.swift",
+                "CorridorKeyProPlugIn+FxAnalyzer.swift",
                 "Parameters/CorridorKeyProPlugIn+Parameters.swift",
                 "Parameters/ParameterIdentifiers.swift",
-                "Inference",
+                "Inference/InferenceCoordinator.swift",
+                "Inference/KeyingInferenceEngine.swift",
+                "Inference/MLXKeyingEngine.swift",
+                "Inference/RoughMatteKeyingEngine.swift",
                 "Render",
                 "Metal",
                 "Resources",
@@ -54,7 +58,9 @@ let package = Package(
             sources: [
                 "Parameters/ParameterEnumerations.swift",
                 "Parameters/PluginStateData.swift",
-                "PostProcess/ScreenColorEstimator.swift"
+                "PostProcess/ScreenColorEstimator.swift",
+                "Inference/AnalysisData.swift",
+                "Inference/MatteCodec.swift"
             ],
             swiftSettings: [
                 .swiftLanguageMode(.v6)

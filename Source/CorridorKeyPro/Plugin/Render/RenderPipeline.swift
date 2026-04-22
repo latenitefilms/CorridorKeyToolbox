@@ -57,40 +57,263 @@ final class RenderPipeline: @unchecked Sendable {
     /// Executes the full render for one tile. Returns a `RenderReport` so the
     /// FxPlug layer can update the runtime status fields.
     func render(_ request: RenderRequest) throws -> RenderReport {
+        let context = try makeDeviceContext(for: request)
+        defer { context.entry.returnCommandQueue(context.commandQueue) }
+
+        let screenTransform = ScreenColorEstimator.defaultTransform(for: request.state.screenColor)
+        let inferenceResolution = request.state.qualityMode.resolvedInferenceResolution(
+            forLongEdge: context.longEdge
+        )
+
+        // Fast path: FxAnalyzer already ran for this clip and the inference
+        // resolution matches the quality the user is asking for. Skip MLX
+        // entirely — the cache already holds a network-quality matte.
+        if let cached = decodedCachedMatte(from: request.state, expectedResolution: inferenceResolution) {
+            return try renderUsingCachedAlpha(
+                request: request,
+                context: context,
+                screenTransform: screenTransform,
+                inferenceResolution: inferenceResolution,
+                cachedAlpha: cached
+            )
+        }
+        return try renderUsingLiveInference(
+            request: request,
+            context: context,
+            screenTransform: screenTransform,
+            inferenceResolution: inferenceResolution
+        )
+    }
+
+    /// Runs pre-inference + MLX (no post-processing) and returns the raw alpha
+    /// matte on the CPU. Called by `FxAnalyzer.analyzeFrame` so the matte can
+    /// be compressed and stored in the custom parameter. This path never reads
+    /// from or writes to the per-frame cache — the custom parameter is the
+    /// persistent cache.
+    func extractAlphaMatteForAnalysis(
+        sourceTexture: any MTLTexture,
+        state: PluginStateData,
+        renderTime: CMTime,
+        device: any MTLDevice,
+        entry: MetalDeviceCacheEntry,
+        commandQueue: any MTLCommandQueue
+    ) throws -> (alpha: [Float], width: Int, height: Int, inferenceResolution: Int) {
+        let screenTransform = ScreenColorEstimator.defaultTransform(for: state.screenColor)
+        let longEdge = max(sourceTexture.width, sourceTexture.height)
+        let inferenceResolution = state.qualityMode.resolvedInferenceResolution(forLongEdge: longEdge)
+
+        let pre = try runPreInference(
+            sourceTexture: sourceTexture,
+            hintTile: nil,
+            device: device,
+            entry: entry,
+            commandQueue: commandQueue,
+            screenTransform: screenTransform,
+            inferenceResolution: inferenceResolution
+        )
+
+        let cacheKey = InferenceCacheKey(
+            frameTime: renderTime,
+            screenColorRaw: state.screenColor.rawValue,
+            inferenceResolution: inferenceResolution,
+            cacheEntry: entry
+        )
+        let inferenceOutput = try inferenceCoordinator.runInference(
+            request: KeyingInferenceRequest(
+                normalisedInputTexture: pre.normalisedInput,
+                rawSourceTexture: pre.rawSourceAtInferenceResolution,
+                inferenceResolution: inferenceResolution
+            ),
+            cacheEntry: entry,
+            cacheKey: cacheKey
+        )
+
+        let width = inferenceOutput.alphaTexture.width
+        let height = inferenceOutput.alphaTexture.height
+        var alpha = [Float](repeating: 0, count: width * height)
+        let bytesPerRow = width * MemoryLayout<Float>.size
+        alpha.withUnsafeMutableBufferPointer { pointer in
+            if let base = pointer.baseAddress {
+                inferenceOutput.alphaTexture.getBytes(
+                    base,
+                    bytesPerRow: bytesPerRow,
+                    from: MTLRegionMake2D(0, 0, width, height),
+                    mipmapLevel: 0
+                )
+            }
+        }
+        return (alpha, width, height, inferenceResolution)
+    }
+
+    // MARK: - Render sub-paths
+
+    private struct DeviceContext {
+        let device: any MTLDevice
+        let entry: MetalDeviceCacheEntry
+        let commandQueue: any MTLCommandQueue
+        let sourceTexture: any MTLTexture
+        let destinationTexture: any MTLTexture
+        let pixelFormat: MTLPixelFormat
+        let sourceWidth: Int
+        let sourceHeight: Int
+        let longEdge: Int
+    }
+
+    private struct PreInferenceArtifacts {
+        let rotatedSource: any MTLTexture
+        let normalisedInput: any MTLTexture
+        let rawSourceAtInferenceResolution: any MTLTexture
+    }
+
+    private func makeDeviceContext(for request: RenderRequest) throws -> DeviceContext {
         let destinationTile = request.destinationImage
         let sourceTile = request.sourceImage
-
         let pixelFormat = MetalDeviceCache.metalPixelFormat(for: destinationTile)
         guard let device = deviceCache.device(forRegistryID: destinationTile.deviceRegistryID) else {
             throw MetalDeviceCacheError.unknownDevice(destinationTile.deviceRegistryID)
         }
         let entry = try deviceCache.entry(for: device)
-
         guard let commandQueue = entry.borrowCommandQueue() else {
             throw MetalDeviceCacheError.queueExhausted
         }
-        defer { entry.returnCommandQueue(commandQueue) }
-
         guard let sourceTexture = sourceTile.metalTexture(for: device) else {
+            entry.returnCommandQueue(commandQueue)
             throw MetalDeviceCacheError.unknownDevice(destinationTile.deviceRegistryID)
         }
         guard let destinationTexture = destinationTile.metalTexture(for: device) else {
+            entry.returnCommandQueue(commandQueue)
             throw MetalDeviceCacheError.unknownDevice(destinationTile.deviceRegistryID)
         }
+        return DeviceContext(
+            device: device,
+            entry: entry,
+            commandQueue: commandQueue,
+            sourceTexture: sourceTexture,
+            destinationTexture: destinationTexture,
+            pixelFormat: pixelFormat,
+            sourceWidth: sourceTexture.width,
+            sourceHeight: sourceTexture.height,
+            longEdge: max(sourceTexture.width, sourceTexture.height)
+        )
+    }
 
-        let sourceWidth = sourceTexture.width
-        let sourceHeight = sourceTexture.height
-        let longEdge = max(sourceWidth, sourceHeight)
+    private func renderUsingLiveInference(
+        request: RenderRequest,
+        context: DeviceContext,
+        screenTransform: ScreenColorTransform,
+        inferenceResolution: Int
+    ) throws -> RenderReport {
+        let pre = try runPreInference(
+            sourceTexture: context.sourceTexture,
+            hintTile: request.alphaHintImage,
+            device: context.device,
+            entry: context.entry,
+            commandQueue: context.commandQueue,
+            screenTransform: screenTransform,
+            inferenceResolution: inferenceResolution
+        )
 
-        let inferenceResolution = request.state.qualityMode.resolvedInferenceResolution(forLongEdge: longEdge)
+        let cacheKey = InferenceCacheKey(
+            frameTime: request.renderTime,
+            screenColorRaw: request.state.screenColor.rawValue,
+            inferenceResolution: inferenceResolution,
+            cacheEntry: context.entry
+        )
+        let inferenceOutput = try inferenceCoordinator.runInference(
+            request: KeyingInferenceRequest(
+                normalisedInputTexture: pre.normalisedInput,
+                rawSourceTexture: pre.rawSourceAtInferenceResolution,
+                inferenceResolution: inferenceResolution
+            ),
+            cacheEntry: context.entry,
+            cacheKey: cacheKey
+        )
 
-        // ----- Pre-inference pass -----------------------------------------
+        try runPostInference(
+            request: request,
+            context: context,
+            screenTransform: screenTransform,
+            rotatedSource: pre.rotatedSource,
+            alphaAtInferenceResolution: inferenceOutput.alphaTexture,
+            foregroundAtInferenceResolution: inferenceOutput.foregroundTexture
+        )
+
+        return RenderReport(
+            backendDescription: inferenceCoordinator.backendDescription,
+            guideSourceDescription: request.alphaHintImage == nil ? "Auto Rough Fallback" : "Alpha Hint Clip",
+            effectiveInferenceResolution: inferenceResolution,
+            deviceName: context.device.name
+        )
+    }
+
+    private func renderUsingCachedAlpha(
+        request: RenderRequest,
+        context: DeviceContext,
+        screenTransform: ScreenColorTransform,
+        inferenceResolution: Int,
+        cachedAlpha: (alpha: [Float], width: Int, height: Int)
+    ) throws -> RenderReport {
+        guard let preCommandBuffer = context.commandQueue.makeCommandBuffer() else {
+            throw MetalDeviceCacheError.commandBufferCreationFailed
+        }
+        preCommandBuffer.label = "Corridor Key Pro Cached Pre-Inference"
+
+        let rotatedSource = try applyScreenRotation(
+            source: context.sourceTexture,
+            matrix: screenTransform.forwardMatrix,
+            isIdentity: screenTransform.isIdentity,
+            entry: context.entry,
+            commandBuffer: preCommandBuffer
+        )
+        let rawSourceAtInferenceResolution = try resample(
+            source: rotatedSource,
+            targetWidth: inferenceResolution,
+            targetHeight: inferenceResolution,
+            pixelFormat: .rgba16Float,
+            entry: context.entry,
+            commandBuffer: preCommandBuffer
+        )
+        preCommandBuffer.commit()
+        preCommandBuffer.waitUntilCompleted()
+        if let error = preCommandBuffer.error { throw error }
+
+        let alphaTexture = try uploadCachedAlpha(
+            alpha: cachedAlpha.alpha,
+            width: cachedAlpha.width,
+            height: cachedAlpha.height,
+            entry: context.entry
+        )
+
+        try runPostInference(
+            request: request,
+            context: context,
+            screenTransform: screenTransform,
+            rotatedSource: rotatedSource,
+            alphaAtInferenceResolution: alphaTexture,
+            foregroundAtInferenceResolution: rawSourceAtInferenceResolution
+        )
+
+        return RenderReport(
+            backendDescription: "Analysed Cache (\(inferenceResolution)px)",
+            guideSourceDescription: "Analysis Cache",
+            effectiveInferenceResolution: inferenceResolution,
+            deviceName: context.device.name
+        )
+    }
+
+    private func runPreInference(
+        sourceTexture: any MTLTexture,
+        hintTile: FxImageTile?,
+        device: any MTLDevice,
+        entry: MetalDeviceCacheEntry,
+        commandQueue: any MTLCommandQueue,
+        screenTransform: ScreenColorTransform,
+        inferenceResolution: Int
+    ) throws -> PreInferenceArtifacts {
         guard let preCommandBuffer = commandQueue.makeCommandBuffer() else {
             throw MetalDeviceCacheError.commandBufferCreationFailed
         }
         preCommandBuffer.label = "Corridor Key Pro Pre-Inference"
-
-        let screenTransform = ScreenColorEstimator.defaultTransform(for: request.state.screenColor)
 
         let rotatedSource = try applyScreenRotation(
             source: sourceTexture,
@@ -99,15 +322,13 @@ final class RenderPipeline: @unchecked Sendable {
             entry: entry,
             commandBuffer: preCommandBuffer
         )
-
         let hintTexture = try makeHintTexture(
             source: rotatedSource,
-            hintTile: request.alphaHintImage,
+            hintTile: hintTile,
             device: device,
             entry: entry,
             commandBuffer: preCommandBuffer
         )
-
         let normalisedInput = try combineAndNormalise(
             source: rotatedSource,
             hint: hintTexture,
@@ -115,7 +336,6 @@ final class RenderPipeline: @unchecked Sendable {
             entry: entry,
             commandBuffer: preCommandBuffer
         )
-
         let rawSourceAtInferenceResolution = try resample(
             source: rotatedSource,
             targetWidth: inferenceResolution,
@@ -124,112 +344,135 @@ final class RenderPipeline: @unchecked Sendable {
             entry: entry,
             commandBuffer: preCommandBuffer
         )
-
         preCommandBuffer.commit()
         preCommandBuffer.waitUntilCompleted()
-        if let error = preCommandBuffer.error {
-            throw error
-        }
+        if let error = preCommandBuffer.error { throw error }
 
-        // ----- Inference pass ---------------------------------------------
-        let cacheKey = InferenceCacheKey(
-            frameTime: request.renderTime,
-            screenColorRaw: request.state.screenColor.rawValue,
-            inferenceResolution: inferenceResolution,
-            cacheEntry: entry
+        return PreInferenceArtifacts(
+            rotatedSource: rotatedSource,
+            normalisedInput: normalisedInput,
+            rawSourceAtInferenceResolution: rawSourceAtInferenceResolution
         )
-        let inferenceOutput = try inferenceCoordinator.runInference(
-            request: KeyingInferenceRequest(
-                normalisedInputTexture: normalisedInput,
-                rawSourceTexture: rawSourceAtInferenceResolution,
-                inferenceResolution: inferenceResolution
-            ),
-            cacheEntry: entry,
-            cacheKey: cacheKey
-        )
+    }
 
-        // ----- Post-inference pass ----------------------------------------
-        guard let postCommandBuffer = commandQueue.makeCommandBuffer() else {
+    private func runPostInference(
+        request: RenderRequest,
+        context: DeviceContext,
+        screenTransform: ScreenColorTransform,
+        rotatedSource: any MTLTexture,
+        alphaAtInferenceResolution: any MTLTexture,
+        foregroundAtInferenceResolution: any MTLTexture
+    ) throws {
+        guard let postCommandBuffer = context.commandQueue.makeCommandBuffer() else {
             throw MetalDeviceCacheError.commandBufferCreationFailed
         }
         postCommandBuffer.label = "Corridor Key Pro Post-Inference"
 
         let upscaledAlpha = try resample(
-            source: inferenceOutput.alphaTexture,
-            targetWidth: sourceWidth,
-            targetHeight: sourceHeight,
+            source: alphaAtInferenceResolution,
+            targetWidth: context.sourceWidth,
+            targetHeight: context.sourceHeight,
             pixelFormat: .r16Float,
-            entry: entry,
+            entry: context.entry,
             commandBuffer: postCommandBuffer
         )
         let upscaledForeground = try resample(
-            source: inferenceOutput.foregroundTexture,
-            targetWidth: sourceWidth,
-            targetHeight: sourceHeight,
+            source: foregroundAtInferenceResolution,
+            targetWidth: context.sourceWidth,
+            targetHeight: context.sourceHeight,
             pixelFormat: .rgba16Float,
-            entry: entry,
+            entry: context.entry,
             commandBuffer: postCommandBuffer
         )
-
         let despilled = try despill(
             foreground: upscaledForeground,
             state: request.state,
-            entry: entry,
+            entry: context.entry,
             commandBuffer: postCommandBuffer
         )
-
         let refinedMatte = try refineMatte(
             alpha: upscaledAlpha,
             state: request.state,
-            entry: entry,
+            entry: context.entry,
             commandBuffer: postCommandBuffer
         )
-
         let workingForeground: any MTLTexture
         if request.state.sourcePassthroughEnabled {
             workingForeground = try sourcePassthrough(
                 foreground: despilled,
                 source: rotatedSource,
                 matte: refinedMatte,
-                entry: entry,
+                entry: context.entry,
                 commandBuffer: postCommandBuffer
             )
         } else {
             workingForeground = despilled
         }
-
         let restoredForeground = try applyScreenRotation(
             source: workingForeground,
             matrix: screenTransform.inverseMatrix,
             isIdentity: screenTransform.isIdentity,
-            entry: entry,
+            entry: context.entry,
             commandBuffer: postCommandBuffer
         )
-
         try compose(
-            source: sourceTexture,
+            source: context.sourceTexture,
             foreground: restoredForeground,
             matte: refinedMatte,
-            destination: destinationTexture,
-            destinationTile: destinationTile,
+            destination: context.destinationTexture,
+            destinationTile: request.destinationImage,
             state: request.state,
-            pixelFormat: pixelFormat,
-            entry: entry,
+            pixelFormat: context.pixelFormat,
+            entry: context.entry,
             commandBuffer: postCommandBuffer
         )
-
         postCommandBuffer.commit()
         postCommandBuffer.waitUntilCompleted()
-        if let error = postCommandBuffer.error {
-            throw error
-        }
+        if let error = postCommandBuffer.error { throw error }
+    }
 
-        return RenderReport(
-            backendDescription: inferenceCoordinator.backendDescription,
-            guideSourceDescription: request.alphaHintImage == nil ? "Auto Rough Fallback" : "Alpha Hint Clip",
-            effectiveInferenceResolution: inferenceResolution,
-            deviceName: device.name
-        )
+    // MARK: - Cached matte helpers
+
+    private func decodedCachedMatte(
+        from state: PluginStateData,
+        expectedResolution: Int
+    ) -> (alpha: [Float], width: Int, height: Int)? {
+        guard let blob = state.cachedMatteBlob,
+              state.cachedMatteInferenceResolution == expectedResolution,
+              let decoded = MatteCodec.decode(blob),
+              decoded.width > 0, decoded.height > 0
+        else {
+            return nil
+        }
+        return decoded
+    }
+
+    private func uploadCachedAlpha(
+        alpha: [Float],
+        width: Int,
+        height: Int,
+        entry: MetalDeviceCacheEntry
+    ) throws -> any MTLTexture {
+        guard let texture = entry.makeIntermediateTexture(
+            width: width,
+            height: height,
+            pixelFormat: .r32Float,
+            storageMode: .shared
+        ) else {
+            throw MetalDeviceCacheError.textureAllocationFailed
+        }
+        let bytesPerRow = width * MemoryLayout<Float>.size
+        alpha.withUnsafeBufferPointer { pointer in
+            if let base = pointer.baseAddress {
+                texture.replace(
+                    region: MTLRegionMake2D(0, 0, width, height),
+                    mipmapLevel: 0,
+                    withBytes: base,
+                    bytesPerRow: bytesPerRow
+                )
+            }
+        }
+        return texture
     }
 
     // MARK: - Stage helpers

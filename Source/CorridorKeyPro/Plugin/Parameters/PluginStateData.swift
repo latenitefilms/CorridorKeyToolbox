@@ -53,6 +53,16 @@ struct PluginStateData: Codable, Sendable {
     /// translate normalised radii into destination pixels.
     var destinationLongEdgePixels: Int
 
+    /// When the FxAnalyzer pass has cached this frame's matte, we embed the
+    /// compressed blob directly in the state so the render callback doesn't
+    /// need to touch the custom parameter again (which would mean re-loading
+    /// the whole clip-wide cache for every render on every thread).
+    var cachedMatteBlob: Data?
+    /// Inference resolution the cached matte was produced at. `0` when no
+    /// matte is cached. The render path bypasses the MLX path only when this
+    /// matches the quality mode the user is currently requesting.
+    var cachedMatteInferenceResolution: Int
+
     init(
         screenColor: ScreenColor = .green,
         qualityMode: QualityMode = .draft512,
@@ -72,7 +82,9 @@ struct PluginStateData: Codable, Sendable {
         upscaleMethod: UpscaleMethod = .bilinear,
         renderQualityLevel: Int = 2,
         longEdgeBaseline: Double = 1920.0,
-        destinationLongEdgePixels: Int = 1920
+        destinationLongEdgePixels: Int = 1920,
+        cachedMatteBlob: Data? = nil,
+        cachedMatteInferenceResolution: Int = 0
     ) {
         self.screenColor = screenColor
         self.qualityMode = qualityMode
@@ -93,13 +105,16 @@ struct PluginStateData: Codable, Sendable {
         self.renderQualityLevel = renderQualityLevel
         self.longEdgeBaseline = longEdgeBaseline
         self.destinationLongEdgePixels = destinationLongEdgePixels
+        self.cachedMatteBlob = cachedMatteBlob
+        self.cachedMatteInferenceResolution = cachedMatteInferenceResolution
     }
 
-    /// Encodes the snapshot as NSData for hand-off to the FxPlug host. A dedicated
-    /// encoder keeps the format stable across processes.
+    /// Encodes the snapshot for hand-off to the FxPlug host. Binary plist is
+    /// used because we need to embed a raw `Data` payload (the cached matte)
+    /// efficiently — JSON would base64 it and bloat the blob by ~33 %.
     func encodedForHost() throws -> NSData {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
+        let encoder = PropertyListEncoder()
+        encoder.outputFormat = .binary
         let data = try encoder.encode(self)
         return NSData(data: data)
     }
@@ -111,7 +126,7 @@ struct PluginStateData: Codable, Sendable {
         guard let nsData, nsData.length > 0 else { return PluginStateData() }
         let data = Data(referencing: nsData)
         do {
-            return try JSONDecoder().decode(PluginStateData.self, from: data)
+            return try PropertyListDecoder().decode(PluginStateData.self, from: data)
         } catch {
             return PluginStateData()
         }

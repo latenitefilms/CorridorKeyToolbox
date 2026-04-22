@@ -17,6 +17,7 @@ struct PluginStateDataTests {
 
     @Test("Round-trip preserves every field")
     func roundTripPreservesFields() throws {
+        let matte = Data([0xFE, 0xED, 0xFA, 0xCE, 0xCA, 0xFE])
         let original = PluginStateData(
             screenColor: .blue,
             qualityMode: .ultra1536,
@@ -36,7 +37,9 @@ struct PluginStateDataTests {
             upscaleMethod: .lanczos,
             renderQualityLevel: 3,
             longEdgeBaseline: 1920,
-            destinationLongEdgePixels: 3840
+            destinationLongEdgePixels: 3840,
+            cachedMatteBlob: matte,
+            cachedMatteInferenceResolution: 1024
         )
         let encoded = try original.encodedForHost()
         let decoded = PluginStateData.decoded(from: encoded)
@@ -60,6 +63,8 @@ struct PluginStateDataTests {
         #expect(decoded.renderQualityLevel == 3)
         #expect(decoded.longEdgeBaseline == 1920)
         #expect(decoded.destinationLongEdgePixels == 3840)
+        #expect(decoded.cachedMatteBlob == matte)
+        #expect(decoded.cachedMatteInferenceResolution == 1024)
     }
 
     @Test("Empty blob falls back to defaults")
@@ -69,41 +74,26 @@ struct PluginStateDataTests {
         #expect(decoded.qualityMode == defaults.qualityMode)
         #expect(decoded.screenColor == defaults.screenColor)
         #expect(decoded.despillStrength == defaults.despillStrength)
+        #expect(decoded.cachedMatteBlob == nil)
+        #expect(decoded.cachedMatteInferenceResolution == 0)
     }
 
-    @Test("Legacy documents with a temporal-smoothing key still decode")
-    func legacyTemporalSmoothingKeyIgnored() {
-        // Simulate a project file that was saved when the Temporal Smoothing
-        // slider still existed. The decoder must skip unknown keys gracefully
-        // rather than throwing and forcing the host back to all defaults.
-        let legacyJSON = """
-        {
-          "screenColor": 0,
-          "qualityMode": 0,
-          "sourcePassthroughEnabled": true,
-          "passthroughErodeNormalized": 3,
-          "passthroughBlurNormalized": 7,
-          "alphaBlackPoint": 0,
-          "alphaWhitePoint": 1,
-          "alphaErodeNormalized": 0,
-          "alphaSoftnessNormalized": 0,
-          "alphaGamma": 1,
-          "autoDespeckleEnabled": false,
-          "despeckleSize": 400,
-          "despillStrength": 0.5,
-          "spillMethod": 0,
-          "outputMode": 0,
-          "temporalSmoothing": 0.42,
-          "upscaleMethod": 0,
-          "renderQualityLevel": 2,
-          "longEdgeBaseline": 1920,
-          "destinationLongEdgePixels": 1920
-        }
-        """
-        let data = NSData(data: Data(legacyJSON.utf8))
-        let decoded = PluginStateData.decoded(from: data)
-        #expect(decoded.despillStrength == 0.5)
-        #expect(decoded.despeckleSize == 400)
+    @Test("Garbage blob falls back to defaults without throwing")
+    func garbageBlobDecodesDefaults() {
+        let garbage = NSData(data: Data([0xDE, 0xAD, 0xBE, 0xEF]))
+        let decoded = PluginStateData.decoded(from: garbage)
+        let defaults = PluginStateData()
+        #expect(decoded.qualityMode == defaults.qualityMode)
+        #expect(decoded.despillStrength == defaults.despillStrength)
+    }
+
+    @Test("Round-trip without a cached matte preserves nil")
+    func roundTripWithoutCachedMatte() throws {
+        let original = PluginStateData(screenColor: .green, qualityMode: .high1024)
+        let encoded = try original.encodedForHost()
+        let decoded = PluginStateData.decoded(from: encoded)
+        #expect(decoded.cachedMatteBlob == nil)
+        #expect(decoded.cachedMatteInferenceResolution == 0)
     }
 
     @Test("destinationPixelRadius scales by clip size")

@@ -19,6 +19,7 @@ enum ParameterIdentifier {
     static let outputGroup: UInt32 = 140
     static let performanceGroup: UInt32 = 150
     static let helpGroup: UInt32 = 160
+    static let analysisGroup: UInt32 = 170
 
     // Key Setup
     static let screenColor: UInt32 = 1001
@@ -55,6 +56,14 @@ enum ParameterIdentifier {
 
     // Help
     static let openUserGuide: UInt32 = 9001
+
+    // Analysis (FxAnalyzer workflow)
+    static let analyzeClip: UInt32 = 7001
+    static let resetAnalysis: UInt32 = 7002
+    /// Hidden custom parameter that persists the per-frame MLX mattes inside
+    /// the Final Cut Pro Library so editors can move projects between
+    /// machines without losing the analysed cache.
+    static let analysisData: UInt32 = 7003
 }
 
 /// Convenience wrapper that makes the raw `kFxParameterFlag_*` constants feel at

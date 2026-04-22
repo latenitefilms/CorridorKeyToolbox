@@ -136,6 +136,17 @@ extension CorridorKeyProPlugIn {
             default: .bilinear
         )
 
+        // If FxAnalyzer has cached a matte for this frame, pack the
+        // compressed blob and its inference resolution into the state so the
+        // render callback can skip MLX entirely. Screen colour must match the
+        // analysis run — mismatches invalidate the cache for that frame.
+        if let analysis = loadAnalysisData(using: retrieval),
+           analysis.screenColorRaw == state.screenColor.rawValue,
+           let blob = analysis.matte(at: renderTime) {
+            state.cachedMatteBlob = blob
+            state.cachedMatteInferenceResolution = analysis.inferenceResolution
+        }
+
         let nsData = try state.encodedForHost()
         pluginState?.pointee = nsData
     }

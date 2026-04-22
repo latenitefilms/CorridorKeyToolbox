@@ -15,7 +15,7 @@ import CoreMedia
 import simd
 
 @objc(CorridorKeyProPlugIn)
-final class CorridorKeyProPlugIn: NSObject, FxTileableEffect {
+final class CorridorKeyProPlugIn: NSObject, FxTileableEffect, FxAnalyzer {
 
     // MARK: - Stored properties
 
