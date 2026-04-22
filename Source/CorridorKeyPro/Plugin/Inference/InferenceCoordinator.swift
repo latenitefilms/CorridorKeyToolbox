@@ -12,9 +12,39 @@
 //  immediately. Once warm-up completes the coordinator switches engines and
 //  subsequent frames render with the neural matte.
 //
+//  A single-frame MLX output cache is layered on top: if the user changes a
+//  post-process parameter (output mode, despill, matte sliders) without
+//  moving the playhead or swapping screen colour, the coordinator returns
+//  the previous MLX result instead of paying for another ~500 ms inference.
+//
 
 import Foundation
 import Metal
+import CoreMedia
+
+/// Cache key for the single-frame MLX output cache. Anything that changes the
+/// neural model's input must participate in the hash; anything purely
+/// post-process (output mode, despill strength, etc.) must not.
+struct InferenceCacheKey: Hashable, Sendable {
+    let frameTimeValue: Int64
+    let frameTimeTimescale: Int32
+    let screenColorRaw: Int
+    let inferenceResolution: Int
+    let cacheEntryID: ObjectIdentifier
+
+    init(
+        frameTime: CMTime,
+        screenColorRaw: Int,
+        inferenceResolution: Int,
+        cacheEntry: MetalDeviceCacheEntry
+    ) {
+        self.frameTimeValue = frameTime.value
+        self.frameTimeTimescale = frameTime.timescale
+        self.screenColorRaw = screenColorRaw
+        self.inferenceResolution = inferenceResolution
+        self.cacheEntryID = ObjectIdentifier(cacheEntry)
+    }
+}
 
 final class InferenceCoordinator: @unchecked Sendable {
 
@@ -30,6 +60,12 @@ final class InferenceCoordinator: @unchecked Sendable {
     private var mlxEngineLoading: Bool = false
     private var mlxLoadedResolution: Int = 0
     private var mlxCacheEntryID: ObjectIdentifier?
+
+    /// Single-frame cache of the latest MLX inference. The rough-matte path
+    /// writes to freshly-allocated textures every frame so it's cheap enough
+    /// to re-run; only the expensive MLX result is worth caching.
+    private var cachedMLXKey: InferenceCacheKey?
+    private var cachedMLXOutput: KeyingInferenceOutput?
 
     /// Human-readable backend summary for diagnostics.
     var backendDescription: String {
@@ -47,10 +83,18 @@ final class InferenceCoordinator: @unchecked Sendable {
     /// Runs inference for a single frame. Uses MLX when it's warm, otherwise
     /// synchronously produces a rough matte. MLX warm-up is kicked off in
     /// the background on the first frame so subsequent frames can use it.
+    ///
+    /// Passes `cacheKey` so we can short-circuit repeated inferences at the
+    /// same play-head when only post-process parameters have changed.
     func runInference(
         request: KeyingInferenceRequest,
-        cacheEntry: MetalDeviceCacheEntry
+        cacheEntry: MetalDeviceCacheEntry,
+        cacheKey: InferenceCacheKey
     ) throws -> KeyingInferenceOutput {
+        if let cached = cachedOutput(for: cacheKey) {
+            return cached
+        }
+
         let output = try makeOutputTextures(request: request, cacheEntry: cacheEntry)
 
         // If the resolution has changed since the last warm-up we'll need a
@@ -65,6 +109,7 @@ final class InferenceCoordinator: @unchecked Sendable {
         if let mlx = readyMLXEngine(for: request.inferenceResolution, cacheEntry: cacheEntry) {
             do {
                 try mlx.run(request: request, output: output)
+                storeCachedOutput(output, for: cacheKey)
                 return output
             } catch {
                 PluginLog.error(
@@ -76,7 +121,27 @@ final class InferenceCoordinator: @unchecked Sendable {
 
         let fallback = getOrCreateRoughMatteEngine(cacheEntry: cacheEntry)
         try fallback.run(request: request, output: output)
+        // The fallback path intentionally isn't cached — it's already cheap
+        // and caching it would starve later MLX-ready frames of a valid slot.
         return output
+    }
+
+    // MARK: - MLX frame cache
+
+    private func cachedOutput(for key: InferenceCacheKey) -> KeyingInferenceOutput? {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard cachedMLXKey == key, let cached = cachedMLXOutput else {
+            return nil
+        }
+        return cached
+    }
+
+    private func storeCachedOutput(_ output: KeyingInferenceOutput, for key: InferenceCacheKey) {
+        stateLock.lock()
+        cachedMLXKey = key
+        cachedMLXOutput = output
+        stateLock.unlock()
     }
 
     // MARK: - Output textures
@@ -146,6 +211,8 @@ final class InferenceCoordinator: @unchecked Sendable {
         mlxEngine = nil
         mlxLoadedResolution = resolution
         mlxCacheEntryID = ObjectIdentifier(cacheEntry)
+        cachedMLXKey = nil
+        cachedMLXOutput = nil
         stateLock.unlock()
 
         let engine = MLXKeyingEngine(cacheEntry: cacheEntry)
@@ -182,6 +249,8 @@ final class InferenceCoordinator: @unchecked Sendable {
         mlxEngineReady = true
         mlxLoadedResolution = resolution
         mlxCacheEntryID = cacheEntryID
+        cachedMLXKey = nil
+        cachedMLXOutput = nil
         stateLock.unlock()
     }
 
@@ -190,6 +259,8 @@ final class InferenceCoordinator: @unchecked Sendable {
         mlxEngineLoading = false
         mlxEngine = nil
         mlxEngineReady = false
+        cachedMLXKey = nil
+        cachedMLXOutput = nil
         stateLock.unlock()
     }
 

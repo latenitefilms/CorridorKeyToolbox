@@ -119,7 +119,31 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
                 "MLX could not load \(bridgeURL.lastPathComponent): \(error.localizedDescription)"
             )
         }
+
+        // Drive one zero-filled inference to trigger MLX's JIT compilation and
+        // allocate the Metal buffer pool. Finishing this before we advertise
+        // the engine as loaded means the first real render frame never pays a
+        // multi-second stall while MLX compiles on demand.
+        await warmJIT(function: function, rung: rung)
         storeFunction(function, rung: rung)
+    }
+
+    /// Runs a throwaway inference on a zero tensor so MLX compiles the graph
+    /// and warms the Metal buffer cache. Any failure here is non-fatal — the
+    /// real inference will surface the same error to the caller later.
+    private func warmJIT(function: ImportedFunction, rung: Int) async {
+        let warmupStart = Date()
+        let zeros = [Float](repeating: 0, count: rung * rung * 4)
+        let input = MLXArray(zeros, [1, rung, rung, 4])
+        do {
+            let outputs = try function(input)
+            eval(outputs)
+        } catch {
+            PluginLog.error("MLX JIT warm-up failed (non-fatal): \(error.localizedDescription)")
+            return
+        }
+        let elapsedSeconds = Date().timeIntervalSince(warmupStart)
+        PluginLog.notice("MLX JIT warm-up finished in \(String(format: "%.2f", elapsedSeconds))s for \(rung)px.")
     }
 
     func run(request: KeyingInferenceRequest, output: KeyingInferenceOutput) throws {

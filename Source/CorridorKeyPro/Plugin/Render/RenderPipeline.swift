@@ -132,13 +132,20 @@ final class RenderPipeline: @unchecked Sendable {
         }
 
         // ----- Inference pass ---------------------------------------------
+        let cacheKey = InferenceCacheKey(
+            frameTime: request.renderTime,
+            screenColorRaw: request.state.screenColor.rawValue,
+            inferenceResolution: inferenceResolution,
+            cacheEntry: entry
+        )
         let inferenceOutput = try inferenceCoordinator.runInference(
             request: KeyingInferenceRequest(
                 normalisedInputTexture: normalisedInput,
                 rawSourceTexture: rawSourceAtInferenceResolution,
                 inferenceResolution: inferenceResolution
             ),
-            cacheEntry: entry
+            cacheEntry: entry,
+            cacheKey: cacheKey
         )
 
         // ----- Post-inference pass ----------------------------------------

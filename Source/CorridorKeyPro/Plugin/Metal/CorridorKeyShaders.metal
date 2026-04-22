@@ -295,10 +295,12 @@ kernel void corridorKeyGaussianVerticalKernel(
 
 // MARK: - Green screen detection & rough matte fallback
 
-/// Detects how green-dominant each pixel is. Writes a value in 0..1 where 1
-/// means "very green" and 0 means "not green". Used as the alpha-hint input
-/// to the neural model — the network consumes this as a coarse guide to the
-/// screen area.
+/// Coarse alpha-hint for the neural model. Matches the CorridorKey-Runtime
+/// reference (`ColorUtils::generate_rough_matte` in
+/// src/post_process/color_utils.cpp): the hint uses matte convention —
+/// `1.0` means foreground/keep, `0.0` means screen/remove — so the trained
+/// network reads it the same way it was trained. Sending raw greenness
+/// here flips the model's output and the whole key inverts.
 kernel void corridorKeyGreenHintKernel(
     texture2d<float, access::read> source [[texture(CKTextureIndexSource)]],
     texture2d<float, access::write> destination [[texture(CKTextureIndexOutput)]],
@@ -308,14 +310,15 @@ kernel void corridorKeyGreenHintKernel(
     if (gid.x >= dims.x || gid.y >= dims.y) { return; }
 
     float4 rgba = source.read(gid);
-    float greenness = saturate((rgba.g - max(rgba.r, rgba.b)) * 2.5);
-    destination.write(float4(greenness, 0.0, 0.0, 1.0), gid);
+    float greenBias = rgba.g - max(rgba.r, rgba.b);
+    float matte = 1.0 - saturate(greenBias * 2.0);
+    destination.write(float4(matte, 0.0, 0.0, 1.0), gid);
 }
 
 /// Produces a fallback alpha matte where 1 = foreground (opaque) and 0 =
-/// green screen (transparent). Used when no MLX bridge is loaded. This is
-/// the inverse of the green-hint convention, because the compose step
-/// expects alpha-as-foreground-opacity.
+/// green screen (transparent). Used when no MLX bridge is loaded. Matches
+/// the CorridorKey-Runtime green-bias formula exactly so the fallback matte
+/// and the MLX-ready hint line up pixel-for-pixel.
 kernel void corridorKeyRoughMatteKernel(
     texture2d<float, access::read> source [[texture(CKTextureIndexSource)]],
     texture2d<float, access::write> destination [[texture(CKTextureIndexOutput)]],
@@ -325,8 +328,8 @@ kernel void corridorKeyRoughMatteKernel(
     if (gid.x >= dims.x || gid.y >= dims.y) { return; }
 
     float4 rgba = source.read(gid);
-    float greenness = saturate((rgba.g - max(rgba.r, rgba.b)) * 2.5);
-    float alpha = 1.0 - greenness;
+    float greenBias = rgba.g - max(rgba.r, rgba.b);
+    float alpha = 1.0 - saturate(greenBias * 2.0);
     destination.write(float4(alpha, 0.0, 0.0, 1.0), gid);
 }
 
