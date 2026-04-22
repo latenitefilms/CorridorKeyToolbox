@@ -269,6 +269,13 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
 
     /// Writes a tightly-packed single-channel Float32 buffer into an `.r32Float`
     /// destination. Matches the MLX output for alpha.
+    ///
+    /// The bundled `.mlxfn` bridge places tensor row 0 at what the downstream
+    /// render pipeline treats as the visual bottom — matches the `y-up` /
+    /// OFX bottom-left convention the CorridorKey-Runtime uses. We flip rows
+    /// on the way out so Metal texel `(0, 0)` holds the matte value for the
+    /// source's visual top-left pixel, which is what the compose pass and the
+    /// FxAnalyzer cache both expect.
     private func writeScalarBuffer(
         buffer: [Float],
         texture: any MTLTexture
@@ -280,9 +287,23 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
                 "MLX alpha buffer was \(buffer.count) floats; expected \(width * height)."
             )
         }
+        var flipped = [Float](repeating: 0, count: width * height)
+        flipped.withUnsafeMutableBufferPointer { destPointer in
+            buffer.withUnsafeBufferPointer { srcPointer in
+                guard let destBase = destPointer.baseAddress,
+                      let srcBase = srcPointer.baseAddress
+                else { return }
+                for row in 0..<height {
+                    let srcRow = height - 1 - row
+                    destBase
+                        .advanced(by: row * width)
+                        .update(from: srcBase.advanced(by: srcRow * width), count: width)
+                }
+            }
+        }
         let region = MTLRegionMake2D(0, 0, width, height)
         let bytesPerRow = width * MemoryLayout<Float>.size
-        buffer.withUnsafeBufferPointer { pointer in
+        flipped.withUnsafeBufferPointer { pointer in
             if let base = pointer.baseAddress {
                 texture.replace(region: region, mipmapLevel: 0, withBytes: base, bytesPerRow: bytesPerRow)
             }
@@ -290,7 +311,8 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
     }
 
     /// Expands a tightly-packed RGB Float32 buffer into an `.rgba32Float`
-    /// destination by appending an opaque alpha channel.
+    /// destination by appending an opaque alpha channel. Rows are flipped for
+    /// the same reason as `writeScalarBuffer`.
     private func writeForegroundBuffer(
         buffer: [Float],
         texture: any MTLTexture
@@ -304,11 +326,16 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
             )
         }
         var rgba = [Float](repeating: 0, count: pixelCount * 4)
-        for index in 0..<pixelCount {
-            rgba[index * 4 + 0] = buffer[index * 3 + 0]
-            rgba[index * 4 + 1] = buffer[index * 3 + 1]
-            rgba[index * 4 + 2] = buffer[index * 3 + 2]
-            rgba[index * 4 + 3] = 1
+        for row in 0..<height {
+            let srcRow = height - 1 - row
+            for col in 0..<width {
+                let destIndex = (row * width + col) * 4
+                let srcIndex = (srcRow * width + col) * 3
+                rgba[destIndex + 0] = buffer[srcIndex + 0]
+                rgba[destIndex + 1] = buffer[srcIndex + 1]
+                rgba[destIndex + 2] = buffer[srcIndex + 2]
+                rgba[destIndex + 3] = 1
+            }
         }
 
         let region = MTLRegionMake2D(0, 0, width, height)

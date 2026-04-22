@@ -51,7 +51,7 @@ struct CorridorKeyHeaderView: View {
             }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, 5)
         .onAppear { startPolling() }
         .onDisappear { stopPolling() }
     }
@@ -81,40 +81,62 @@ struct CorridorKeyHeaderView: View {
         switch bridge.snapshot.state {
         case .notAnalysed:
             if bridge.snapshot.totalFrameCount > 0 {
-                Text("Cached \(bridge.snapshot.analyzedFrameCount) of \(bridge.snapshot.totalFrameCount) frames at \(bridge.snapshot.inferenceResolution)px.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                statusBadge(
+                    systemImage: "exclamationmark.triangle.fill",
+                    tint: .orange,
+                    text: "Cached \(bridge.snapshot.analyzedFrameCount) of \(bridge.snapshot.totalFrameCount) frames at \(bridge.snapshot.inferenceResolution)px."
+                )
             } else {
-                Text("Not analysed yet. Click Analyse Clip for real-time playback.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                statusBadge(
+                    systemImage: "exclamationmark.triangle.fill",
+                    tint: .orange,
+                    text: "Not analysed yet. Click Analyse Clip for real-time playback."
+                )
             }
         case .requested:
-            Text("Analysis queued…")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            statusBadge(
+                systemImage: "clock.fill",
+                tint: .secondary,
+                text: "Analysis queued…"
+            )
         case .running:
             VStack(alignment: .leading, spacing: 4) {
                 ProgressView(value: bridge.snapshot.progress)
                     .progressViewStyle(.linear)
-                Text(runningStatusText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                statusBadge(
+                    systemImage: "waveform.path.ecg.magnifyingglass",
+                    tint: .secondary,
+                    text: runningStatusText
+                )
             }
         case .completed:
-            Text("Analysed \(bridge.snapshot.analyzedFrameCount) frames at \(bridge.snapshot.inferenceResolution)px.")
-                .font(.caption)
-                .foregroundStyle(.green)
-                .fixedSize(horizontal: false, vertical: true)
+            statusBadge(
+                systemImage: "checkmark.seal.fill",
+                tint: .green,
+                text: "Analysed \(bridge.snapshot.analyzedFrameCount) frames at \(bridge.snapshot.inferenceResolution)px."
+            )
         case .interrupted:
-            Text("Analysis interrupted — click Analyse Clip to resume.")
-                .font(.caption)
-                .foregroundStyle(.orange)
-                .fixedSize(horizontal: false, vertical: true)
+            statusBadge(
+                systemImage: "exclamationmark.octagon.fill",
+                tint: .orange,
+                text: "Analysis interrupted — click Analyse Clip to resume."
+            )
         }
+    }
+
+    private func statusBadge(
+        systemImage: String,
+        tint: Color,
+        text: String
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Image(systemName: systemImage)
+                .foregroundStyle(tint)
+            Text(text)
+                .foregroundStyle(tint)
+        }
+        .font(.caption)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: - Helpers

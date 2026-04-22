@@ -163,7 +163,7 @@
 	</sceneSettings>
 	<publishSettings>
 		<version>2</version>
-		<target object="10010" channel="./50" name="Settings"/>
+		<target object="10010" channel="./50" name=""/>
 		<target object="10010" channel="./100" name="Settings"/>
 		<target object="10010" channel="./110" name="Interior"/>
 		<target object="10010" channel="./120" name="Matte"/>

@@ -46,13 +46,6 @@ final class RenderPipeline: @unchecked Sendable {
     private let deviceCache: MetalDeviceCache
     let inferenceCoordinator: InferenceCoordinator
 
-    /// Set after the first successful render so we can emit a one-shot log of
-    /// the tile origins FxPlug handed us — the only way to confirm whether
-    /// FCP surfaces TOP_LEFT or BOTTOM_LEFT when our plug-in is driven by a
-    /// Motion Template.
-    private let hasLoggedOrientationLock = NSLock()
-    private var hasLoggedOrientation = false
-
     init(
         deviceCache: MetalDeviceCache = .shared,
         inferenceCoordinator: InferenceCoordinator = InferenceCoordinator()
@@ -64,10 +57,6 @@ final class RenderPipeline: @unchecked Sendable {
     /// Executes the full render for one tile. Returns a `RenderReport` so the
     /// FxPlug layer can update the runtime status fields.
     func render(_ request: RenderRequest) throws -> RenderReport {
-        logOrientationIfNeeded(
-            sourceOrigin: request.sourceImage.imageOrigin,
-            destinationOrigin: request.destinationImage.imageOrigin
-        )
         let context = try makeDeviceContext(for: request)
         defer { context.entry.returnCommandQueue(context.commandQueue) }
 
@@ -88,12 +77,11 @@ final class RenderPipeline: @unchecked Sendable {
                 cachedAlpha: cached
             )
         }
-        return try renderUsingLiveInference(
-            request: request,
-            context: context,
-            screenTransform: screenTransform,
-            inferenceResolution: inferenceResolution
-        )
+        // Unanalysed → leave the source untouched. Running MLX on the render
+        // thread made toggling the effect feel laggy and produced inconsistent
+        // output while the analysis cache was being built, so pass-through is
+        // now the explicit "nothing to key yet" signal.
+        return try renderSourcePassThrough(request: request, context: context)
     }
 
     /// Runs pre-inference + MLX (no post-processing) and returns the raw alpha
@@ -208,51 +196,44 @@ final class RenderPipeline: @unchecked Sendable {
         )
     }
 
-    private func renderUsingLiveInference(
+    /// Writes the source tile straight through to the destination. Used when
+    /// the clip hasn't been analysed yet — the plug-in stays out of the way
+    /// until the cache is populated.
+    private func renderSourcePassThrough(
         request: RenderRequest,
-        context: DeviceContext,
-        screenTransform: ScreenColorTransform,
-        inferenceResolution: Int
+        context: DeviceContext
     ) throws -> RenderReport {
-        let pre = try runPreInference(
-            sourceTexture: context.sourceTexture,
-            hintTile: request.alphaHintImage,
-            device: context.device,
+        guard let commandBuffer = context.commandQueue.makeCommandBuffer() else {
+            throw MetalDeviceCacheError.commandBufferCreationFailed
+        }
+        commandBuffer.label = "Corridor Key Pro Pass-Through"
+
+        // Reuse the compose render pipeline with the source bound as every
+        // sampler and `foregroundOnly` output. This re-publishes the raw
+        // source bytes through a tiny render pass so format and tile-layout
+        // conversions the host expects still happen, without touching MLX.
+        var passThroughState = request.state
+        passThroughState.outputMode = .foregroundOnly
+        try compose(
+            source: context.sourceTexture,
+            foreground: context.sourceTexture,
+            matte: context.sourceTexture,
+            destination: context.destinationTexture,
+            destinationTile: request.destinationImage,
+            state: passThroughState,
+            pixelFormat: context.pixelFormat,
             entry: context.entry,
-            commandQueue: context.commandQueue,
-            screenTransform: screenTransform,
-            inferenceResolution: inferenceResolution
+            commandBuffer: commandBuffer
         )
 
-        let cacheKey = InferenceCacheKey(
-            frameTime: request.renderTime,
-            screenColorRaw: request.state.screenColor.rawValue,
-            inferenceResolution: inferenceResolution,
-            cacheEntry: context.entry
-        )
-        let inferenceOutput = try inferenceCoordinator.runInference(
-            request: KeyingInferenceRequest(
-                normalisedInputTexture: pre.normalisedInput,
-                rawSourceTexture: pre.rawSourceAtInferenceResolution,
-                inferenceResolution: inferenceResolution
-            ),
-            cacheEntry: context.entry,
-            cacheKey: cacheKey
-        )
-
-        try runPostInference(
-            request: request,
-            context: context,
-            screenTransform: screenTransform,
-            rotatedSource: pre.rotatedSource,
-            alphaAtInferenceResolution: inferenceOutput.alphaTexture,
-            foregroundAtInferenceResolution: inferenceOutput.foregroundTexture
-        )
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+        if let error = commandBuffer.error { throw error }
 
         return RenderReport(
-            backendDescription: inferenceCoordinator.backendDescription,
-            guideSourceDescription: request.alphaHintImage == nil ? "Auto Rough Fallback" : "Alpha Hint Clip",
-            effectiveInferenceResolution: inferenceResolution,
+            backendDescription: "Source Pass-Through",
+            guideSourceDescription: "Clip not analysed",
+            effectiveInferenceResolution: 0,
             deviceName: context.device.name
         )
     }
@@ -432,7 +413,6 @@ final class RenderPipeline: @unchecked Sendable {
             matte: refinedMatte,
             destination: context.destinationTexture,
             destinationTile: request.destinationImage,
-            sourceOrigin: CorridorKeyImageOrigin(fxOrigin: request.sourceImage.imageOrigin),
             state: request.state,
             pixelFormat: context.pixelFormat,
             entry: context.entry,
@@ -457,29 +437,6 @@ final class RenderPipeline: @unchecked Sendable {
             return nil
         }
         return decoded
-    }
-
-    private func logOrientationIfNeeded(
-        sourceOrigin: FxImageOrigin,
-        destinationOrigin: FxImageOrigin
-    ) {
-        hasLoggedOrientationLock.lock()
-        let alreadyLogged = hasLoggedOrientation
-        if !alreadyLogged {
-            hasLoggedOrientation = true
-        }
-        hasLoggedOrientationLock.unlock()
-        guard !alreadyLogged else { return }
-
-        let sourceEnum = CorridorKeyImageOrigin(fxOrigin: sourceOrigin)
-        let destinationEnum = CorridorKeyImageOrigin(fxOrigin: destinationOrigin)
-        let flipV = OrientationHelper.composeNeedsVerticalFlip(
-            sourceOrigin: sourceEnum,
-            destinationOrigin: destinationEnum
-        )
-        PluginLog.notice(
-            "Orientation: source=\(OrientationHelper.describe(sourceEnum)) dest=\(OrientationHelper.describe(destinationEnum)) composeFlipV=\(flipV)."
-        )
     }
 
     private func uploadCachedAlpha(
@@ -882,7 +839,6 @@ final class RenderPipeline: @unchecked Sendable {
         matte: any MTLTexture,
         destination: any MTLTexture,
         destinationTile: FxImageTile,
-        sourceOrigin: CorridorKeyImageOrigin,
         state: PluginStateData,
         pixelFormat: MTLPixelFormat,
         entry: MetalDeviceCacheEntry,
@@ -906,26 +862,11 @@ final class RenderPipeline: @unchecked Sendable {
         let halfW = outputWidth * 0.5
         let halfH = outputHeight * 0.5
 
-        // Metal clip-space maps +y to row 0 of its render target — i.e. the
-        // top of the framebuffer in Metal's convention. Final Cut Pro reads
-        // back the resulting IOSurface bytes as y-up, so Metal's "top row"
-        // ends up displayed at the bottom of the host's viewer. We match
-        // FxBrightnessAnalysis' behaviour by rendering the non-MLX source
-        // (which is IOSurface-backed and inherits the host's orientation)
-        // 1:1 through the pipeline, and by flipping the V coordinate used
-        // for our Metal-native intermediates when the source tile reports
-        // TOP_LEFT origin — the Final Cut Pro default.
-        let flipV = OrientationHelper.composeNeedsVerticalFlip(
-            sourceOrigin: sourceOrigin,
-            destinationOrigin: CorridorKeyImageOrigin(fxOrigin: destinationTile.imageOrigin)
-        )
-        let topV: Float = flipV ? 1 : 0
-        let bottomV: Float = flipV ? 0 : 1
         var vertices: [CKVertex2D] = [
-            CKVertex2D(position: SIMD2<Float>(halfW, -halfH), textureCoordinate: SIMD2<Float>(1, bottomV)),
-            CKVertex2D(position: SIMD2<Float>(-halfW, -halfH), textureCoordinate: SIMD2<Float>(0, bottomV)),
-            CKVertex2D(position: SIMD2<Float>(halfW, halfH), textureCoordinate: SIMD2<Float>(1, topV)),
-            CKVertex2D(position: SIMD2<Float>(-halfW, halfH), textureCoordinate: SIMD2<Float>(0, topV))
+            CKVertex2D(position: SIMD2<Float>(halfW, -halfH), textureCoordinate: SIMD2<Float>(1, 1)),
+            CKVertex2D(position: SIMD2<Float>(-halfW, -halfH), textureCoordinate: SIMD2<Float>(0, 1)),
+            CKVertex2D(position: SIMD2<Float>(halfW, halfH), textureCoordinate: SIMD2<Float>(1, 0)),
+            CKVertex2D(position: SIMD2<Float>(-halfW, halfH), textureCoordinate: SIMD2<Float>(0, 0))
         ]
         var viewportSize = SIMD2<UInt32>(UInt32(outputWidth), UInt32(outputHeight))
 

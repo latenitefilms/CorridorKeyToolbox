@@ -53,8 +53,7 @@ let package = Package(
                 "Inspector/CorridorKeyProPlugIn+CustomViews.swift",
                 "Inspector/CorridorKeyInspectorBridge.swift",
                 "Inspector/CorridorKeyHeaderView.swift",
-                "Render/RenderPipeline.swift",
-                "Render/OrientationHelper+FxPlug.swift",
+                "Render",
                 "Metal",
                 "Resources",
                 "Shared"
@@ -65,8 +64,7 @@ let package = Package(
                 "PostProcess/ScreenColorEstimator.swift",
                 "Inference/AnalysisData.swift",
                 "Inference/MatteCodec.swift",
-                "Inspector/CorridorKeyAnalysisSnapshot.swift",
-                "Render/OrientationHelper.swift"
+                "Inspector/CorridorKeyAnalysisSnapshot.swift"
             ],
             swiftSettings: [
                 .swiftLanguageMode(.v6)
