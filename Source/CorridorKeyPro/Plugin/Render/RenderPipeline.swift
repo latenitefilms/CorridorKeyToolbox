@@ -212,7 +212,7 @@ final class RenderPipeline: @unchecked Sendable {
         )
 
         postCommandBuffer.commit()
-        postCommandBuffer.waitUntilScheduled()
+        postCommandBuffer.waitUntilCompleted()
         if let error = postCommandBuffer.error {
             throw error
         }
@@ -392,6 +392,32 @@ final class RenderPipeline: @unchecked Sendable {
 
         try runAlphaLevelsGamma(source: current, destination: buffer, state: state, entry: entry, commandBuffer: commandBuffer)
         current = buffer
+
+        if state.autoDespeckleEnabled {
+            let despeckleRadius = despeckleRadiusPixels(state: state)
+            if despeckleRadius > 0 {
+                // Morphological open (erode → dilate) removes isolated specks up to
+                // roughly `despeckleSize` pixels² without touching larger regions.
+                try runMorphology(
+                    source: current,
+                    intermediate: auxiliary,
+                    destination: buffer,
+                    radius: -despeckleRadius,
+                    entry: entry,
+                    commandBuffer: commandBuffer
+                )
+                current = buffer
+                try runMorphology(
+                    source: current,
+                    intermediate: auxiliary,
+                    destination: buffer,
+                    radius: despeckleRadius,
+                    entry: entry,
+                    commandBuffer: commandBuffer
+                )
+                current = buffer
+            }
+        }
 
         let alphaErodeRadiusPixels = state.destinationPixelRadius(fromNormalized: state.alphaErodeNormalized)
         if abs(alphaErodeRadiusPixels) > 0.5 {
@@ -626,8 +652,7 @@ final class RenderPipeline: @unchecked Sendable {
         encoder.setFragmentTexture(matte, index: Int(CKTextureIndexMatte.rawValue))
 
         var params = CKComposeParams(
-            outputMode: state.outputMode.shaderValue,
-            temporalSmoothing: Float(state.temporalSmoothing)
+            outputMode: state.outputMode.shaderValue
         )
         encoder.setFragmentBytes(
             &params,
@@ -681,6 +706,16 @@ final class RenderPipeline: @unchecked Sendable {
         let threadsPerThreadgroup = MTLSize(width: threadgroupWidth, height: threadgroupHeight, depth: 1)
         let threadsPerGrid = MTLSize(width: max(width, 1), height: max(height, 1), depth: 1)
         encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
+    }
+
+    /// Converts the inspector's "Despeckle Size" (approximate speckle area in
+    /// 1920px-baseline pixels) to a morphology radius scaled to the current
+    /// destination. The square-root mapping treats the slider as area rather
+    /// than diameter — a 100px² speckle becomes a 10px structuring radius.
+    private func despeckleRadiusPixels(state: PluginStateData) -> Int {
+        let scale = Double(state.destinationLongEdgePixels) / max(state.longEdgeBaseline, 1.0)
+        let radius = Double(max(state.despeckleSize, 1)).squareRoot() * scale
+        return max(1, Int(radius.rounded()))
     }
 
     private func hintTileLayoutValue(for texture: any MTLTexture) -> Int32 {

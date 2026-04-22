@@ -129,12 +129,6 @@ extension CorridorKeyProPlugIn {
             time: renderTime,
             default: .processed
         )
-        state.temporalSmoothing = floatValue(
-            retrieval: retrieval,
-            parameterID: ParameterIdentifier.temporalSmoothing,
-            time: renderTime,
-            default: 0
-        )
         state.upscaleMethod = popupValue(
             retrieval: retrieval,
             parameterID: ParameterIdentifier.upscaleMethod,
@@ -144,9 +138,6 @@ extension CorridorKeyProPlugIn {
 
         let nsData = try state.encodedForHost()
         pluginState?.pointee = nsData
-        PluginLog.debug(
-            "Plugin state captured: screen=\(state.screenColor.displayName), quality=\(state.qualityMode.displayName), output=\(state.outputMode.displayName)."
-        )
     }
 
     // MARK: - Retrieval helpers

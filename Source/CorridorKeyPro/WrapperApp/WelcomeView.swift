@@ -61,6 +61,11 @@ struct WelcomeView: View {
                     openUserGuide()
                 }
                 .controlSize(.large)
+
+                Button("Reveal Log File", systemImage: "doc.text.magnifyingglass") {
+                    revealRendererLogs()
+                }
+                .controlSize(.large)
             }
             Spacer(minLength: 8)
         }
@@ -104,6 +109,42 @@ struct WelcomeView: View {
     private func openUserGuide() {
         guard let url = URL(string: "https://github.com/latenitefilms/CorridorKeyForFinalCutPro") else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    /// Opens Finder at the renderer's log directory. The FxPlug renderer runs
+    /// in its own sandbox container, so logs land at
+    /// `~/Library/Containers/com.latenitefilms.CorridorKeyPro.Renderer/
+    ///     Data/Library/Application Support/Corridor Key Pro/Logs`.
+    /// NSWorkspace can reveal paths across sandbox boundaries because Finder
+    /// performs the navigation in its own process.
+    private func revealRendererLogs() {
+        let rendererContainerURL = URL(fileURLWithPath: realUserHomePath())
+            .appending(path: "Library/Containers/com.latenitefilms.CorridorKeyPro.Renderer/Data/Library/Application Support/Corridor Key Pro/Logs", directoryHint: .isDirectory)
+
+        // If the directory doesn't exist yet (FCP hasn't launched the
+        // renderer) let the user know rather than opening Finder at a
+        // missing path.
+        if !FileManager.default.fileExists(atPath: rendererContainerURL.path) {
+            showAlert(
+                title: "No logs yet",
+                message: "The renderer log folder appears once Final Cut Pro has loaded Corridor Key Pro at least once. Apply the effect to a clip and try again."
+            )
+            return
+        }
+
+        NSWorkspace.shared.activateFileViewerSelecting([rendererContainerURL])
+    }
+
+    /// Resolves the real user home directory, sidestepping the wrapper app's
+    /// sandbox container redirect. Required because the renderer's container
+    /// lives under the real `~/Library/Containers`, not the wrapper app's
+    /// redirected library.
+    private func realUserHomePath() -> String {
+        guard let passwordEntry = getpwuid(getuid()),
+              let homeCString = passwordEntry.pointee.pw_dir else {
+            return NSHomeDirectory()
+        }
+        return String(cString: homeCString)
     }
 
     /// Kicks off the Motion Template installation exactly once per view

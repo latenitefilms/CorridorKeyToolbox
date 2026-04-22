@@ -40,7 +40,6 @@ struct PluginStateData: Codable, Sendable {
     var outputMode: OutputMode
 
     // Performance and quality
-    var temporalSmoothing: Double
     var upscaleMethod: UpscaleMethod
 
     // Runtime
@@ -70,7 +69,6 @@ struct PluginStateData: Codable, Sendable {
         despillStrength: Double = 0.5,
         spillMethod: SpillMethod = .average,
         outputMode: OutputMode = .processed,
-        temporalSmoothing: Double = 0.0,
         upscaleMethod: UpscaleMethod = .bilinear,
         renderQualityLevel: Int = 2,
         longEdgeBaseline: Double = 1920.0,
@@ -91,7 +89,6 @@ struct PluginStateData: Codable, Sendable {
         self.despillStrength = despillStrength
         self.spillMethod = spillMethod
         self.outputMode = outputMode
-        self.temporalSmoothing = temporalSmoothing
         self.upscaleMethod = upscaleMethod
         self.renderQualityLevel = renderQualityLevel
         self.longEdgeBaseline = longEdgeBaseline

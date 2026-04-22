@@ -18,7 +18,7 @@ enum ParameterIdentifier {
     static let edgeSpillGroup: UInt32 = 130
     static let outputGroup: UInt32 = 140
     static let performanceGroup: UInt32 = 150
-    static let processGroup: UInt32 = 160
+    static let helpGroup: UInt32 = 160
 
     // Key Setup
     static let screenColor: UInt32 = 1001
@@ -46,11 +46,14 @@ enum ParameterIdentifier {
     static let outputMode: UInt32 = 5001
 
     // Performance
+    /// Reserved — the Temporal Smoothing control was removed because FxPlug's
+    /// multi-threaded frame rendering can't guarantee the ordered per-frame
+    /// history an EMA needs. ID is retained so saved documents that referenced
+    /// it continue to load cleanly; never reuse this value.
     static let temporalSmoothing: UInt32 = 6001
     static let upscaleMethod: UInt32 = 6002
 
-    // Process and help
-    static let processClipButton: UInt32 = 7003
+    // Help
     static let openUserGuide: UInt32 = 9001
 }
 

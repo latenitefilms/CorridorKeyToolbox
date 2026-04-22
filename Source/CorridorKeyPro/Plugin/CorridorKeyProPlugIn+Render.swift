@@ -43,7 +43,6 @@ extension CorridorKeyProPlugIn {
         )
 
         let startTime = CACurrentMediaTime()
-        PluginLog.debug("Render begin for tile \(destinationImage.tilePixelBounds.left),\(destinationImage.tilePixelBounds.bottom) — \(destinationImage.tilePixelBounds.right - destinationImage.tilePixelBounds.left)×\(destinationImage.tilePixelBounds.top - destinationImage.tilePixelBounds.bottom) output=\(state.outputMode.displayName).")
         do {
             _ = try renderPipeline.render(request)
         } catch {
@@ -52,6 +51,5 @@ extension CorridorKeyProPlugIn {
         }
         let elapsedMilliseconds = (CACurrentMediaTime() - startTime) * 1000
         lastFrameMilliseconds.set(elapsedMilliseconds)
-        PluginLog.debug("Render finished in \(elapsedMilliseconds) ms.")
     }
 }

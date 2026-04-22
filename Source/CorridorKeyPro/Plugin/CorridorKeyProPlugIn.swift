@@ -4,9 +4,8 @@
 //
 //  Main FxPlug entry point. Final Cut Pro instantiates this class through the
 //  `ProPlugPlugInList` declaration in Info.plist and routes every tileable
-//  effect call, analysis call, and UI callback through it. Keeping the class
-//  thin and delegating work to dedicated helpers keeps the integration layer
-//  easy to maintain.
+//  effect call through it. Keeping the class thin and delegating work to
+//  dedicated helpers keeps the integration layer easy to maintain.
 //
 
 import Foundation
@@ -16,7 +15,7 @@ import CoreMedia
 import simd
 
 @objc(CorridorKeyProPlugIn)
-final class CorridorKeyProPlugIn: NSObject, FxTileableEffect, FxAnalyzer {
+final class CorridorKeyProPlugIn: NSObject, FxTileableEffect {
 
     // MARK: - Stored properties
 
@@ -25,48 +24,13 @@ final class CorridorKeyProPlugIn: NSObject, FxTileableEffect, FxAnalyzer {
     /// fetched through this manager on demand.
     let apiManager: any PROAPIAccessing
 
-    /// Lock that guards analyser scratch state. Final Cut Pro may call analyser
-    /// and render methods from different threads so this is explicitly a lock
-    /// rather than an actor.
-    let analysisLock = NSLock()
-
     /// Per-instance renderer. Lazy so that instantiation in `addParameters` is
     /// cheap and so the first touch of Metal happens in the render thread.
     lazy var renderPipeline: RenderPipeline = RenderPipeline()
 
-    /// Rolling timing of the last rendered frame in milliseconds. Used to
-    /// populate the "Last Frame" runtime status field.
+    /// Rolling timing of the last rendered frame in milliseconds. Used only
+    /// for internal performance tracing.
     let lastFrameMilliseconds = AtomicDouble(0)
-
-    /// Frames produced by the analysis pass, one per timeline frame the user
-    /// asked us to analyse. Persisted via the hidden custom analysis parameter.
-    var analyzedFrames: [AnalyzedFrame] = []
-    var analysisFrameDuration: CMTime = .invalid
-
-    struct AnalyzedFrame: Codable, Sendable {
-        let frameTimeValue: Int64
-        let frameTimescale: Int32
-        let screenReferenceR: Float
-        let screenReferenceG: Float
-        let screenReferenceB: Float
-        let estimatedDifficulty: Double
-
-        init(frameTime: CMTime, screenReference: SIMD3<Float>, estimatedDifficulty: Double) {
-            self.frameTimeValue = frameTime.value
-            self.frameTimescale = frameTime.timescale
-            self.screenReferenceR = screenReference.x
-            self.screenReferenceG = screenReference.y
-            self.screenReferenceB = screenReference.z
-            self.estimatedDifficulty = estimatedDifficulty
-        }
-
-        var frameTime: CMTime {
-            CMTime(value: frameTimeValue, timescale: frameTimescale)
-        }
-        var screenReference: SIMD3<Float> {
-            SIMD3<Float>(screenReferenceR, screenReferenceG, screenReferenceB)
-        }
-    }
 
     // MARK: - Init
 

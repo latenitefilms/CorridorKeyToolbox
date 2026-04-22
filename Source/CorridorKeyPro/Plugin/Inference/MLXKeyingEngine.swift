@@ -76,11 +76,15 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
     var guideSourceDescription: String
 
     private let cacheEntry: MetalDeviceCacheEntry
+    /// Guards `importedFunction` / `loadedResolution` reads and writes. Held
+    /// briefly so warm-up and per-frame renders never deadlock each other.
     private let stateLock = NSLock()
+    /// Serialises the entire `run(...)` path. FxPlug calls us from multiple
+    /// render threads concurrently and `ImportedFunction` is not documented as
+    /// thread-safe — funnel everything through a single in-flight inference.
+    private let runLock = NSLock()
     private var importedFunction: ImportedFunction?
     private var loadedResolution: Int = 0
-
-    private var inputBuffer: [Float] = []
 
     init(cacheEntry: MetalDeviceCacheEntry) {
         self.cacheEntry = cacheEntry
@@ -119,15 +123,20 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
     }
 
     func run(request: KeyingInferenceRequest, output: KeyingInferenceOutput) throws {
+        runLock.lock()
+        defer { runLock.unlock() }
+
         let (function, rung) = loadedState()
         guard let function, rung > 0 else {
             throw KeyingInferenceError.modelUnavailable("MLX bridge not prepared.")
         }
 
         _ = request.rawSourceTexture
-        // Step 1: stage the normalised tensor off the GPU into our CPU scratch
-        // buffer. Apple Silicon's unified memory keeps this near-zero cost.
-        try readNormalisedInput(texture: request.normalisedInputTexture, rung: rung)
+        // Step 1: stage the normalised tensor off the GPU into a per-call scratch
+        // buffer. Apple Silicon's unified memory keeps this near-zero cost and
+        // fresh allocation keeps the engine safe for concurrent FxPlug renders.
+        var inputBuffer = [Float](repeating: 0, count: rung * rung * 4)
+        try readNormalisedInput(texture: request.normalisedInputTexture, into: &inputBuffer, rung: rung)
 
         // Step 2: hand the tensor to MLX as an `MLXArray` and invoke the
         // imported function. The graph returns `(alpha, foreground)` per
@@ -146,6 +155,7 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
                 "MLX bridge returned \(results.count) outputs; expected 2."
             )
         }
+        try assertOutputShapes(alpha: results[0], foreground: results[1], rung: rung)
 
         // Step 3: force evaluation so the backing buffers are populated.
         eval(results[0], results[1])
@@ -185,24 +195,43 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         if importedFunction != nil, loadedResolution == rung { return }
         importedFunction = function
         loadedResolution = rung
-        inputBuffer = Array(repeating: 0, count: rung * rung * 4)
+    }
+
+    /// Validates that the loaded bridge's outputs have the expected NHWC layout.
+    /// Fails loudly on mismatch so a misbuilt or misplaced `.mlxfn` doesn't
+    /// silently corrupt downstream writes.
+    private func assertOutputShapes(alpha: MLXArray, foreground: MLXArray, rung: Int) throws {
+        let expectedAlpha = [1, rung, rung, 1]
+        let expectedForeground = [1, rung, rung, 3]
+        if alpha.shape != expectedAlpha || foreground.shape != expectedForeground {
+            PluginLog.error(
+                "MLX bridge returned unexpected shapes: alpha=\(alpha.shape) foreground=\(foreground.shape); expected \(expectedAlpha) and \(expectedForeground)."
+            )
+            throw KeyingInferenceError.modelUnavailable(
+                "MLX bridge returned unexpected output shapes."
+            )
+        }
     }
 
     // MARK: - Metal ↔ CPU staging
 
-    /// Reads the supplied texture's pixels into `inputBuffer`. Assumes the
-    /// caller has already dispatched a blit/synchronise so the contents are
-    /// visible to the CPU — the render pipeline's `preCommandBuffer` does this
-    /// before calling us.
-    private func readNormalisedInput(texture: any MTLTexture, rung: Int) throws {
+    /// Reads the supplied texture's pixels into `buffer`. Assumes the caller
+    /// has already dispatched a blit/synchronise so the contents are visible to
+    /// the CPU — the render pipeline's `preCommandBuffer` does this before
+    /// calling us.
+    private func readNormalisedInput(
+        texture: any MTLTexture,
+        into buffer: inout [Float],
+        rung: Int
+    ) throws {
         let expected = rung * rung * 4
-        if inputBuffer.count != expected {
-            inputBuffer = Array(repeating: 0, count: expected)
+        if buffer.count != expected {
+            buffer = Array(repeating: 0, count: expected)
         }
 
         let bytesPerRow = rung * 4 * MemoryLayout<Float>.size
         let region = MTLRegionMake2D(0, 0, rung, rung)
-        inputBuffer.withUnsafeMutableBufferPointer { pointer in
+        buffer.withUnsafeMutableBufferPointer { pointer in
             if let base = pointer.baseAddress {
                 texture.getBytes(
                     base,

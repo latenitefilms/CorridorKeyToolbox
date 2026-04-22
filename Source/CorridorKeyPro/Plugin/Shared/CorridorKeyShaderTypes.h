@@ -76,7 +76,6 @@ typedef struct CKAlphaEdgeParams {
 
 typedef struct CKComposeParams {
     int outputMode; // CorridorKeyOutputMode
-    float temporalSmoothing;
 } CKComposeParams;
 
 typedef struct CKNormalizeParams {

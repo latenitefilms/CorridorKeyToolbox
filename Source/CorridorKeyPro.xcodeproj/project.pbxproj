@@ -22,7 +22,6 @@
 		CK0100000000000000000005 /* CorridorKeyProPlugIn+Properties.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000005 /* CorridorKeyProPlugIn+Properties.swift */; };
 		CK0100000000000000000006 /* CorridorKeyProPlugIn+RenderRects.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000006 /* CorridorKeyProPlugIn+RenderRects.swift */; };
 		CK0100000000000000000007 /* CorridorKeyProPlugIn+Render.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000007 /* CorridorKeyProPlugIn+Render.swift */; };
-		CK0100000000000000000008 /* CorridorKeyProPlugIn+FxAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000008 /* CorridorKeyProPlugIn+FxAnalyzer.swift */; };
 		CK0100000000000000000009 /* ParameterIdentifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000009 /* ParameterIdentifiers.swift */; };
 		CK010000000000000000000A /* ParameterEnumerations.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK020000000000000000000A /* ParameterEnumerations.swift */; };
 		CK010000000000000000000B /* PluginStateData.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK020000000000000000000B /* PluginStateData.swift */; };
@@ -104,7 +103,6 @@
 		CK0200000000000000000005 /* CorridorKeyProPlugIn+Properties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyProPlugIn+Properties.swift"; path = "CorridorKeyPro/Plugin/CorridorKeyProPlugIn+Properties.swift"; sourceTree = "<group>"; };
 		CK0200000000000000000006 /* CorridorKeyProPlugIn+RenderRects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyProPlugIn+RenderRects.swift"; path = "CorridorKeyPro/Plugin/CorridorKeyProPlugIn+RenderRects.swift"; sourceTree = "<group>"; };
 		CK0200000000000000000007 /* CorridorKeyProPlugIn+Render.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyProPlugIn+Render.swift"; path = "CorridorKeyPro/Plugin/CorridorKeyProPlugIn+Render.swift"; sourceTree = "<group>"; };
-		CK0200000000000000000008 /* CorridorKeyProPlugIn+FxAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyProPlugIn+FxAnalyzer.swift"; path = "CorridorKeyPro/Plugin/CorridorKeyProPlugIn+FxAnalyzer.swift"; sourceTree = "<group>"; };
 		CK0200000000000000000009 /* ParameterIdentifiers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ParameterIdentifiers.swift; path = CorridorKeyPro/Plugin/Parameters/ParameterIdentifiers.swift; sourceTree = "<group>"; };
 		CK020000000000000000000A /* ParameterEnumerations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ParameterEnumerations.swift; path = CorridorKeyPro/Plugin/Parameters/ParameterEnumerations.swift; sourceTree = "<group>"; };
 		CK020000000000000000000B /* PluginStateData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PluginStateData.swift; path = CorridorKeyPro/Plugin/Parameters/PluginStateData.swift; sourceTree = "<group>"; };
@@ -210,7 +208,6 @@
 				CK0200000000000000000005 /* CorridorKeyProPlugIn+Properties.swift */,
 				CK0200000000000000000006 /* CorridorKeyProPlugIn+RenderRects.swift */,
 				CK0200000000000000000007 /* CorridorKeyProPlugIn+Render.swift */,
-				CK0200000000000000000008 /* CorridorKeyProPlugIn+FxAnalyzer.swift */,
 				CK0200000000000000000040 /* PluginLog.swift */,
 				CK0A00000000000000000004 /* Parameters */,
 				CK0A00000000000000000005 /* Render */,
@@ -486,7 +483,6 @@
 				CK0100000000000000000005 /* CorridorKeyProPlugIn+Properties.swift in Sources */,
 				CK0100000000000000000006 /* CorridorKeyProPlugIn+RenderRects.swift in Sources */,
 				CK0100000000000000000007 /* CorridorKeyProPlugIn+Render.swift in Sources */,
-				CK0100000000000000000008 /* CorridorKeyProPlugIn+FxAnalyzer.swift in Sources */,
 				CK0100000000000000000009 /* ParameterIdentifiers.swift in Sources */,
 				CK010000000000000000000A /* ParameterEnumerations.swift in Sources */,
 				CK010000000000000000000B /* PluginStateData.swift in Sources */,

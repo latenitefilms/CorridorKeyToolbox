@@ -31,7 +31,7 @@ extension CorridorKeyProPlugIn {
         try addEdgeAndSpillGroup(create: create)
         try addOutputGroup(create: create)
         try addPerformanceGroup(create: create)
-        try addProcessGroup(create: create)
+        try addHelpGroup(create: create)
         PluginLog.notice("Parameters registered with Final Cut Pro.")
     }
 
@@ -248,18 +248,6 @@ extension CorridorKeyProPlugIn {
             parameterFlags: [CorridorKeyParameterFlags.default].reduce(into: CorridorKeyParameterFlags()) { $0.insert($1) }.fxFlags
         )
 
-        create.addFloatSlider(
-            withName: "Temporal Smoothing",
-            parameterID: ParameterIdentifier.temporalSmoothing,
-            defaultValue: 0,
-            parameterMin: 0,
-            parameterMax: 1,
-            sliderMin: 0,
-            sliderMax: 1,
-            delta: 0.01,
-            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
-        )
-
         create.addPopupMenu(
             withName: "Upscale Method",
             parameterID: ParameterIdentifier.upscaleMethod,
@@ -271,17 +259,10 @@ extension CorridorKeyProPlugIn {
         create.endParameterSubGroup()
     }
 
-    private func addProcessGroup(create: any FxParameterCreationAPI_v5) throws {
+    private func addHelpGroup(create: any FxParameterCreationAPI_v5) throws {
         create.startParameterSubGroup(
-            "Process",
-            parameterID: ParameterIdentifier.processGroup,
-            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
-        )
-
-        create.addPushButton(
-            withName: "Process Clip",
-            parameterID: ParameterIdentifier.processClipButton,
-            selector: #selector(handleProcessClip),
+            "Help",
+            parameterID: ParameterIdentifier.helpGroup,
             parameterFlags: CorridorKeyParameterFlags.default.fxFlags
         )
 
@@ -297,75 +278,9 @@ extension CorridorKeyProPlugIn {
 
     // MARK: - Callbacks
 
-    @objc func handleProcessClip() {
-        PluginLog.notice("Process Clip button pressed.")
-
-        let analysisRawObject = apiManager.api(for: (any FxAnalysisAPI_v2).self)
-            ?? apiManager.api(for: (any FxAnalysisAPI).self)
-        PluginLog.notice("FxAnalysisAPI lookup returned \(String(describing: analysisRawObject)).")
-
-        guard let analysisObject = analysisRawObject else {
-            presentProcessAlert(
-                title: "Process Clip unavailable",
-                message: "This version of Final Cut Pro did not expose an analysis API to the plug-in."
-            )
-            return
-        }
-
-        // Don't restart an analysis that's already running.
-        if let analysisAPI = analysisObject as? any FxAnalysisAPI {
-            let currentState = analysisAPI.analysisStateForEffect()
-            PluginLog.notice("Current analysis state before start: \(currentState).")
-            if currentState == kFxAnalysisState_AnalysisStarted || currentState == kFxAnalysisState_AnalysisRequested {
-                presentProcessAlert(
-                    title: "Analysis already running",
-                    message: "Corridor Key Pro is already analysing this clip. Progress is shown in the timeline overlay."
-                )
-                return
-            }
-        }
-
-        do {
-            if let analysisV2 = analysisObject as? any FxAnalysisAPI_v2 {
-                try analysisV2.startForwardAnalysis(kFxAnalysisLocation_GPU)
-            } else if let analysisV1 = analysisObject as? any FxAnalysisAPI {
-                try analysisV1.startForwardAnalysis(kFxAnalysisLocation_GPU)
-            } else {
-                throw NSError(
-                    domain: FxPlugErrorDomain,
-                    code: kFxError_APIUnavailable,
-                    userInfo: [NSLocalizedDescriptionKey: "No compatible FxAnalysisAPI was returned by the host."]
-                )
-            }
-            PluginLog.notice("Forward analysis started on GPU.")
-            presentProcessAlert(
-                title: "Processing started",
-                message: "Final Cut Pro is analysing the clip in the background. Progress is shown next to the timeline playhead."
-            )
-        } catch {
-            PluginLog.error("startForwardAnalysis failed: \(error.localizedDescription)")
-            presentProcessAlert(
-                title: "Processing could not start",
-                message: error.localizedDescription
-            )
-        }
-    }
-
     @objc func handleOpenUserGuide() {
         guard let url = URL(string: "https://corridordigital.com/corridor-key-pro") else { return }
         NSWorkspace.shared.open(url)
-    }
-
-    /// Shows a short confirmation alert over the FCP UI. Posted through the
-    /// main queue because the button handler arrives on an arbitrary thread.
-    private func presentProcessAlert(title: String, message: String) {
-        Task { @MainActor in
-            let alert = NSAlert()
-            alert.messageText = title
-            alert.informativeText = message
-            alert.addButton(withTitle: "OK")
-            alert.runModal()
-        }
     }
 
     // MARK: - Parameter change notifications
@@ -377,6 +292,7 @@ extension CorridorKeyProPlugIn {
     /// changes.
     @objc(parameterChanged:atTime:error:)
     func parameterChanged(_ paramID: UInt32, atTime time: CMTime) throws {
-        PluginLog.debug("Parameter \(paramID) changed at \(CMTimeGetSeconds(time))s.")
+        // Intentionally empty. The host re-requests plug-in state and
+        // triggers a re-render automatically when parameters change.
     }
 }
