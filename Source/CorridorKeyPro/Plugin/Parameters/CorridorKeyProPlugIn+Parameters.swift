@@ -2,9 +2,12 @@
 //  CorridorKeyProPlugIn+Parameters.swift
 //  Corridor Key Pro
 //
-//  Defines the entire inspector layout for the plug-in. The grouping and
-//  defaults intentionally match the CorridorKey OFX panel so that an editor
-//  moving between DaVinci Resolve and Final Cut Pro feels at home.
+//  Defines the entire inspector layout for the plug-in. Analyse / Reset /
+//  version live in the custom-UI header at the top, then the sliders match
+//  the CorridorKey OFX panel so editors moving between Resolve and Final
+//  Cut Pro stay oriented. Enum and toggle controls are explicitly marked
+//  non-animatable — animating "Screen Colour" or "Output" flashes between
+//  unrelated looks and pollutes the curve editor.
 //
 
 import Foundation
@@ -25,14 +28,12 @@ extension CorridorKeyProPlugIn {
             )
         }
 
-        try addKeySetupGroup(create: create)
-        try addAnalysisGroup(create: create)
+        try addHeaderParameter(create: create)
+        try addHiddenAnalysisParameter(create: create)
+        try addSettingsGroup(create: create)
         try addInteriorDetailGroup(create: create)
         try addMatteGroup(create: create)
         try addEdgeAndSpillGroup(create: create)
-        try addOutputGroup(create: create)
-        try addPerformanceGroup(create: create)
-        try addHelpGroup(create: create)
         PluginLog.notice("Parameters registered with Final Cut Pro.")
     }
 
@@ -59,12 +60,38 @@ extension CorridorKeyProPlugIn {
         }
     }
 
-    // MARK: - Groups
+    // MARK: - Inspector header + hidden cache
 
-    private func addKeySetupGroup(create: any FxParameterCreationAPI_v5) throws {
+    /// Custom-UI placeholder that `createViewForParameterID` swaps for the
+    /// SwiftUI header (icon, version, Analyse / Reset buttons, status).
+    private func addHeaderParameter(create: any FxParameterCreationAPI_v5) throws {
+        create.addCustomParameter(
+            withName: "",
+            parameterID: ParameterIdentifier.headerSummary,
+            defaultValue: NSDictionary(),
+            parameterFlags: CorridorKeyParameterFlags.headerCustomUI.fxFlags
+        )
+    }
+
+    /// Hidden, non-animatable custom parameter that persists the per-frame
+    /// MLX mattes inside the Final Cut Pro Library. Never surfaced to the
+    /// inspector — only touched by the analyser and by `pluginState`.
+    private func addHiddenAnalysisParameter(create: any FxParameterCreationAPI_v5) throws {
+        let hiddenFlags: CorridorKeyParameterFlags = [.default, .hidden, .notAnimatable, .curveEditorHidden]
+        create.addCustomParameter(
+            withName: "Analysis Data",
+            parameterID: ParameterIdentifier.analysisData,
+            defaultValue: NSDictionary(),
+            parameterFlags: hiddenFlags.fxFlags
+        )
+    }
+
+    // MARK: - Visible groups
+
+    private func addSettingsGroup(create: any FxParameterCreationAPI_v5) throws {
         create.startParameterSubGroup(
-            "Key Setup",
-            parameterID: ParameterIdentifier.keySetupGroup,
+            "Settings",
+            parameterID: ParameterIdentifier.settingsGroup,
             parameterFlags: CorridorKeyParameterFlags.default.fxFlags
         )
 
@@ -73,7 +100,7 @@ extension CorridorKeyProPlugIn {
             parameterID: ParameterIdentifier.screenColor,
             defaultValue: UInt32(ScreenColor.green.rawValue),
             menuEntries: ScreenColor.allCases.map(\.displayName),
-            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
+            parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
 
         create.addPopupMenu(
@@ -81,42 +108,23 @@ extension CorridorKeyProPlugIn {
             parameterID: ParameterIdentifier.qualityMode,
             defaultValue: UInt32(QualityMode.automatic.rawValue),
             menuEntries: QualityMode.allCases.map(\.displayName),
-            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
+            parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
 
-        create.endParameterSubGroup()
-    }
-
-    private func addAnalysisGroup(create: any FxParameterCreationAPI_v5) throws {
-        create.startParameterSubGroup(
-            "Analyse",
-            parameterID: ParameterIdentifier.analysisGroup,
-            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
+        create.addPopupMenu(
+            withName: "Output",
+            parameterID: ParameterIdentifier.outputMode,
+            defaultValue: UInt32(OutputMode.processed.rawValue),
+            menuEntries: OutputMode.allCases.map(\.displayName),
+            parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
 
-        create.addPushButton(
-            withName: "Analyse Clip",
-            parameterID: ParameterIdentifier.analyzeClip,
-            selector: #selector(handleAnalyzeClip),
-            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
-        )
-
-        create.addPushButton(
-            withName: "Reset Analysis",
-            parameterID: ParameterIdentifier.resetAnalysis,
-            selector: #selector(handleResetAnalysis),
-            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
-        )
-
-        let hiddenFlags = CorridorKeyParameterFlags(
-            rawValue: CorridorKeyParameterFlags.hidden.rawValue |
-                      CorridorKeyParameterFlags.notAnimatable.rawValue
-        )
-        create.addCustomParameter(
-            withName: "Analysis Data",
-            parameterID: ParameterIdentifier.analysisData,
-            defaultValue: NSDictionary(),
-            parameterFlags: hiddenFlags.fxFlags
+        create.addPopupMenu(
+            withName: "Upscale Method",
+            parameterID: ParameterIdentifier.upscaleMethod,
+            defaultValue: UInt32(UpscaleMethod.bilinear.rawValue),
+            menuEntries: UpscaleMethod.allCases.map(\.displayName),
+            parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
 
         create.endParameterSubGroup()
@@ -126,14 +134,14 @@ extension CorridorKeyProPlugIn {
         create.startParameterSubGroup(
             "Interior Detail",
             parameterID: ParameterIdentifier.interiorGroup,
-            parameterFlags: [CorridorKeyParameterFlags.default].reduce(into: CorridorKeyParameterFlags()) { $0.insert($1) }.fxFlags
+            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
         )
 
         create.addToggleButton(
             withName: "Source Passthrough",
             parameterID: ParameterIdentifier.sourcePassthrough,
             defaultValue: true,
-            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
+            parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
 
         create.addFloatSlider(
@@ -234,7 +242,7 @@ extension CorridorKeyProPlugIn {
             withName: "Auto Despeckle",
             parameterID: ParameterIdentifier.autoDespeckle,
             defaultValue: false,
-            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
+            parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
 
         create.addIntSlider(
@@ -246,7 +254,7 @@ extension CorridorKeyProPlugIn {
             sliderMin: 50,
             sliderMax: 2000,
             delta: 10,
-            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
+            parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
 
         create.endParameterSubGroup()
@@ -276,82 +284,10 @@ extension CorridorKeyProPlugIn {
             parameterID: ParameterIdentifier.spillMethod,
             defaultValue: UInt32(SpillMethod.average.rawValue),
             menuEntries: SpillMethod.allCases.map(\.displayName),
-            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
+            parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
 
         create.endParameterSubGroup()
-    }
-
-    private func addOutputGroup(create: any FxParameterCreationAPI_v5) throws {
-        create.startParameterSubGroup(
-            "Output",
-            parameterID: ParameterIdentifier.outputGroup,
-            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
-        )
-
-        create.addPopupMenu(
-            withName: "Output",
-            parameterID: ParameterIdentifier.outputMode,
-            defaultValue: UInt32(OutputMode.processed.rawValue),
-            menuEntries: OutputMode.allCases.map(\.displayName),
-            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
-        )
-
-        create.endParameterSubGroup()
-    }
-
-    private func addPerformanceGroup(create: any FxParameterCreationAPI_v5) throws {
-        create.startParameterSubGroup(
-            "Performance",
-            parameterID: ParameterIdentifier.performanceGroup,
-            parameterFlags: [CorridorKeyParameterFlags.default].reduce(into: CorridorKeyParameterFlags()) { $0.insert($1) }.fxFlags
-        )
-
-        create.addPopupMenu(
-            withName: "Upscale Method",
-            parameterID: ParameterIdentifier.upscaleMethod,
-            defaultValue: UInt32(UpscaleMethod.bilinear.rawValue),
-            menuEntries: UpscaleMethod.allCases.map(\.displayName),
-            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
-        )
-
-        create.endParameterSubGroup()
-    }
-
-    private func addHelpGroup(create: any FxParameterCreationAPI_v5) throws {
-        create.startParameterSubGroup(
-            "Help",
-            parameterID: ParameterIdentifier.helpGroup,
-            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
-        )
-
-        create.addPushButton(
-            withName: "Open User Guide",
-            parameterID: ParameterIdentifier.openUserGuide,
-            selector: #selector(handleOpenUserGuide),
-            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
-        )
-
-        create.endParameterSubGroup()
-    }
-
-    // MARK: - Callbacks
-
-    @objc func handleOpenUserGuide() {
-        guard let url = URL(string: "https://corridordigital.com/corridor-key-pro") else { return }
-        NSWorkspace.shared.open(url)
-    }
-
-    /// Inspector button that kicks off a forward-analysis pass. The host
-    /// drives the per-frame callbacks defined in `CorridorKeyProPlugIn+FxAnalyzer`.
-    @objc func handleAnalyzeClip() {
-        startForwardAnalysisPass()
-    }
-
-    /// Inspector button that clears the persisted analysis cache so the next
-    /// "Analyse Clip" invocation starts from scratch.
-    @objc func handleResetAnalysis() {
-        clearAnalysisCache()
     }
 
     // MARK: - Parameter change notifications

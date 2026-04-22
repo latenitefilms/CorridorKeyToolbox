@@ -163,14 +163,10 @@
 	</sceneSettings>
 	<publishSettings>
 		<version>2</version>
-		<target object="10010" channel="./100" name="Setup"/>
+		<target object="10010" channel="./100" name="Settings"/>
 		<target object="10010" channel="./110" name="Interior"/>
 		<target object="10010" channel="./120" name="Matte"/>
 		<target object="10010" channel="./130" name="Edge Spill"/>
-		<target object="10010" channel="./140" name="Output"/>
-		<target object="10010" channel="./150" name="Performance"/>
-		<target object="10010" channel="./160" name="Help"/>
-		<target object="10010" channel="./170" name="Analysis"/>
 	</publishSettings>
 	<currentFrame>0 1 1 0</currentFrame>
 	<currentObject>10007</currentObject>
@@ -262,9 +258,11 @@
 			<filter name="Corridor Key Pro" id="10010" factoryID="6" pluginUUID="D29F6B10-4F3A-4C5E-B611-7A2E8D4C9F08" pluginVersion="1" pluginName="Corridor Key Pro" pluginDynamicParams="0">
 				<timing in="0 1 1 0" out="147456 153600 1 0" offset="0 1 1 0"/>
 				<baseFlags>8589934609</baseFlags>
-				<parameter name="Key Setup" id="100" flags="8589938704">
+				<parameter name="Settings" id="100" flags="8589938704">
 					<parameter name="Screen Colour" id="1001" flags="12884901904" default="0" value="0"/>
 					<parameter name="Quality" id="1002" flags="12884901904" default="0" value="0"/>
+					<parameter name="Output" id="5001" flags="12884901904" default="0" value="0"/>
+					<parameter name="Upscale Method" id="6002" flags="12884901904" default="0" value="0"/>
 				</parameter>
 				<parameter name="Interior Detail" id="110" flags="8589938704">
 					<foldFlags>4</foldFlags>
@@ -284,14 +282,6 @@
 				<parameter name="Edge &amp; Spill" id="130" flags="8589938704">
 					<parameter name="Despill Strength" id="4001" flags="12884901904" default="0.5" value="0.5"/>
 					<parameter name="Spill Method" id="4002" flags="12884901904" default="0" value="0"/>
-				</parameter>
-				<parameter name="Output" id="140" flags="8589938704">
-					<parameter name="Output" id="5001" flags="12884901904" default="0" value="0"/>
-				</parameter>
-				<parameter name="Performance" id="150" flags="8589938704">
-					<foldFlags>4</foldFlags>
-					<parameter name="Temporal Smoothing" id="6001" flags="12884901904" default="0" value="0"/>
-					<parameter name="Upscale Method" id="6002" flags="12884901904" default="0" value="0"/>
 				</parameter>
 				<parameter name="Mix" id="10001" flags="12884901888" default="1" value="1"/>
 				<parameter name="Flip" id="10002" flags="12889161760" default="0" value="0"/>

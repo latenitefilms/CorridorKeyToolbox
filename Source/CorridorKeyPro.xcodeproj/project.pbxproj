@@ -50,6 +50,10 @@
 		CK0100000000000000000050 /* CorridorKeyProPlugIn+FxAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000050 /* CorridorKeyProPlugIn+FxAnalyzer.swift */; };
 		CK0100000000000000000051 /* AnalysisData.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000051 /* AnalysisData.swift */; };
 		CK0100000000000000000052 /* MatteCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000052 /* MatteCodec.swift */; };
+		CK0100000000000000000060 /* CorridorKeyProPlugIn+CustomViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000060 /* CorridorKeyProPlugIn+CustomViews.swift */; };
+		CK0100000000000000000061 /* CorridorKeyInspectorBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000061 /* CorridorKeyInspectorBridge.swift */; };
+		CK0100000000000000000062 /* CorridorKeyHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000062 /* CorridorKeyHeaderView.swift */; };
+		CK0100000000000000000063 /* CorridorKeyAnalysisSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000063 /* CorridorKeyAnalysisSnapshot.swift */; };
 		MX0200000000000000000002 /* MLXKeyingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = MX0100000000000000000003 /* MLXKeyingEngine.swift */; };
 		MX0500000000000000000001 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = MX0400000000000000000001 /* MLX */; };
 		MX0500000000000000000002 /* MLXNN in Frameworks */ = {isa = PBXBuildFile; productRef = MX0400000000000000000002 /* MLXNN */; };
@@ -132,6 +136,10 @@
 		CK0200000000000000000050 /* CorridorKeyProPlugIn+FxAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyProPlugIn+FxAnalyzer.swift"; path = "CorridorKeyPro/Plugin/CorridorKeyProPlugIn+FxAnalyzer.swift"; sourceTree = "<group>"; };
 		CK0200000000000000000051 /* AnalysisData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AnalysisData.swift; path = CorridorKeyPro/Plugin/Inference/AnalysisData.swift; sourceTree = "<group>"; };
 		CK0200000000000000000052 /* MatteCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MatteCodec.swift; path = CorridorKeyPro/Plugin/Inference/MatteCodec.swift; sourceTree = "<group>"; };
+		CK0200000000000000000060 /* CorridorKeyProPlugIn+CustomViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyProPlugIn+CustomViews.swift"; path = "CorridorKeyPro/Plugin/Inspector/CorridorKeyProPlugIn+CustomViews.swift"; sourceTree = "<group>"; };
+		CK0200000000000000000061 /* CorridorKeyInspectorBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyInspectorBridge.swift; path = CorridorKeyPro/Plugin/Inspector/CorridorKeyInspectorBridge.swift; sourceTree = "<group>"; };
+		CK0200000000000000000062 /* CorridorKeyHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyHeaderView.swift; path = CorridorKeyPro/Plugin/Inspector/CorridorKeyHeaderView.swift; sourceTree = "<group>"; };
+		CK0200000000000000000063 /* CorridorKeyAnalysisSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyAnalysisSnapshot.swift; path = CorridorKeyPro/Plugin/Inspector/CorridorKeyAnalysisSnapshot.swift; sourceTree = "<group>"; };
 		CK0300000000000000000001 /* Corridor Key Pro.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Corridor Key Pro.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		CK0300000000000000000002 /* Corridor Key Pro Renderer.pluginkit */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Corridor Key Pro Renderer.pluginkit"; sourceTree = BUILT_PRODUCTS_DIR; };
 		CK0400000000000000000001 /* FxPlug.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FxPlug.framework; path = /Library/Developer/Frameworks/FxPlug.framework; sourceTree = "<absolute>"; };
@@ -219,6 +227,7 @@
 				CK0A00000000000000000004 /* Parameters */,
 				CK0A00000000000000000005 /* Render */,
 				CK0A0000000000000000000A /* Inference */,
+				CK0A00000000000000000020 /* Inspector */,
 				CK0A0000000000000000000B /* Metal */,
 				CK0A0000000000000000000C /* PostProcess */,
 				CK0A0000000000000000000D /* Shared */,
@@ -299,6 +308,17 @@
 				CK0200000000000000000052 /* MatteCodec.swift */,
 			);
 			name = Inference;
+			sourceTree = "<group>";
+		};
+		CK0A00000000000000000020 /* Inspector */ = {
+			isa = PBXGroup;
+			children = (
+				CK0200000000000000000060 /* CorridorKeyProPlugIn+CustomViews.swift */,
+				CK0200000000000000000061 /* CorridorKeyInspectorBridge.swift */,
+				CK0200000000000000000062 /* CorridorKeyHeaderView.swift */,
+				CK0200000000000000000063 /* CorridorKeyAnalysisSnapshot.swift */,
+			);
+			name = Inspector;
 			sourceTree = "<group>";
 		};
 		CK0A0000000000000000000B /* Metal */ = {
@@ -507,6 +527,10 @@
 				CK0100000000000000000050 /* CorridorKeyProPlugIn+FxAnalyzer.swift in Sources */,
 				CK0100000000000000000051 /* AnalysisData.swift in Sources */,
 				CK0100000000000000000052 /* MatteCodec.swift in Sources */,
+				CK0100000000000000000060 /* CorridorKeyProPlugIn+CustomViews.swift in Sources */,
+				CK0100000000000000000061 /* CorridorKeyInspectorBridge.swift in Sources */,
+				CK0100000000000000000062 /* CorridorKeyHeaderView.swift in Sources */,
+				CK0100000000000000000063 /* CorridorKeyAnalysisSnapshot.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

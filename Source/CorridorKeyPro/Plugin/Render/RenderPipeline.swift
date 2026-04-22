@@ -870,11 +870,21 @@ final class RenderPipeline: @unchecked Sendable {
         let halfW = outputWidth * 0.5
         let halfH = outputHeight * 0.5
 
+        // Motion hands us IOSurfaces with bottom-left origin, Final Cut Pro
+        // with top-left. Because our intermediate textures (MLX output, etc.)
+        // are plain Metal allocations without an intrinsic origin, we key the
+        // compose quad's V coordinate off the destination tile so the final
+        // image lands the right way up in both hosts. Motion Templates loaded
+        // inside FCP surface the Motion convention, which is why this matters
+        // even when the user is "in" Final Cut Pro.
+        let flipV = destinationTile.imageOrigin == FxImageOrigin(kFxImageOrigin_BOTTOM_LEFT)
+        let topV: Float = flipV ? 1 : 0
+        let bottomV: Float = flipV ? 0 : 1
         var vertices: [CKVertex2D] = [
-            CKVertex2D(position: SIMD2<Float>(halfW, -halfH), textureCoordinate: SIMD2<Float>(1, 1)),
-            CKVertex2D(position: SIMD2<Float>(-halfW, -halfH), textureCoordinate: SIMD2<Float>(0, 1)),
-            CKVertex2D(position: SIMD2<Float>(halfW, halfH), textureCoordinate: SIMD2<Float>(1, 0)),
-            CKVertex2D(position: SIMD2<Float>(-halfW, halfH), textureCoordinate: SIMD2<Float>(0, 0))
+            CKVertex2D(position: SIMD2<Float>(halfW, -halfH), textureCoordinate: SIMD2<Float>(1, bottomV)),
+            CKVertex2D(position: SIMD2<Float>(-halfW, -halfH), textureCoordinate: SIMD2<Float>(0, bottomV)),
+            CKVertex2D(position: SIMD2<Float>(halfW, halfH), textureCoordinate: SIMD2<Float>(1, topV)),
+            CKVertex2D(position: SIMD2<Float>(-halfW, halfH), textureCoordinate: SIMD2<Float>(0, topV))
         ]
         var viewportSize = SIMD2<UInt32>(UInt32(outputWidth), UInt32(outputHeight))
 

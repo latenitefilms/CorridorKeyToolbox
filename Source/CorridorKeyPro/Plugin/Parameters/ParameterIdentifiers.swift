@@ -12,16 +12,17 @@ import Foundation
 
 enum ParameterIdentifier {
     // Subgroups
-    static let keySetupGroup: UInt32 = 100
+    static let settingsGroup: UInt32 = 100
     static let interiorGroup: UInt32 = 110
     static let matteGroup: UInt32 = 120
     static let edgeSpillGroup: UInt32 = 130
-    static let outputGroup: UInt32 = 140
-    static let performanceGroup: UInt32 = 150
-    static let helpGroup: UInt32 = 160
-    static let analysisGroup: UInt32 = 170
 
-    // Key Setup
+    /// Custom-UI parameter that hosts the inspector header (app icon,
+    /// version, Analyse/Reset buttons, analysis status). Drawn as a SwiftUI
+    /// `NSHostingView` returned from `createViewForParameterID`.
+    static let headerSummary: UInt32 = 50
+
+    // Settings
     static let screenColor: UInt32 = 1001
     static let qualityMode: UInt32 = 1002
 
@@ -43,23 +44,12 @@ enum ParameterIdentifier {
     static let despillStrength: UInt32 = 4001
     static let spillMethod: UInt32 = 4002
 
-    // Output
+    // Output (lives in the Settings group)
     static let outputMode: UInt32 = 5001
 
-    // Performance
-    /// Reserved — the Temporal Smoothing control was removed because FxPlug's
-    /// multi-threaded frame rendering can't guarantee the ordered per-frame
-    /// history an EMA needs. ID is retained so saved documents that referenced
-    /// it continue to load cleanly; never reuse this value.
-    static let temporalSmoothing: UInt32 = 6001
+    // Performance (also in the Settings group)
     static let upscaleMethod: UInt32 = 6002
 
-    // Help
-    static let openUserGuide: UInt32 = 9001
-
-    // Analysis (FxAnalyzer workflow)
-    static let analyzeClip: UInt32 = 7001
-    static let resetAnalysis: UInt32 = 7002
     /// Hidden custom parameter that persists the per-frame MLX mattes inside
     /// the Final Cut Pro Library so editors can move projects between
     /// machines without losing the analysed cache.
@@ -79,6 +69,23 @@ struct CorridorKeyParameterFlags: OptionSet, Sendable {
     static let notAnimatable = CorridorKeyParameterFlags(rawValue: UInt32(kFxParameterFlag_NOT_ANIMATABLE))
     static let collapsed = CorridorKeyParameterFlags(rawValue: UInt32(kFxParameterFlag_COLLAPSED))
     static let ignoreMinMax = CorridorKeyParameterFlags(rawValue: UInt32(kFxParameterFlag_IGNORE_MINMAX))
+    static let customUI = CorridorKeyParameterFlags(rawValue: UInt32(kFxParameterFlag_CUSTOM_UI))
+    static let useFullViewWidth = CorridorKeyParameterFlags(rawValue: UInt32(kFxParameterFlag_USE_FULL_VIEW_WIDTH))
+    static let curveEditorHidden = CorridorKeyParameterFlags(rawValue: UInt32(kFxParameterFlag_CURVE_EDITOR_HIDDEN))
+
+    /// Flag combo we apply to every enum/toggle parameter in the inspector.
+    /// Animating screen colour or output mode makes no visual sense and
+    /// clutters the curve editor, so we keep these controls static.
+    static let nonAnimatableChoice: CorridorKeyParameterFlags = [.default, .notAnimatable, .curveEditorHidden]
+
+    /// Flag combo for the custom-UI inspector header parameter.
+    static let headerCustomUI: CorridorKeyParameterFlags = [
+        .default,
+        .customUI,
+        .notAnimatable,
+        .curveEditorHidden,
+        .useFullViewWidth
+    ]
 
     var fxFlags: FxParameterFlags { FxParameterFlags(rawValue) }
 }

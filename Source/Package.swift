@@ -50,6 +50,9 @@ let package = Package(
                 "Inference/KeyingInferenceEngine.swift",
                 "Inference/MLXKeyingEngine.swift",
                 "Inference/RoughMatteKeyingEngine.swift",
+                "Inspector/CorridorKeyProPlugIn+CustomViews.swift",
+                "Inspector/CorridorKeyInspectorBridge.swift",
+                "Inspector/CorridorKeyHeaderView.swift",
                 "Render",
                 "Metal",
                 "Resources",
@@ -60,7 +63,8 @@ let package = Package(
                 "Parameters/PluginStateData.swift",
                 "PostProcess/ScreenColorEstimator.swift",
                 "Inference/AnalysisData.swift",
-                "Inference/MatteCodec.swift"
+                "Inference/MatteCodec.swift",
+                "Inspector/CorridorKeyAnalysisSnapshot.swift"
             ],
             swiftSettings: [
                 .swiftLanguageMode(.v6)
