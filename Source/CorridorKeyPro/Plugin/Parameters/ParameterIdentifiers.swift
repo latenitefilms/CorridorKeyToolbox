@@ -23,7 +23,6 @@ enum ParameterIdentifier {
     // Key Setup
     static let screenColor: UInt32 = 1001
     static let qualityMode: UInt32 = 1002
-    static let alphaHintClip: UInt32 = 1004
 
     // Interior Detail
     static let sourcePassthrough: UInt32 = 2001

@@ -18,13 +18,12 @@ import Metal
 
 final class InferenceCoordinator: @unchecked Sendable {
 
-    /// Set to `true` once the MLX bridge's input/output convention is
-    /// validated end-to-end against CorridorKey's reference OFX plug-in.
-    /// Currently off because the bundled bridge produces an inverted matte
-    /// at runtime — the pipeline gets the same artefact every frame whether
-    /// MLX is involved or not, so we ship the deterministic rough-matte
-    /// path until we have the right pre/post-processing wired up.
-    private static let mlxEnabled = false
+    /// Enables the MLX bridge. When `true` the coordinator tries to load the
+    /// bundled `.mlxfn` that matches the requested resolution and falls back
+    /// to `RoughMatteKeyingEngine` on any error (missing file, warm-up
+    /// failure, per-frame inference failure). Set to `false` to force the
+    /// rough-matte path for debugging.
+    private static let mlxEnabled = true
 
     private let stateLock = NSLock()
     private var currentEngine: (any KeyingInferenceEngine)?

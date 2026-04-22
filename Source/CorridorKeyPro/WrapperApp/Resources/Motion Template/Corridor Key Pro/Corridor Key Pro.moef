@@ -264,7 +264,6 @@
 				<parameter name="Key Setup" id="100" flags="8589938704">
 					<parameter name="Screen Colour" id="1001" flags="12884901904" default="0" value="0"/>
 					<parameter name="Quality" id="1002" flags="12884901904" default="0" value="0"/>
-					<parameter name="Alpha Hint" id="1004" flags="81604444176" default="0" value="0"/>
 				</parameter>
 				<parameter name="Interior Detail" id="110" flags="8589938704">
 					<foldFlags>4</foldFlags>

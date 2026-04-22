@@ -60,12 +60,6 @@ extension CorridorKeyProPlugIn {
             parameterFlags: CorridorKeyParameterFlags.default.fxFlags
         )
 
-        create.addImageReference(
-            withName: "Alpha Hint",
-            parameterID: ParameterIdentifier.alphaHintClip,
-            parameterFlags: CorridorKeyParameterFlags.default.fxFlags
-        )
-
         create.endParameterSubGroup()
     }
 
@@ -73,7 +67,7 @@ extension CorridorKeyProPlugIn {
         create.startParameterSubGroup(
             "Interior Detail",
             parameterID: ParameterIdentifier.interiorGroup,
-            parameterFlags: [CorridorKeyParameterFlags.default, .collapsed].reduce(into: CorridorKeyParameterFlags()) { $0.insert($1) }.fxFlags
+            parameterFlags: [CorridorKeyParameterFlags.default].reduce(into: CorridorKeyParameterFlags()) { $0.insert($1) }.fxFlags
         )
 
         create.addToggleButton(
@@ -305,28 +299,48 @@ extension CorridorKeyProPlugIn {
 
     @objc func handleProcessClip() {
         PluginLog.notice("Process Clip button pressed.")
-        guard let analysisObject = apiManager.api(for: (any FxAnalysisAPI_v2).self)
-                ?? apiManager.api(for: (any FxAnalysisAPI).self) else {
-            PluginLog.error("Process Clip: FxAnalysisAPI is not available on this host.")
+
+        let analysisRawObject = apiManager.api(for: (any FxAnalysisAPI_v2).self)
+            ?? apiManager.api(for: (any FxAnalysisAPI).self)
+        PluginLog.notice("FxAnalysisAPI lookup returned \(String(describing: analysisRawObject)).")
+
+        guard let analysisObject = analysisRawObject else {
             presentProcessAlert(
                 title: "Process Clip unavailable",
-                message: "This host does not expose the analysis API. Live rendering will continue using the rough matte."
+                message: "This version of Final Cut Pro did not expose an analysis API to the plug-in."
             )
             return
         }
 
+        // Don't restart an analysis that's already running.
+        if let analysisAPI = analysisObject as? any FxAnalysisAPI {
+            let currentState = analysisAPI.analysisStateForEffect()
+            PluginLog.notice("Current analysis state before start: \(currentState).")
+            if currentState == kFxAnalysisState_AnalysisStarted || currentState == kFxAnalysisState_AnalysisRequested {
+                presentProcessAlert(
+                    title: "Analysis already running",
+                    message: "Corridor Key Pro is already analysing this clip. Progress is shown in the timeline overlay."
+                )
+                return
+            }
+        }
+
         do {
-            if let analysis = analysisObject as? any FxAnalysisAPI_v2 {
-                try analysis.startForwardAnalysis(kFxAnalysisLocation_GPU)
-            } else if let analysis = analysisObject as? any FxAnalysisAPI {
-                try analysis.startForwardAnalysis(kFxAnalysisLocation_GPU)
+            if let analysisV2 = analysisObject as? any FxAnalysisAPI_v2 {
+                try analysisV2.startForwardAnalysis(kFxAnalysisLocation_GPU)
+            } else if let analysisV1 = analysisObject as? any FxAnalysisAPI {
+                try analysisV1.startForwardAnalysis(kFxAnalysisLocation_GPU)
             } else {
-                throw NSError(domain: FxPlugErrorDomain, code: kFxError_APIUnavailable)
+                throw NSError(
+                    domain: FxPlugErrorDomain,
+                    code: kFxError_APIUnavailable,
+                    userInfo: [NSLocalizedDescriptionKey: "No compatible FxAnalysisAPI was returned by the host."]
+                )
             }
             PluginLog.notice("Forward analysis started on GPU.")
             presentProcessAlert(
                 title: "Processing started",
-                message: "Final Cut Pro is analysing the clip in the background. Progress is shown in the timeline overlay."
+                message: "Final Cut Pro is analysing the clip in the background. Progress is shown next to the timeline playhead."
             )
         } catch {
             PluginLog.error("startForwardAnalysis failed: \(error.localizedDescription)")
