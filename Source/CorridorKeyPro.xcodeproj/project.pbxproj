@@ -33,6 +33,7 @@
 		CK0100000000000000000010 /* RoughMatteKeyingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000010 /* RoughMatteKeyingEngine.swift */; };
 		CK0100000000000000000012 /* InferenceCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000012 /* InferenceCoordinator.swift */; };
 		CK0100000000000000000013 /* RenderPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000013 /* RenderPipeline.swift */; };
+		CK0100000000000000000040 /* PluginLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000040 /* PluginLog.swift */; };
 		CK0100000000000000000014 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000014 /* InfoPlist.strings */; };
 		CK0100000000000000000015 /* CorridorKeyProApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000015 /* CorridorKeyProApp.swift */; };
 		CK0100000000000000000016 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000016 /* WelcomeView.swift */; };
@@ -114,6 +115,7 @@
 		CK0200000000000000000010 /* RoughMatteKeyingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RoughMatteKeyingEngine.swift; path = CorridorKeyPro/Plugin/Inference/RoughMatteKeyingEngine.swift; sourceTree = "<group>"; };
 		CK0200000000000000000012 /* InferenceCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InferenceCoordinator.swift; path = CorridorKeyPro/Plugin/Inference/InferenceCoordinator.swift; sourceTree = "<group>"; };
 		CK0200000000000000000013 /* RenderPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RenderPipeline.swift; path = CorridorKeyPro/Plugin/Render/RenderPipeline.swift; sourceTree = "<group>"; };
+		CK0200000000000000000040 /* PluginLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PluginLog.swift; path = CorridorKeyPro/Plugin/PluginLog.swift; sourceTree = "<group>"; };
 		CK0200000000000000000015 /* CorridorKeyProApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyProApp.swift; path = CorridorKeyPro/WrapperApp/CorridorKeyProApp.swift; sourceTree = "<group>"; };
 		CK0200000000000000000016 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WelcomeView.swift; path = CorridorKeyPro/WrapperApp/WelcomeView.swift; sourceTree = "<group>"; };
 		CK0200000000000000000020 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = CorridorKeyPro/Plugin/Info.plist; sourceTree = "<group>"; };
@@ -209,6 +211,7 @@
 				CK0200000000000000000006 /* CorridorKeyProPlugIn+RenderRects.swift */,
 				CK0200000000000000000007 /* CorridorKeyProPlugIn+Render.swift */,
 				CK0200000000000000000008 /* CorridorKeyProPlugIn+FxAnalyzer.swift */,
+				CK0200000000000000000040 /* PluginLog.swift */,
 				CK0A00000000000000000004 /* Parameters */,
 				CK0A00000000000000000005 /* Render */,
 				CK0A0000000000000000000A /* Inference */,
@@ -495,6 +498,7 @@
 				MX0200000000000000000002 /* MLXKeyingEngine.swift in Sources */,
 				CK0100000000000000000012 /* InferenceCoordinator.swift in Sources */,
 				CK0100000000000000000013 /* RenderPipeline.swift in Sources */,
+				CK0100000000000000000040 /* PluginLog.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

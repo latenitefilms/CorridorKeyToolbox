@@ -26,7 +26,7 @@ struct KeyingInferenceRequest {
     /// RGBA (hint packed into alpha) texture, already normalised and resampled
     /// to `inferenceResolution x inferenceResolution` by the render pipeline.
     /// Allocated with `.shared` storage.
-    let normalisedInputTexture: MTLTexture
+    let normalisedInputTexture: any MTLTexture
     /// Square side length used for inference.
     let inferenceResolution: Int
 }
@@ -34,8 +34,8 @@ struct KeyingInferenceRequest {
 /// Textures the engine writes into. Both are created by the caller at the
 /// requested inference resolution.
 struct KeyingInferenceOutput {
-    let alphaTexture: MTLTexture
-    let foregroundTexture: MTLTexture
+    let alphaTexture: any MTLTexture
+    let foregroundTexture: any MTLTexture
 }
 
 /// Error surface returned when inference cannot proceed. The orchestrator can

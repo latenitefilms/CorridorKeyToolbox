@@ -14,7 +14,7 @@ import Metal
 /// Final Cut Pro can drive multiple tiles into the same instance at once.
 final class InferenceCoordinator: @unchecked Sendable {
     private let stateLock = NSLock()
-    private var currentEngine: KeyingInferenceEngine?
+    private var currentEngine: (any KeyingInferenceEngine)?
     private var warmResolution: Int = 0
     private var warmCacheEntryID: ObjectIdentifier?
 
@@ -35,12 +35,14 @@ final class InferenceCoordinator: @unchecked Sendable {
         let engine = try engine(for: request.inferenceResolution, cacheEntry: cacheEntry)
 
         // Output textures are allocated with `.shared` storage so the engine
-        // can populate them from the CPU via `texture.replace(region:…)` after
-        // inference, and the post-inference GPU pass can read them back.
+        // can populate them from the CPU via `texture.replace(region:…)`, and
+        // the post-inference GPU pass can then read them back. 32-bit float
+        // formats match the `Float` scratch buffers MLX produces so the
+        // replace call is a pointer-size copy.
         guard let alpha = cacheEntry.makeIntermediateTexture(
             width: request.inferenceResolution,
             height: request.inferenceResolution,
-            pixelFormat: .r16Float,
+            pixelFormat: .r32Float,
             storageMode: .shared
         ) else {
             throw KeyingInferenceError.deviceUnavailable
@@ -48,7 +50,7 @@ final class InferenceCoordinator: @unchecked Sendable {
         guard let foreground = cacheEntry.makeIntermediateTexture(
             width: request.inferenceResolution,
             height: request.inferenceResolution,
-            pixelFormat: .rgba16Float,
+            pixelFormat: .rgba32Float,
             storageMode: .shared
         ) else {
             throw KeyingInferenceError.deviceUnavailable
@@ -59,8 +61,9 @@ final class InferenceCoordinator: @unchecked Sendable {
             try engine.run(request: request, output: output)
             return output
         } catch {
-            // Fall back to the rough-matte engine on any error so the render
-            // always completes; the status field will reflect the fallback.
+            PluginLog.error(
+                "Inference engine \(engine.backendDisplayName) failed; falling back. Error: \(error.localizedDescription)"
+            )
             let fallback = RoughMatteKeyingEngine(cacheEntry: cacheEntry)
             try fallback.run(request: request, output: output)
             stateLock.lock()
@@ -70,12 +73,10 @@ final class InferenceCoordinator: @unchecked Sendable {
         }
     }
 
-    /// Returns the engine that should service the given resolution, creating
-    /// it lazily on first use.
     private func engine(
         for resolution: Int,
         cacheEntry: MetalDeviceCacheEntry
-    ) throws -> KeyingInferenceEngine {
+    ) throws -> any KeyingInferenceEngine {
         stateLock.lock()
         if let engine = currentEngine,
            engine.supports(resolution: resolution),
@@ -89,19 +90,19 @@ final class InferenceCoordinator: @unchecked Sendable {
         let preferred = MLXKeyingEngine(cacheEntry: cacheEntry)
         if preferred.supports(resolution: resolution) {
             do {
-                // Synchronously wait for the MLX bridge to warm up. The first
-                // call loads the `.mlxfn` file and JIT-compiles the graph;
-                // subsequent calls reuse the cached function handle.
                 try runBlocking { try await preferred.prepare(resolution: resolution) }
                 stateLock.lock()
                 currentEngine = preferred
                 warmResolution = resolution
                 warmCacheEntryID = ObjectIdentifier(cacheEntry)
                 stateLock.unlock()
+                PluginLog.notice("MLX engine ready for \(resolution)px inference on \(cacheEntry.device.name).")
                 return preferred
             } catch {
-                // Fall through to the rough matte engine.
+                PluginLog.error("MLX warm-up failed; using rough matte fallback. Error: \(error.localizedDescription)")
             }
+        } else {
+            PluginLog.notice("No MLX bridge bundled for \(resolution)px; using rough matte fallback.")
         }
 
         let fallback = RoughMatteKeyingEngine(cacheEntry: cacheEntry)
@@ -114,8 +115,9 @@ final class InferenceCoordinator: @unchecked Sendable {
     }
 
     /// Runs an async throwing closure on a detached task and blocks the
-    /// caller until it completes. Required because FxPlug's render entry
-    /// point is itself synchronous; Final Cut Pro manages concurrency above us.
+    /// caller until it completes. FxPlug's render entry point is synchronous,
+    /// so we bridge Swift concurrency back to the render thread for MLX
+    /// warm-up only (a one-time cost amortised across the timeline).
     private func runBlocking<T>(_ body: @escaping @Sendable () async throws -> T) throws -> T where T: Sendable {
         let semaphore = DispatchSemaphore(value: 0)
         let resultBox = RunBlockingBox<T>()
@@ -133,13 +135,11 @@ final class InferenceCoordinator: @unchecked Sendable {
     }
 }
 
-/// Minimal thread-safe storage for a `Result` value produced by a background
-/// task and read from the thread that kicked it off.
 private final class RunBlockingBox<T>: @unchecked Sendable {
     private let lock = NSLock()
-    private var result: Result<T, Error> = .failure(KeyingInferenceError.deviceUnavailable)
+    private var result: Result<T, any Error> = .failure(KeyingInferenceError.deviceUnavailable)
 
-    func set(_ value: Result<T, Error>) {
+    func set(_ value: Result<T, any Error>) {
         lock.lock(); result = value; lock.unlock()
     }
 

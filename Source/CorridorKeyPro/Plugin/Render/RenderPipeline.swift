@@ -2,10 +2,17 @@
 //  RenderPipeline.swift
 //  Corridor Key Pro
 //
-//  Orchestrates a single-frame render: screen-colour mapping, downsample,
-//  normalisation, neural inference, despill, alpha edge work, source
-//  passthrough blend, and final compose. Every stage runs on the GPU; the host
-//  hands us a destination `IOSurface` and we write straight back to it.
+//  Orchestrates a single-frame render. The pipeline is built around three
+//  command buffers so the inference engine (which owns synchronous CPU work
+//  on Apple Silicon's unified memory) can sit between GPU passes without
+//  racing their writes:
+//
+//  1. Pre-inference — screen rotation → hint extraction → combine & normalise.
+//  2. Inference — the neural engine reads the normalised tensor and writes
+//     alpha + foreground at inference resolution.
+//  3. Post-inference — upscale → despill → matte refine → passthrough →
+//     restore → compose directly into Final Cut Pro's destination texture
+//     via a render pass.
 //
 
 import Foundation
@@ -13,8 +20,8 @@ import Metal
 import CoreMedia
 import simd
 
-/// Input bundle for a render. Kept as a value type so that the orchestrator is
-/// trivial to reason about in isolation.
+/// Input bundle for a render. Value-type keeps the orchestrator easy to reason
+/// about; `FxImageTile` is passed along because we only read it, never mutate.
 struct RenderRequest: @unchecked Sendable {
     let destinationImage: FxImageTile
     let sourceImage: FxImageTile
@@ -23,15 +30,21 @@ struct RenderRequest: @unchecked Sendable {
     let renderTime: CMTime
 }
 
-/// Runs the per-frame pipeline. One instance is created per FxPlug plug-in
-/// instance so each timeline can hold its own warmed-up model without stepping
-/// on its neighbours. Final Cut Pro may invoke `render(_:)` concurrently for
-/// multiple tiles, so the pipeline keeps no per-frame mutable state of its own
-/// – each call is self-contained and the shared `InferenceCoordinator` is
-/// internally locked.
+/// Result fed back to the FxPlug layer so it can surface status in the
+/// inspector's "Runtime Status" group.
+struct RenderReport: Sendable {
+    let backendDescription: String
+    let guideSourceDescription: String
+    let effectiveInferenceResolution: Int
+    let deviceName: String
+}
+
+/// Runs the per-frame pipeline. One instance lives per plug-in instance so
+/// each timeline can keep its own warmed-up model. All Metal resources are
+/// shared through `MetalDeviceCache`, so creating a pipeline is cheap.
 final class RenderPipeline: @unchecked Sendable {
     private let deviceCache: MetalDeviceCache
-    private let inferenceCoordinator: InferenceCoordinator
+    let inferenceCoordinator: InferenceCoordinator
 
     init(
         deviceCache: MetalDeviceCache = .shared,
@@ -41,19 +54,9 @@ final class RenderPipeline: @unchecked Sendable {
         self.inferenceCoordinator = inferenceCoordinator
     }
 
-    /// Executes the full render for one tile. Throws if Metal resources can't
-    /// be provisioned; the plug-in surfaces a user-visible error in that case.
-    ///
-    /// The render is split into three phases so the inference engine can
-    /// read from and write to `.shared` textures without racing GPU work:
-    ///
-    /// 1. Pre-inference: rotate, resample, combine + normalise — committed
-    ///    and awaited so the normalised input texture is populated.
-    /// 2. Inference: the engine runs synchronously, reads the shared input
-    ///    and writes the shared alpha/foreground outputs.
-    /// 3. Post-inference: upscale, despill, refine matte, passthrough,
-    ///    restore, compose — committed and awaited.
-    func render(_ request: RenderRequest) throws {
+    /// Executes the full render for one tile. Returns a `RenderReport` so the
+    /// FxPlug layer can update the runtime status fields.
+    func render(_ request: RenderRequest) throws -> RenderReport {
         let destinationTile = request.destinationImage
         let sourceTile = request.sourceImage
 
@@ -61,47 +64,52 @@ final class RenderPipeline: @unchecked Sendable {
         guard let device = deviceCache.device(forRegistryID: destinationTile.deviceRegistryID) else {
             throw MetalDeviceCacheError.unknownDevice(destinationTile.deviceRegistryID)
         }
-        let entry = try deviceCache.entry(for: device, pixelFormat: pixelFormat)
+        let entry = try deviceCache.entry(for: device)
 
         guard let commandQueue = entry.borrowCommandQueue() else {
             throw MetalDeviceCacheError.queueExhausted
         }
         defer { entry.returnCommandQueue(commandQueue) }
 
-        guard let sourceTexture = sourceTile.metalTexture(for: device),
-              let destinationTexture = destinationTile.metalTexture(for: device) else {
+        guard let sourceTexture = sourceTile.metalTexture(for: device) else {
+            throw MetalDeviceCacheError.unknownDevice(destinationTile.deviceRegistryID)
+        }
+        guard let destinationTexture = destinationTile.metalTexture(for: device) else {
             throw MetalDeviceCacheError.unknownDevice(destinationTile.deviceRegistryID)
         }
 
-        let destinationWidth = sourceTexture.width
-        let destinationHeight = sourceTexture.height
+        let sourceWidth = sourceTexture.width
+        let sourceHeight = sourceTexture.height
+        let longEdge = max(sourceWidth, sourceHeight)
 
-        // Pre-inference phase -------------------------------------------------
-        guard let preCommandBuffer = commandQueue.makeCommandBuffer() else { return }
+        let inferenceResolution = request.state.qualityMode.resolvedInferenceResolution(forLongEdge: longEdge)
+
+        // ----- Pre-inference pass -----------------------------------------
+        guard let preCommandBuffer = commandQueue.makeCommandBuffer() else {
+            throw MetalDeviceCacheError.commandBufferCreationFailed
+        }
         preCommandBuffer.label = "Corridor Key Pro Pre-Inference"
 
         let screenTransform = ScreenColorEstimator.defaultTransform(for: request.state.screenColor)
 
-        let workingSource = try rotateIntoGreenDomain(
+        let rotatedSource = try applyScreenRotation(
             source: sourceTexture,
-            transform: screenTransform,
+            matrix: screenTransform.forwardMatrix,
+            isIdentity: screenTransform.isIdentity,
             entry: entry,
             commandBuffer: preCommandBuffer
         )
 
         let hintTexture = try makeHintTexture(
-            source: workingSource,
+            source: rotatedSource,
             hintTile: request.alphaHintImage,
             device: device,
             entry: entry,
             commandBuffer: preCommandBuffer
         )
 
-        let inferenceResolution = request.state.qualityMode.resolvedInferenceResolution(
-            forLongEdge: max(destinationWidth, destinationHeight)
-        )
         let normalisedInput = try combineAndNormalise(
-            source: workingSource,
+            source: rotatedSource,
             hint: hintTexture,
             inferenceResolution: inferenceResolution,
             entry: entry,
@@ -110,9 +118,11 @@ final class RenderPipeline: @unchecked Sendable {
 
         preCommandBuffer.commit()
         preCommandBuffer.waitUntilCompleted()
-        if let error = preCommandBuffer.error { throw error }
+        if let error = preCommandBuffer.error {
+            throw error
+        }
 
-        // Inference phase -----------------------------------------------------
+        // ----- Inference pass ---------------------------------------------
         let inferenceOutput = try inferenceCoordinator.runInference(
             request: KeyingInferenceRequest(
                 normalisedInputTexture: normalisedInput,
@@ -121,21 +131,25 @@ final class RenderPipeline: @unchecked Sendable {
             cacheEntry: entry
         )
 
-        // Post-inference phase ------------------------------------------------
-        guard let postCommandBuffer = commandQueue.makeCommandBuffer() else { return }
+        // ----- Post-inference pass ----------------------------------------
+        guard let postCommandBuffer = commandQueue.makeCommandBuffer() else {
+            throw MetalDeviceCacheError.commandBufferCreationFailed
+        }
         postCommandBuffer.label = "Corridor Key Pro Post-Inference"
 
         let upscaledAlpha = try resample(
             source: inferenceOutput.alphaTexture,
-            targetWidth: destinationWidth,
-            targetHeight: destinationHeight,
+            targetWidth: sourceWidth,
+            targetHeight: sourceHeight,
+            pixelFormat: .r16Float,
             entry: entry,
             commandBuffer: postCommandBuffer
         )
         let upscaledForeground = try resample(
             source: inferenceOutput.foregroundTexture,
-            targetWidth: destinationWidth,
-            targetHeight: destinationHeight,
+            targetWidth: sourceWidth,
+            targetHeight: sourceHeight,
+            pixelFormat: .rgba16Float,
             entry: entry,
             commandBuffer: postCommandBuffer
         )
@@ -158,9 +172,8 @@ final class RenderPipeline: @unchecked Sendable {
         if request.state.sourcePassthroughEnabled {
             workingForeground = try sourcePassthrough(
                 foreground: despilled,
-                source: workingSource,
+                source: rotatedSource,
                 matte: refinedMatte,
-                state: request.state,
                 entry: entry,
                 commandBuffer: postCommandBuffer
             )
@@ -168,129 +181,114 @@ final class RenderPipeline: @unchecked Sendable {
             workingForeground = despilled
         }
 
-        let restoredForeground = try restoreOriginalDomain(
-            foreground: workingForeground,
-            transform: screenTransform,
+        let restoredForeground = try applyScreenRotation(
+            source: workingForeground,
+            matrix: screenTransform.inverseMatrix,
+            isIdentity: screenTransform.isIdentity,
             entry: entry,
             commandBuffer: postCommandBuffer
         )
 
         try compose(
-            foreground: restoredForeground,
             source: sourceTexture,
+            foreground: restoredForeground,
             matte: refinedMatte,
             destination: destinationTexture,
+            destinationTile: destinationTile,
             state: request.state,
+            pixelFormat: pixelFormat,
             entry: entry,
             commandBuffer: postCommandBuffer
         )
 
         postCommandBuffer.commit()
-        postCommandBuffer.waitUntilCompleted()
-        if let error = postCommandBuffer.error { throw error }
+        postCommandBuffer.waitUntilScheduled()
+        if let error = postCommandBuffer.error {
+            throw error
+        }
+
+        return RenderReport(
+            backendDescription: inferenceCoordinator.backendDescription,
+            guideSourceDescription: request.alphaHintImage == nil ? "Auto Rough Fallback" : "Alpha Hint Clip",
+            effectiveInferenceResolution: inferenceResolution,
+            deviceName: device.name
+        )
     }
 
     // MARK: - Stage helpers
 
-    private func rotateIntoGreenDomain(
-        source: MTLTexture,
-        transform: ScreenColorTransform,
+    private func applyScreenRotation(
+        source: any MTLTexture,
+        matrix: simd_float3x3,
+        isIdentity: Bool,
         entry: MetalDeviceCacheEntry,
-        commandBuffer: MTLCommandBuffer
-    ) throws -> MTLTexture {
-        guard !transform.isIdentity else { return source }
-        guard let output = entry.makeIntermediateTexture(width: source.width, height: source.height) else {
-            return source
+        commandBuffer: any MTLCommandBuffer
+    ) throws -> any MTLTexture {
+        if isIdentity { return source }
+        guard let output = entry.makeIntermediateTexture(
+            width: source.width,
+            height: source.height,
+            pixelFormat: .rgba16Float
+        ) else {
+            throw MetalDeviceCacheError.textureAllocationFailed
         }
-        let passDescriptor = MTLRenderPassDescriptor()
-        passDescriptor.colorAttachments[0].texture = output
-        passDescriptor.colorAttachments[0].loadAction = .dontCare
-        passDescriptor.colorAttachments[0].storeAction = .store
-        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDescriptor) else {
-            return source
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            throw MetalDeviceCacheError.commandEncoderCreationFailed
         }
-        encoder.label = "Corridor Key Screen Rotation"
-        encoder.setRenderPipelineState(entry.pipelines.applyColorMatrix)
-        setupFullscreenQuad(on: encoder, width: output.width, height: output.height)
-        encoder.setFragmentTexture(source, index: Int(CKTextureIndexSource.rawValue))
-        var matrix = transform.forwardMatrix
-        encoder.setFragmentBytes(&matrix, length: MemoryLayout<simd_float3x3>.size, index: Int(CKBufferIndexScreenColorMatrix.rawValue))
-        encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
-        encoder.endEncoding()
-        return output
-    }
-
-    private func restoreOriginalDomain(
-        foreground: MTLTexture,
-        transform: ScreenColorTransform,
-        entry: MetalDeviceCacheEntry,
-        commandBuffer: MTLCommandBuffer
-    ) throws -> MTLTexture {
-        guard !transform.isIdentity else { return foreground }
-        guard let output = entry.makeIntermediateTexture(width: foreground.width, height: foreground.height) else {
-            return foreground
-        }
-        let passDescriptor = MTLRenderPassDescriptor()
-        passDescriptor.colorAttachments[0].texture = output
-        passDescriptor.colorAttachments[0].loadAction = .dontCare
-        passDescriptor.colorAttachments[0].storeAction = .store
-        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDescriptor) else {
-            return foreground
-        }
-        encoder.label = "Corridor Key Screen Restore"
-        encoder.setRenderPipelineState(entry.pipelines.applyColorMatrix)
-        setupFullscreenQuad(on: encoder, width: output.width, height: output.height)
-        encoder.setFragmentTexture(foreground, index: Int(CKTextureIndexSource.rawValue))
-        var matrix = transform.inverseMatrix
-        encoder.setFragmentBytes(&matrix, length: MemoryLayout<simd_float3x3>.size, index: Int(CKBufferIndexScreenColorMatrix.rawValue))
-        encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        encoder.label = "Corridor Key Pro Screen Matrix"
+        encoder.setComputePipelineState(entry.computePipelines.applyScreenMatrix)
+        encoder.setTexture(source, index: Int(CKTextureIndexSource.rawValue))
+        encoder.setTexture(output, index: Int(CKTextureIndexOutput.rawValue))
+        var matrixCopy = matrix
+        encoder.setBytes(
+            &matrixCopy,
+            length: MemoryLayout<simd_float3x3>.size,
+            index: Int(CKBufferIndexScreenColorMatrix.rawValue)
+        )
+        dispatch(encoder: encoder, pipeline: entry.computePipelines.applyScreenMatrix, width: output.width, height: output.height)
         encoder.endEncoding()
         return output
     }
 
     private func makeHintTexture(
-        source: MTLTexture,
+        source: any MTLTexture,
         hintTile: FxImageTile?,
-        device: MTLDevice,
+        device: any MTLDevice,
         entry: MetalDeviceCacheEntry,
-        commandBuffer: MTLCommandBuffer
-    ) throws -> MTLTexture {
+        commandBuffer: any MTLCommandBuffer
+    ) throws -> any MTLTexture {
         guard let hintTexture = entry.makeIntermediateTexture(
             width: source.width,
             height: source.height,
             pixelFormat: .r16Float
         ) else {
-            throw MetalDeviceCacheError.missingDefaultLibrary
+            throw MetalDeviceCacheError.textureAllocationFailed
         }
-
-        guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return hintTexture }
-        encoder.label = "Corridor Key Hint"
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            throw MetalDeviceCacheError.commandEncoderCreationFailed
+        }
+        encoder.label = "Corridor Key Pro Hint"
 
         if let hintTile, let hostTexture = hintTile.metalTexture(for: device) {
-            encoder.setComputePipelineState(entry.pipelines.extractHint)
+            encoder.setComputePipelineState(entry.computePipelines.extractHint)
             encoder.setTexture(hostTexture, index: Int(CKTextureIndexSource.rawValue))
             encoder.setTexture(hintTexture, index: Int(CKTextureIndexOutput.rawValue))
-            var layout: Int32 = hintTileLayoutValue(for: hostTexture)
+            var layout = hintTileLayoutValue(for: hostTexture)
             encoder.setBytes(&layout, length: MemoryLayout<Int32>.size, index: 0)
+            dispatch(encoder: encoder, pipeline: entry.computePipelines.extractHint, width: hintTexture.width, height: hintTexture.height)
         } else {
-            encoder.setComputePipelineState(entry.pipelines.roughMatte)
+            encoder.setComputePipelineState(entry.computePipelines.roughMatte)
             encoder.setTexture(source, index: Int(CKTextureIndexSource.rawValue))
             encoder.setTexture(hintTexture, index: Int(CKTextureIndexOutput.rawValue))
+            dispatch(encoder: encoder, pipeline: entry.computePipelines.roughMatte, width: hintTexture.width, height: hintTexture.height)
         }
-
-        let threads = MTLSize(width: hintTexture.width, height: hintTexture.height, depth: 1)
-        encoder.dispatchThreads(
-            threads,
-            threadsPerThreadgroup: threadgroupSize(for: entry.pipelines.roughMatte, threads: threads)
-        )
         encoder.endEncoding()
         return hintTexture
     }
 
     /// Downsamples source + hint to the inference resolution and writes the
-    /// four-channel normalised tensor the neural model expects into a single
-    /// `.shared` texture. `.shared` storage is required so the inference
-    /// engine can read the result back from the CPU.
+    /// four-channel normalised tensor into a `.shared` storage texture so the
+    /// inference engine can read it back from the CPU.
     private func combineAndNormalise(
         source: any MTLTexture,
         hint: any MTLTexture,
@@ -304,12 +302,13 @@ final class RenderPipeline: @unchecked Sendable {
             pixelFormat: .rgba32Float,
             storageMode: .shared
         ) else {
-            throw MetalDeviceCacheError.missingDefaultLibrary
+            throw MetalDeviceCacheError.textureAllocationFailed
         }
-
-        guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return normalised }
-        encoder.label = "Corridor Key Combine + Normalise"
-        encoder.setComputePipelineState(entry.pipelines.combineAndNormalize)
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            throw MetalDeviceCacheError.commandEncoderCreationFailed
+        }
+        encoder.label = "Corridor Key Pro Combine + Normalise"
+        encoder.setComputePipelineState(entry.computePipelines.combineAndNormalize)
         encoder.setTexture(source, index: Int(CKTextureIndexSource.rawValue))
         encoder.setTexture(hint, index: Int(CKTextureIndexHint.rawValue))
         encoder.setTexture(normalised, index: Int(CKTextureIndexOutput.rawValue))
@@ -323,71 +322,67 @@ final class RenderPipeline: @unchecked Sendable {
             length: MemoryLayout<CKNormalizeParams>.size,
             index: Int(CKBufferIndexNormalizeParams.rawValue)
         )
-
-        let threads = MTLSize(width: inferenceResolution, height: inferenceResolution, depth: 1)
-        encoder.dispatchThreads(
-            threads,
-            threadsPerThreadgroup: threadgroupSize(for: entry.pipelines.combineAndNormalize, threads: threads)
-        )
+        dispatch(encoder: encoder, pipeline: entry.computePipelines.combineAndNormalize, width: inferenceResolution, height: inferenceResolution)
         encoder.endEncoding()
         return normalised
     }
 
     private func despill(
-        foreground: MTLTexture,
+        foreground: any MTLTexture,
         state: PluginStateData,
         entry: MetalDeviceCacheEntry,
-        commandBuffer: MTLCommandBuffer
-    ) throws -> MTLTexture {
+        commandBuffer: any MTLCommandBuffer
+    ) throws -> any MTLTexture {
         guard state.despillStrength > 0 else { return foreground }
-        guard let output = entry.makeIntermediateTexture(width: foreground.width, height: foreground.height) else {
-            return foreground
+        guard let output = entry.makeIntermediateTexture(
+            width: foreground.width,
+            height: foreground.height
+        ) else {
+            throw MetalDeviceCacheError.textureAllocationFailed
         }
-        guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return foreground }
-        encoder.label = "Corridor Key Despill"
-        encoder.setComputePipelineState(entry.pipelines.despill)
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            throw MetalDeviceCacheError.commandEncoderCreationFailed
+        }
+        encoder.label = "Corridor Key Pro Despill"
+        encoder.setComputePipelineState(entry.computePipelines.despill)
         encoder.setTexture(foreground, index: Int(CKTextureIndexSource.rawValue))
         encoder.setTexture(output, index: Int(CKTextureIndexOutput.rawValue))
         var params = CKDespillParams(
             strength: Float(state.despillStrength),
             method: state.spillMethod.shaderValue
         )
-        encoder.setBytes(&params, length: MemoryLayout<CKDespillParams>.size, index: Int(CKBufferIndexDespillParams.rawValue))
-        let threads = MTLSize(width: output.width, height: output.height, depth: 1)
-        encoder.dispatchThreads(
-            threads,
-            threadsPerThreadgroup: threadgroupSize(for: entry.pipelines.despill, threads: threads)
+        encoder.setBytes(
+            &params,
+            length: MemoryLayout<CKDespillParams>.size,
+            index: Int(CKBufferIndexDespillParams.rawValue)
         )
+        dispatch(encoder: encoder, pipeline: entry.computePipelines.despill, width: output.width, height: output.height)
         encoder.endEncoding()
         return output
     }
 
     private func refineMatte(
-        alpha: MTLTexture,
+        alpha: any MTLTexture,
         state: PluginStateData,
         entry: MetalDeviceCacheEntry,
-        commandBuffer: MTLCommandBuffer
-    ) throws -> MTLTexture {
-        // Levels and gamma run first so downstream morphology and blur work on
-        // the user-corrected alpha. Each pass is a compute shader that reads
-        // from `current` and writes to `next`, then swaps.
-        var current = alpha
+        commandBuffer: any MTLCommandBuffer
+    ) throws -> any MTLTexture {
         guard let buffer = entry.makeIntermediateTexture(
             width: alpha.width,
             height: alpha.height,
             pixelFormat: .r16Float
-        ) else { return alpha }
+        ) else { throw MetalDeviceCacheError.textureAllocationFailed }
         guard let auxiliary = entry.makeIntermediateTexture(
             width: alpha.width,
             height: alpha.height,
             pixelFormat: .r16Float
-        ) else { return alpha }
+        ) else { throw MetalDeviceCacheError.textureAllocationFailed }
 
-        // Levels + gamma
+        var current = alpha
+
         try runAlphaLevelsGamma(source: current, destination: buffer, state: state, entry: entry, commandBuffer: commandBuffer)
         current = buffer
 
-        // Erode / dilate when the user asked for a non-zero alpha erode.
         let alphaErodeRadiusPixels = state.destinationPixelRadius(fromNormalized: state.alphaErodeNormalized)
         if abs(alphaErodeRadiusPixels) > 0.5 {
             try runMorphology(
@@ -401,7 +396,6 @@ final class RenderPipeline: @unchecked Sendable {
             current = buffer
         }
 
-        // Gaussian softness
         let softnessRadiusPixels = state.destinationPixelRadius(fromNormalized: state.alphaSoftnessNormalized)
         if softnessRadiusPixels > 0.5 {
             try runGaussianBlur(
@@ -418,15 +412,17 @@ final class RenderPipeline: @unchecked Sendable {
     }
 
     private func runAlphaLevelsGamma(
-        source: MTLTexture,
-        destination: MTLTexture,
+        source: any MTLTexture,
+        destination: any MTLTexture,
         state: PluginStateData,
         entry: MetalDeviceCacheEntry,
-        commandBuffer: MTLCommandBuffer
+        commandBuffer: any MTLCommandBuffer
     ) throws {
-        guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
-        encoder.label = "Corridor Key Levels + Gamma"
-        encoder.setComputePipelineState(entry.pipelines.alphaLevelsGamma)
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            throw MetalDeviceCacheError.commandEncoderCreationFailed
+        }
+        encoder.label = "Corridor Key Pro Levels + Gamma"
+        encoder.setComputePipelineState(entry.computePipelines.alphaLevelsGamma)
         encoder.setTexture(source, index: Int(CKTextureIndexMatte.rawValue))
         encoder.setTexture(destination, index: Int(CKTextureIndexOutput.rawValue))
         var params = CKAlphaEdgeParams(
@@ -436,79 +432,69 @@ final class RenderPipeline: @unchecked Sendable {
             morphRadius: 0,
             blurRadius: 0
         )
-        encoder.setBytes(&params, length: MemoryLayout<CKAlphaEdgeParams>.size, index: Int(CKBufferIndexAlphaEdgeParams.rawValue))
-        let threads = MTLSize(width: destination.width, height: destination.height, depth: 1)
-        encoder.dispatchThreads(
-            threads,
-            threadsPerThreadgroup: threadgroupSize(for: entry.pipelines.alphaLevelsGamma, threads: threads)
+        encoder.setBytes(
+            &params,
+            length: MemoryLayout<CKAlphaEdgeParams>.size,
+            index: Int(CKBufferIndexAlphaEdgeParams.rawValue)
         )
+        dispatch(encoder: encoder, pipeline: entry.computePipelines.alphaLevelsGamma, width: destination.width, height: destination.height)
         encoder.endEncoding()
     }
 
     private func runMorphology(
-        source: MTLTexture,
-        intermediate: MTLTexture,
-        destination: MTLTexture,
+        source: any MTLTexture,
+        intermediate: any MTLTexture,
+        destination: any MTLTexture,
         radius: Int,
         entry: MetalDeviceCacheEntry,
-        commandBuffer: MTLCommandBuffer
+        commandBuffer: any MTLCommandBuffer
     ) throws {
-        let absoluteRadius = Int32(abs(radius))
-        var radiusBuffer = absoluteRadius
+        var absoluteRadius = Int32(abs(radius))
         var erodeFlag: Int32 = (radius < 0) ? 1 : 0
 
         if let encoder = commandBuffer.makeComputeCommandEncoder() {
-            encoder.label = "Corridor Key Morphology H"
-            encoder.setComputePipelineState(entry.pipelines.morphologyHorizontal)
+            encoder.label = "Corridor Key Pro Morphology H"
+            encoder.setComputePipelineState(entry.computePipelines.morphologyHorizontal)
             encoder.setTexture(source, index: Int(CKTextureIndexMatte.rawValue))
             encoder.setTexture(intermediate, index: Int(CKTextureIndexOutput.rawValue))
-            encoder.setBytes(&radiusBuffer, length: MemoryLayout<Int32>.size, index: 0)
+            encoder.setBytes(&absoluteRadius, length: MemoryLayout<Int32>.size, index: 0)
             encoder.setBytes(&erodeFlag, length: MemoryLayout<Int32>.size, index: 1)
-            let threads = MTLSize(width: intermediate.width, height: intermediate.height, depth: 1)
-            encoder.dispatchThreads(
-                threads,
-                threadsPerThreadgroup: threadgroupSize(for: entry.pipelines.morphologyHorizontal, threads: threads)
-            )
+            dispatch(encoder: encoder, pipeline: entry.computePipelines.morphologyHorizontal, width: intermediate.width, height: intermediate.height)
             encoder.endEncoding()
         }
 
         if let encoder = commandBuffer.makeComputeCommandEncoder() {
-            encoder.label = "Corridor Key Morphology V"
-            encoder.setComputePipelineState(entry.pipelines.morphologyVertical)
+            encoder.label = "Corridor Key Pro Morphology V"
+            encoder.setComputePipelineState(entry.computePipelines.morphologyVertical)
             encoder.setTexture(intermediate, index: Int(CKTextureIndexMatte.rawValue))
             encoder.setTexture(destination, index: Int(CKTextureIndexOutput.rawValue))
-            encoder.setBytes(&radiusBuffer, length: MemoryLayout<Int32>.size, index: 0)
+            encoder.setBytes(&absoluteRadius, length: MemoryLayout<Int32>.size, index: 0)
             encoder.setBytes(&erodeFlag, length: MemoryLayout<Int32>.size, index: 1)
-            let threads = MTLSize(width: destination.width, height: destination.height, depth: 1)
-            encoder.dispatchThreads(
-                threads,
-                threadsPerThreadgroup: threadgroupSize(for: entry.pipelines.morphologyVertical, threads: threads)
-            )
+            dispatch(encoder: encoder, pipeline: entry.computePipelines.morphologyVertical, width: destination.width, height: destination.height)
             encoder.endEncoding()
         }
     }
 
     private func runGaussianBlur(
-        source: MTLTexture,
-        intermediate: MTLTexture,
-        destination: MTLTexture,
+        source: any MTLTexture,
+        intermediate: any MTLTexture,
+        destination: any MTLTexture,
         radiusPixels: Float,
         entry: MetalDeviceCacheEntry,
-        commandBuffer: MTLCommandBuffer
+        commandBuffer: any MTLCommandBuffer
     ) throws {
         let kernelRadius = Int(ceil(radiusPixels))
         guard kernelRadius > 0 else { return }
 
-        // Build separable Gaussian weights on the CPU and upload once.
-        let sigma = radiusPixels * 0.5
+        let sigma = max(radiusPixels * 0.5, 0.5)
         var weights: [Float] = []
         weights.reserveCapacity(kernelRadius + 1)
         var total: Float = 0
-        for i in 0...kernelRadius {
-            let f = Float(i)
-            let weight = exp(-(f * f) / (2 * sigma * sigma))
+        for index in 0...kernelRadius {
+            let offset = Float(index)
+            let weight = exp(-(offset * offset) / (2 * sigma * sigma))
             weights.append(weight)
-            total += (i == 0) ? weight : (weight * 2)
+            total += (index == 0) ? weight : (weight * 2)
         }
         for index in weights.indices { weights[index] /= total }
 
@@ -521,152 +507,173 @@ final class RenderPipeline: @unchecked Sendable {
         var radiusValue = Int32(kernelRadius)
 
         if let encoder = commandBuffer.makeComputeCommandEncoder() {
-            encoder.label = "Corridor Key Blur H"
-            encoder.setComputePipelineState(entry.pipelines.gaussianHorizontal)
+            encoder.label = "Corridor Key Pro Blur H"
+            encoder.setComputePipelineState(entry.computePipelines.gaussianHorizontal)
             encoder.setTexture(source, index: Int(CKTextureIndexMatte.rawValue))
             encoder.setTexture(intermediate, index: Int(CKTextureIndexOutput.rawValue))
             encoder.setBuffer(weightsBuffer, offset: 0, index: Int(CKBufferIndexBlurWeights.rawValue))
             encoder.setBytes(&radiusValue, length: MemoryLayout<Int32>.size, index: 0)
-            let threads = MTLSize(width: intermediate.width, height: intermediate.height, depth: 1)
-            encoder.dispatchThreads(
-                threads,
-                threadsPerThreadgroup: threadgroupSize(for: entry.pipelines.gaussianHorizontal, threads: threads)
-            )
+            dispatch(encoder: encoder, pipeline: entry.computePipelines.gaussianHorizontal, width: intermediate.width, height: intermediate.height)
             encoder.endEncoding()
         }
         if let encoder = commandBuffer.makeComputeCommandEncoder() {
-            encoder.label = "Corridor Key Blur V"
-            encoder.setComputePipelineState(entry.pipelines.gaussianVertical)
+            encoder.label = "Corridor Key Pro Blur V"
+            encoder.setComputePipelineState(entry.computePipelines.gaussianVertical)
             encoder.setTexture(intermediate, index: Int(CKTextureIndexMatte.rawValue))
             encoder.setTexture(destination, index: Int(CKTextureIndexOutput.rawValue))
             encoder.setBuffer(weightsBuffer, offset: 0, index: Int(CKBufferIndexBlurWeights.rawValue))
             encoder.setBytes(&radiusValue, length: MemoryLayout<Int32>.size, index: 0)
-            let threads = MTLSize(width: destination.width, height: destination.height, depth: 1)
-            encoder.dispatchThreads(
-                threads,
-                threadsPerThreadgroup: threadgroupSize(for: entry.pipelines.gaussianVertical, threads: threads)
-            )
+            dispatch(encoder: encoder, pipeline: entry.computePipelines.gaussianVertical, width: destination.width, height: destination.height)
             encoder.endEncoding()
         }
     }
 
     private func sourcePassthrough(
-        foreground: MTLTexture,
-        source: MTLTexture,
-        matte: MTLTexture,
-        state: PluginStateData,
+        foreground: any MTLTexture,
+        source: any MTLTexture,
+        matte: any MTLTexture,
         entry: MetalDeviceCacheEntry,
-        commandBuffer: MTLCommandBuffer
-    ) throws -> MTLTexture {
+        commandBuffer: any MTLCommandBuffer
+    ) throws -> any MTLTexture {
         guard let output = entry.makeIntermediateTexture(width: foreground.width, height: foreground.height) else {
-            return foreground
+            throw MetalDeviceCacheError.textureAllocationFailed
         }
-        guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return foreground }
-        encoder.label = "Corridor Key Source Passthrough"
-        encoder.setComputePipelineState(entry.pipelines.sourcePassthrough)
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            throw MetalDeviceCacheError.commandEncoderCreationFailed
+        }
+        encoder.label = "Corridor Key Pro Source Passthrough"
+        encoder.setComputePipelineState(entry.computePipelines.sourcePassthrough)
         encoder.setTexture(foreground, index: Int(CKTextureIndexForeground.rawValue))
         encoder.setTexture(source, index: Int(CKTextureIndexSource.rawValue))
         encoder.setTexture(matte, index: Int(CKTextureIndexMatte.rawValue))
         encoder.setTexture(output, index: Int(CKTextureIndexOutput.rawValue))
-        let threads = MTLSize(width: output.width, height: output.height, depth: 1)
-        encoder.dispatchThreads(
-            threads,
-            threadsPerThreadgroup: threadgroupSize(for: entry.pipelines.sourcePassthrough, threads: threads)
-        )
+        dispatch(encoder: encoder, pipeline: entry.computePipelines.sourcePassthrough, width: output.width, height: output.height)
         encoder.endEncoding()
         return output
     }
 
+    /// Writes the final pixel directly into Final Cut Pro's destination tile
+    /// using a render pass. Positioning the quad in tile-local coordinates
+    /// keeps the output aligned when FCP requests a sub-tile.
     private func compose(
-        foreground: MTLTexture,
-        source: MTLTexture,
-        matte: MTLTexture,
-        destination: MTLTexture,
+        source: any MTLTexture,
+        foreground: any MTLTexture,
+        matte: any MTLTexture,
+        destination: any MTLTexture,
+        destinationTile: FxImageTile,
         state: PluginStateData,
+        pixelFormat: MTLPixelFormat,
         entry: MetalDeviceCacheEntry,
-        commandBuffer: MTLCommandBuffer
+        commandBuffer: any MTLCommandBuffer
     ) throws {
-        guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
-        encoder.label = "Corridor Key Compose"
-        encoder.setComputePipelineState(entry.pipelines.compose)
-        encoder.setTexture(foreground, index: Int(CKTextureIndexForeground.rawValue))
-        encoder.setTexture(source, index: Int(CKTextureIndexSource.rawValue))
-        encoder.setTexture(matte, index: Int(CKTextureIndexMatte.rawValue))
-        encoder.setTexture(destination, index: Int(CKTextureIndexOutput.rawValue))
+        let renderPipelines = try entry.renderPipelines(for: pixelFormat)
+
+        let passDescriptor = MTLRenderPassDescriptor()
+        passDescriptor.colorAttachments[0].texture = destination
+        passDescriptor.colorAttachments[0].loadAction = .clear
+        passDescriptor.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0)
+        passDescriptor.colorAttachments[0].storeAction = .store
+
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDescriptor) else {
+            throw MetalDeviceCacheError.commandEncoderCreationFailed
+        }
+        encoder.label = "Corridor Key Pro Compose"
+
+        let outputWidth = Float(destinationTile.tilePixelBounds.right - destinationTile.tilePixelBounds.left)
+        let outputHeight = Float(destinationTile.tilePixelBounds.top - destinationTile.tilePixelBounds.bottom)
+        let halfW = outputWidth * 0.5
+        let halfH = outputHeight * 0.5
+
+        var vertices: [CKVertex2D] = [
+            CKVertex2D(position: SIMD2<Float>(halfW, -halfH), textureCoordinate: SIMD2<Float>(1, 1)),
+            CKVertex2D(position: SIMD2<Float>(-halfW, -halfH), textureCoordinate: SIMD2<Float>(0, 1)),
+            CKVertex2D(position: SIMD2<Float>(halfW, halfH), textureCoordinate: SIMD2<Float>(1, 0)),
+            CKVertex2D(position: SIMD2<Float>(-halfW, halfH), textureCoordinate: SIMD2<Float>(0, 0))
+        ]
+        var viewportSize = SIMD2<UInt32>(UInt32(outputWidth), UInt32(outputHeight))
+
+        encoder.setViewport(MTLViewport(
+            originX: 0,
+            originY: 0,
+            width: Double(outputWidth),
+            height: Double(outputHeight),
+            znear: -1,
+            zfar: 1
+        ))
+        encoder.setRenderPipelineState(renderPipelines.compose)
+        encoder.setVertexBytes(
+            &vertices,
+            length: MemoryLayout<CKVertex2D>.stride * vertices.count,
+            index: Int(CKVertexInputIndexVertices.rawValue)
+        )
+        encoder.setVertexBytes(
+            &viewportSize,
+            length: MemoryLayout<SIMD2<UInt32>>.size,
+            index: Int(CKVertexInputIndexViewportSize.rawValue)
+        )
+        encoder.setFragmentTexture(source, index: Int(CKTextureIndexSource.rawValue))
+        encoder.setFragmentTexture(foreground, index: Int(CKTextureIndexForeground.rawValue))
+        encoder.setFragmentTexture(matte, index: Int(CKTextureIndexMatte.rawValue))
+
         var params = CKComposeParams(
             outputMode: state.outputMode.shaderValue,
             temporalSmoothing: Float(state.temporalSmoothing)
         )
-        encoder.setBytes(&params, length: MemoryLayout<CKComposeParams>.size, index: Int(CKBufferIndexComposeParams.rawValue))
-        let threads = MTLSize(width: destination.width, height: destination.height, depth: 1)
-        encoder.dispatchThreads(
-            threads,
-            threadsPerThreadgroup: threadgroupSize(for: entry.pipelines.compose, threads: threads)
+        encoder.setFragmentBytes(
+            &params,
+            length: MemoryLayout<CKComposeParams>.size,
+            index: Int(CKBufferIndexComposeParams.rawValue)
         )
+        encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         encoder.endEncoding()
     }
 
     private func resample(
-        source: MTLTexture,
+        source: any MTLTexture,
         targetWidth: Int,
         targetHeight: Int,
+        pixelFormat: MTLPixelFormat,
         entry: MetalDeviceCacheEntry,
-        commandBuffer: MTLCommandBuffer
-    ) throws -> MTLTexture {
-        if source.width == targetWidth && source.height == targetHeight { return source }
+        commandBuffer: any MTLCommandBuffer
+    ) throws -> any MTLTexture {
+        if source.width == targetWidth && source.height == targetHeight && source.pixelFormat == pixelFormat {
+            return source
+        }
         guard let target = entry.makeIntermediateTexture(
             width: targetWidth,
             height: targetHeight,
-            pixelFormat: source.pixelFormat
-        ) else { return source }
-        try resampleInPlace(source: source, target: target, entry: entry, commandBuffer: commandBuffer)
-        return target
-    }
-
-    private func resampleInPlace(
-        source: MTLTexture,
-        target: MTLTexture,
-        entry: MetalDeviceCacheEntry,
-        commandBuffer: MTLCommandBuffer
-    ) throws {
-        guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
-        encoder.label = "Corridor Key Resample"
-        encoder.setComputePipelineState(entry.pipelines.resample)
+            pixelFormat: pixelFormat
+        ) else {
+            throw MetalDeviceCacheError.textureAllocationFailed
+        }
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            throw MetalDeviceCacheError.commandEncoderCreationFailed
+        }
+        encoder.label = "Corridor Key Pro Resample"
+        encoder.setComputePipelineState(entry.computePipelines.resample)
         encoder.setTexture(source, index: Int(CKTextureIndexSource.rawValue))
         encoder.setTexture(target, index: Int(CKTextureIndexOutput.rawValue))
-        let threads = MTLSize(width: target.width, height: target.height, depth: 1)
-        encoder.dispatchThreads(
-            threads,
-            threadsPerThreadgroup: threadgroupSize(for: entry.pipelines.resample, threads: threads)
-        )
+        dispatch(encoder: encoder, pipeline: entry.computePipelines.resample, width: target.width, height: target.height)
         encoder.endEncoding()
+        return target
     }
 
     // MARK: - Utilities
 
-    private func setupFullscreenQuad(on encoder: MTLRenderCommandEncoder, width: Int, height: Int) {
-        let halfWidth = Float(width) * 0.5
-        let halfHeight = Float(height) * 0.5
-        var vertices: [CKVertex2D] = [
-            CKVertex2D(position: SIMD2<Float>(halfWidth, -halfHeight), textureCoordinate: SIMD2<Float>(1, 1)),
-            CKVertex2D(position: SIMD2<Float>(-halfWidth, -halfHeight), textureCoordinate: SIMD2<Float>(0, 1)),
-            CKVertex2D(position: SIMD2<Float>(halfWidth, halfHeight), textureCoordinate: SIMD2<Float>(1, 0)),
-            CKVertex2D(position: SIMD2<Float>(-halfWidth, halfHeight), textureCoordinate: SIMD2<Float>(0, 0))
-        ]
-        encoder.setVertexBytes(&vertices, length: MemoryLayout<CKVertex2D>.stride * vertices.count, index: Int(CKVertexInputIndexVertices.rawValue))
-        var viewport = SIMD2<UInt32>(UInt32(width), UInt32(height))
-        encoder.setVertexBytes(&viewport, length: MemoryLayout<SIMD2<UInt32>>.size, index: Int(CKVertexInputIndexViewportSize.rawValue))
-        encoder.setViewport(MTLViewport(originX: 0, originY: 0, width: Double(width), height: Double(height), znear: -1, zfar: 1))
+    private func dispatch(
+        encoder: any MTLComputeCommandEncoder,
+        pipeline: any MTLComputePipelineState,
+        width: Int,
+        height: Int
+    ) {
+        let threadgroupWidth = min(pipeline.threadExecutionWidth, max(width, 1))
+        let threadgroupHeight = max(1, min(pipeline.maxTotalThreadsPerThreadgroup / max(threadgroupWidth, 1), max(height, 1)))
+        let threadsPerThreadgroup = MTLSize(width: threadgroupWidth, height: threadgroupHeight, depth: 1)
+        let threadsPerGrid = MTLSize(width: max(width, 1), height: max(height, 1), depth: 1)
+        encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
     }
 
-    private func threadgroupSize(for pipeline: MTLComputePipelineState, threads: MTLSize) -> MTLSize {
-        let width = min(pipeline.threadExecutionWidth, threads.width)
-        let height = min(pipeline.maxTotalThreadsPerThreadgroup / max(width, 1), threads.height)
-        return MTLSize(width: max(width, 1), height: max(height, 1), depth: 1)
-    }
-
-    private func hintTileLayoutValue(for texture: MTLTexture) -> Int32 {
-        // 0 = RGBA (use alpha), 1 = Alpha only, 2 = RGB (use red channel).
+    private func hintTileLayoutValue(for texture: any MTLTexture) -> Int32 {
         switch texture.pixelFormat {
         case .rgba16Float, .rgba32Float, .bgra8Unorm, .rgba8Unorm: return 0
         case .r8Unorm, .r16Float, .r32Float: return 1

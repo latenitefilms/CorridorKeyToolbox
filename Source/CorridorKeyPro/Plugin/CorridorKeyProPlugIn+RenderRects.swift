@@ -3,9 +3,9 @@
 //  Corridor Key Pro
 //
 //  Tells FxPlug which parts of the input and output images we touch. The
-//  keyer is an identity transform — the output bounds always match the input
-//  bounds — and we need to read the full source tile to produce a given
-//  output tile because the neural matte considers spatial context.
+//  keyer is an identity transform so the output bounds always equal the
+//  input bounds. Because the neural matte considers spatial context, we
+//  also ask for the full source image rather than a sub-tile.
 //
 
 import Foundation
@@ -19,7 +19,7 @@ extension CorridorKeyProPlugIn {
         sourceImages: [FxImageTile],
         destinationImage: FxImageTile,
         pluginState: Data?,
-        at renderTime: CMTime
+        atTime renderTime: CMTime
     ) throws {
         if let source = sourceImages.first {
             destinationImageRect.pointee = source.imagePixelBounds
@@ -36,10 +36,8 @@ extension CorridorKeyProPlugIn {
         destinationTileRect: FxRect,
         destinationImage: FxImageTile,
         pluginState: Data?,
-        at renderTime: CMTime
+        atTime renderTime: CMTime
     ) throws {
-        // We need the complete source image to produce a spatially consistent
-        // matte, so expand the required input to the full image bounds.
         let index = Int(sourceImageIndex)
         if sourceImages.indices.contains(index) {
             sourceTileRect.pointee = sourceImages[index].imagePixelBounds

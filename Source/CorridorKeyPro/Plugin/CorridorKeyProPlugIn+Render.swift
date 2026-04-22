@@ -3,8 +3,8 @@
 //  Corridor Key Pro
 //
 //  Hooks FxPlug's per-tile render callback into the Corridor Key render
-//  pipeline. Final Cut Pro calls this method on a worker thread; we marshal to
-//  the main actor because `RenderPipeline` owns per-instance Metal state.
+//  pipeline. Final Cut Pro invokes this method on a background thread; the
+//  render pipeline itself owns all Metal state internally.
 //
 
 import Foundation
@@ -18,7 +18,7 @@ extension CorridorKeyProPlugIn {
         _ destinationImage: FxImageTile,
         sourceImages: [FxImageTile],
         pluginState: Data?,
-        at renderTime: CMTime
+        atTime renderTime: CMTime
     ) throws {
         guard let sourceImage = sourceImages.first else {
             throw NSError(
@@ -43,35 +43,49 @@ extension CorridorKeyProPlugIn {
         )
 
         let startTime = CACurrentMediaTime()
-        try renderPipeline.render(request)
-        let elapsedMs = (CACurrentMediaTime() - startTime) * 1000
-        lastFrameMilliseconds.set(elapsedMs)
+        PluginLog.debug("Render begin for tile \(destinationImage.tilePixelBounds.left),\(destinationImage.tilePixelBounds.bottom) — \(destinationImage.tilePixelBounds.right - destinationImage.tilePixelBounds.left)×\(destinationImage.tilePixelBounds.top - destinationImage.tilePixelBounds.bottom).")
+        let report: RenderReport
+        do {
+            report = try renderPipeline.render(request)
+        } catch {
+            PluginLog.error("Render failed at \(CMTimeGetSeconds(renderTime))s: \(error.localizedDescription)")
+            throw error
+        }
+        let elapsedMilliseconds = (CACurrentMediaTime() - startTime) * 1000
+        lastFrameMilliseconds.set(elapsedMilliseconds)
 
-        publishRuntimeStatus(for: state, elapsedMilliseconds: elapsedMs)
+        publishRuntimeStatus(for: state, report: report, elapsedMilliseconds: elapsedMilliseconds)
     }
 
     /// Updates the read-only status parameters so the user can see which
-    /// backend is active and how fast the frame ran. The setting API works
-    /// regardless of the calling thread; FxPlug schedules the write back onto
-    /// the main UI queue internally.
-    private func publishRuntimeStatus(for state: PluginStateData, elapsedMilliseconds: Double) {
-        guard let setting = apiManager.api(for: FxParameterSettingAPI_v6.self) as? FxParameterSettingAPI_v6 else {
+    /// backend is active and how fast the frame ran.
+    private func publishRuntimeStatus(
+        for state: PluginStateData,
+        report: RenderReport,
+        elapsedMilliseconds: Double
+    ) {
+        guard let setting = apiManager.api(for: FxParameterSettingAPI_v6.self) as? any FxParameterSettingAPI_v6 else {
             return
         }
-        let effectiveResolution = state.qualityMode.resolvedInferenceResolution(
-            forLongEdge: state.destinationLongEdgePixels
+        setting.setStringParameterValue(
+            report.backendDescription,
+            toParameter: ParameterIdentifier.statusBackend
         )
-        setting.setStringParameterValue("\(effectiveResolution)px", toParameter: ParameterIdentifier.statusEffectiveQuality)
-
-        let millisecondsText = String(
-            format: "%.1f ms",
-            locale: Locale(identifier: "en_US_POSIX"),
-            elapsedMilliseconds
+        setting.setStringParameterValue(
+            "\(report.effectiveInferenceResolution)px",
+            toParameter: ParameterIdentifier.statusEffectiveQuality
         )
-        setting.setStringParameterValue(millisecondsText, toParameter: ParameterIdentifier.statusLastFrameMs)
-
-        // Backend and device descriptions are filled in by the coordinator on
-        // the first frame; the plugin pipeline is the owner of that state so
-        // the render path does not need a fresh query here.
+        setting.setStringParameterValue(
+            report.guideSourceDescription,
+            toParameter: ParameterIdentifier.statusGuideSource
+        )
+        setting.setStringParameterValue(
+            elapsedMilliseconds.formatted(.number.precision(.fractionLength(1))) + " ms",
+            toParameter: ParameterIdentifier.statusLastFrameMs
+        )
+        setting.setStringParameterValue(
+            report.deviceName,
+            toParameter: ParameterIdentifier.statusDevice
+        )
     }
 }

@@ -23,7 +23,7 @@ final class CorridorKeyProPlugIn: NSObject, FxTileableEffect, FxAnalyzer {
     /// The FxPlug API manager the host hands us at construction. All runtime
     /// capabilities – parameter creation, retrieval, timing, colour gamut – are
     /// fetched through this manager on demand.
-    let apiManager: PROAPIAccessing
+    let apiManager: any PROAPIAccessing
 
     /// Lock that guards analyser scratch state. Final Cut Pro may call analyser
     /// and render methods from different threads so this is explicitly a lock
@@ -70,9 +70,10 @@ final class CorridorKeyProPlugIn: NSObject, FxTileableEffect, FxAnalyzer {
 
     // MARK: - Init
 
-    @objc required init?(apiManager: PROAPIAccessing) {
+    @objc required init?(apiManager: any PROAPIAccessing) {
         self.apiManager = apiManager
         super.init()
+        PluginLog.notice("CorridorKeyProPlugIn instantiated.")
     }
 }
 

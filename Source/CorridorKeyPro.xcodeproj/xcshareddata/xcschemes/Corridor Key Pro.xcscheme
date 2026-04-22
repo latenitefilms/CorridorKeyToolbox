@@ -29,7 +29,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "CK0700000000000000000002"
-               BuildableName = "Corridor Key Pro.pluginkit"
+               BuildableName = "Corridor Key Pro Renderer.pluginkit"
                BlueprintName = "Corridor Key Pro Renderer"
                ReferencedContainer = "container:CorridorKeyPro.xcodeproj">
             </BuildableReference>

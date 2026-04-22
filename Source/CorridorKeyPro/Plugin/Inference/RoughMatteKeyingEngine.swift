@@ -2,37 +2,33 @@
 //  RoughMatteKeyingEngine.swift
 //  Corridor Key Pro
 //
-//  Fallback engine used when no neural model artefact is bundled (for example
-//  during development builds or if the user disables network-download of
-//  models). Produces a simple `max(G - max(R,B), 0)` matte that mirrors the
-//  rough-matte helper in the CorridorKey CLI, so the plugin always has a
-//  usable output even without ML.
+//  Fallback engine used when no neural model artefact is bundled (or when MLX
+//  fails to load). Produces a simple `saturate((G - max(R, B)) * 2.5)` matte on
+//  the GPU and copies the normalised input forward as the foreground texture
+//  so the rest of the pipeline always has something to work with.
 //
 
 import Foundation
 import Metal
 
 final class RoughMatteKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
-    let backendDisplayName: String = "Rough Matte (Metal)"
+    let backendDisplayName: String
     var guideSourceDescription: String = "Green-channel fallback"
 
     private let cacheEntry: MetalDeviceCacheEntry
 
     init(cacheEntry: MetalDeviceCacheEntry) {
         self.cacheEntry = cacheEntry
+        self.backendDisplayName = "Rough Matte (Metal) on \(cacheEntry.device.name)"
     }
 
     func supports(resolution: Int) -> Bool { true }
 
     func prepare(resolution: Int) async throws {
-        // Nothing to do; all work happens per-frame via Metal.
+        // Nothing to prepare; all work happens per-frame on the GPU.
     }
 
     func run(request: KeyingInferenceRequest, output: KeyingInferenceOutput) throws {
-        // The render pipeline already committed and awaited the pre-inference
-        // GPU pass, so we own the work here: grab a command buffer, dispatch
-        // the rough-matte and resample kernels, then commit+wait so the
-        // post-inference pass sees populated outputs.
         guard let commandQueue = cacheEntry.borrowCommandQueue() else {
             throw KeyingInferenceError.deviceUnavailable
         }
@@ -41,59 +37,43 @@ final class RoughMatteKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
             throw KeyingInferenceError.deviceUnavailable
         }
-        commandBuffer.label = "Corridor Key Rough Matte"
+        commandBuffer.label = "Corridor Key Pro Rough Matte"
 
         guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
             throw KeyingInferenceError.deviceUnavailable
         }
 
-        // The normalised tensor texture already holds R=(source.r), G=(source.g),
-        // B=(source.b), A=(hint). Reading it through the rough-matte kernel
-        // produces a crude alpha from `max(G - max(R, B), 0)`.
-        encoder.setComputePipelineState(cacheEntry.pipelines.roughMatte)
+        // The normalised tensor texture holds (R, G, B, hint) where hint is in
+        // the alpha channel. Re-reading with the rough-matte kernel produces a
+        // crude alpha from `max(G - max(R, B), 0) * 2.5`.
+        encoder.setComputePipelineState(cacheEntry.computePipelines.roughMatte)
         encoder.setTexture(request.normalisedInputTexture, index: Int(CKTextureIndexSource.rawValue))
         encoder.setTexture(output.alphaTexture, index: Int(CKTextureIndexOutput.rawValue))
-        let threadsAlpha = MTLSize(
-            width: output.alphaTexture.width,
-            height: output.alphaTexture.height,
-            depth: 1
-        )
-        encoder.dispatchThreads(
-            threadsAlpha,
-            threadsPerThreadgroup: Self.threadgroupSize(for: cacheEntry.pipelines.roughMatte, threads: threadsAlpha)
-        )
+        dispatchThreads(encoder: encoder, pipeline: cacheEntry.computePipelines.roughMatte, width: output.alphaTexture.width, height: output.alphaTexture.height)
 
-        // Foreground is the unmodified source at the inference resolution.
-        // The despill pass downstream will remove any residual green cast.
-        encoder.setComputePipelineState(cacheEntry.pipelines.resample)
+        encoder.setComputePipelineState(cacheEntry.computePipelines.resample)
         encoder.setTexture(request.normalisedInputTexture, index: Int(CKTextureIndexSource.rawValue))
         encoder.setTexture(output.foregroundTexture, index: Int(CKTextureIndexOutput.rawValue))
-        let threadsFG = MTLSize(
-            width: output.foregroundTexture.width,
-            height: output.foregroundTexture.height,
-            depth: 1
-        )
-        encoder.dispatchThreads(
-            threadsFG,
-            threadsPerThreadgroup: Self.threadgroupSize(for: cacheEntry.pipelines.resample, threads: threadsFG)
-        )
+        dispatchThreads(encoder: encoder, pipeline: cacheEntry.computePipelines.resample, width: output.foregroundTexture.width, height: output.foregroundTexture.height)
 
         encoder.endEncoding()
         commandBuffer.commit()
         commandBuffer.waitUntilCompleted()
-        if let error = commandBuffer.error { throw error }
+        if let error = commandBuffer.error {
+            throw error
+        }
     }
 
-    private static func threadgroupSize(
-        for pipeline: MTLComputePipelineState,
-        threads: MTLSize
-    ) -> MTLSize {
-        let width = min(pipeline.threadExecutionWidth, threads.width)
-        let height = min(pipeline.maxTotalThreadsPerThreadgroup / max(width, 1), threads.height)
-        return MTLSize(
-            width: max(width, 1),
-            height: max(height, 1),
-            depth: 1
-        )
+    private func dispatchThreads(
+        encoder: any MTLComputeCommandEncoder,
+        pipeline: any MTLComputePipelineState,
+        width: Int,
+        height: Int
+    ) {
+        let threadgroupWidth = min(pipeline.threadExecutionWidth, max(width, 1))
+        let threadgroupHeight = max(1, min(pipeline.maxTotalThreadsPerThreadgroup / max(threadgroupWidth, 1), max(height, 1)))
+        let threadsPerThreadgroup = MTLSize(width: threadgroupWidth, height: threadgroupHeight, depth: 1)
+        let threadsPerGrid = MTLSize(width: max(width, 1), height: max(height, 1), depth: 1)
+        encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
     }
 }

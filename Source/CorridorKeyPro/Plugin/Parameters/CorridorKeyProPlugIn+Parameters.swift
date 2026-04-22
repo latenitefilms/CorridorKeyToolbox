@@ -15,7 +15,7 @@ extension CorridorKeyProPlugIn {
     /// Called once by FxPlug for each new instance.
     @objc(addParametersWithError:)
     func addParameters() throws {
-        guard let create = apiManager.api(for: FxParameterCreationAPI_v5.self) as? FxParameterCreationAPI_v5 else {
+        guard let create = apiManager.api(for: FxParameterCreationAPI_v5.self) as? any FxParameterCreationAPI_v5 else {
             throw NSError(
                 domain: FxPlugErrorDomain,
                 code: kFxError_APIUnavailable,
@@ -31,11 +31,12 @@ extension CorridorKeyProPlugIn {
         try addPerformanceGroup(create: create)
         try addAdvancedGroup(create: create)
         try addRuntimeStatusGroup(create: create)
+        PluginLog.notice("Parameters registered with Final Cut Pro.")
     }
 
     // MARK: - Groups
 
-    private func addKeySetupGroup(create: FxParameterCreationAPI_v5) throws {
+    private func addKeySetupGroup(create: any FxParameterCreationAPI_v5) throws {
         create.startParameterSubGroup(
             "Key Setup",
             parameterID: ParameterIdentifier.keySetupGroup,
@@ -75,7 +76,7 @@ extension CorridorKeyProPlugIn {
         create.endParameterSubGroup()
     }
 
-    private func addInteriorDetailGroup(create: FxParameterCreationAPI_v5) throws {
+    private func addInteriorDetailGroup(create: any FxParameterCreationAPI_v5) throws {
         create.startParameterSubGroup(
             "Interior Detail",
             parameterID: ParameterIdentifier.interiorGroup,
@@ -116,7 +117,7 @@ extension CorridorKeyProPlugIn {
         create.endParameterSubGroup()
     }
 
-    private func addMatteGroup(create: FxParameterCreationAPI_v5) throws {
+    private func addMatteGroup(create: any FxParameterCreationAPI_v5) throws {
         create.startParameterSubGroup(
             "Matte",
             parameterID: ParameterIdentifier.matteGroup,
@@ -205,7 +206,7 @@ extension CorridorKeyProPlugIn {
         create.endParameterSubGroup()
     }
 
-    private func addEdgeAndSpillGroup(create: FxParameterCreationAPI_v5) throws {
+    private func addEdgeAndSpillGroup(create: any FxParameterCreationAPI_v5) throws {
         create.startParameterSubGroup(
             "Edge & Spill",
             parameterID: ParameterIdentifier.edgeSpillGroup,
@@ -235,7 +236,7 @@ extension CorridorKeyProPlugIn {
         create.endParameterSubGroup()
     }
 
-    private func addOutputGroup(create: FxParameterCreationAPI_v5) throws {
+    private func addOutputGroup(create: any FxParameterCreationAPI_v5) throws {
         create.startParameterSubGroup(
             "Output",
             parameterID: ParameterIdentifier.outputGroup,
@@ -253,7 +254,7 @@ extension CorridorKeyProPlugIn {
         create.endParameterSubGroup()
     }
 
-    private func addPerformanceGroup(create: FxParameterCreationAPI_v5) throws {
+    private func addPerformanceGroup(create: any FxParameterCreationAPI_v5) throws {
         create.startParameterSubGroup(
             "Performance",
             parameterID: ParameterIdentifier.performanceGroup,
@@ -283,7 +284,7 @@ extension CorridorKeyProPlugIn {
         create.endParameterSubGroup()
     }
 
-    private func addAdvancedGroup(create: FxParameterCreationAPI_v5) throws {
+    private func addAdvancedGroup(create: any FxParameterCreationAPI_v5) throws {
         create.startParameterSubGroup(
             "Advanced",
             parameterID: ParameterIdentifier.advancedGroup,
@@ -319,7 +320,7 @@ extension CorridorKeyProPlugIn {
         create.endParameterSubGroup()
     }
 
-    private func addRuntimeStatusGroup(create: FxParameterCreationAPI_v5) throws {
+    private func addRuntimeStatusGroup(create: any FxParameterCreationAPI_v5) throws {
         create.startParameterSubGroup(
             "Runtime Status",
             parameterID: ParameterIdentifier.runtimeStatusGroup,

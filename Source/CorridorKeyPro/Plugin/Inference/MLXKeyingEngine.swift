@@ -9,7 +9,8 @@
 //  the render pipeline's Metal textures and MLX's tensor API.
 //
 //  Apple Silicon's unified memory means the Metal↔MLX hand-off is mostly a
-//  pointer copy; the GPU work itself is scheduled by MLX.
+//  pointer copy; the GPU work itself is scheduled by MLX against the Neural
+//  Engine or the GPU as appropriate for the compiled graph.
 //
 
 import Foundation
@@ -32,9 +33,7 @@ enum MLXBridgeArtifact {
     }
 
     /// Returns the ladder rung that is at least as large as `requested`,
-    /// falling back to the maximum if nothing larger exists. Used by the
-    /// coordinator when the user-selected quality rung does not have a
-    /// matching bridge file.
+    /// falling back to the maximum if nothing larger exists.
     static func closestSupportedResolution(forRequested requested: Int) -> Int? {
         ladder.first(where: { $0 >= requested }) ?? ladder.last
     }
@@ -45,17 +44,27 @@ enum MLXBridgeArtifact {
 private enum MLXBridgeResourceLocator {
     static func url(for filename: String) -> URL? {
         let fileManager = FileManager.default
-        let candidateBundles = [Bundle.main] + Bundle.allBundles
-        let searched = Set(candidateBundles.compactMap(\.bundleURL.standardizedFileURL))
 
-        for bundleURL in searched {
-            let direct = bundleURL.appendingPathComponent(filename)
-            if fileManager.fileExists(atPath: direct.path) {
-                return direct
+        // Bundle.main.url(forResource:…) is the simplest path — it resolves
+        // to the service bundle's Resources folder when FCP loads us.
+        let filenameStem = (filename as NSString).deletingPathExtension
+        let filenameExtension = (filename as NSString).pathExtension
+        if let url = Bundle.main.url(forResource: filenameStem, withExtension: filenameExtension) {
+            return url
+        }
+
+        // Also walk `Bundle.allBundles` in case the file lives inside the
+        // wrapper app's Resources folder (for a dev build where the pluginkit
+        // is copied in after Xcode bundles the mlxfn into the outer app).
+        for bundle in Bundle.allBundles {
+            if let url = bundle.url(forResource: filenameStem, withExtension: filenameExtension) {
+                return url
             }
-            let resourcesURL = bundleURL.appendingPathComponent("Contents/Resources/\(filename)")
-            if fileManager.fileExists(atPath: resourcesURL.path) {
-                return resourcesURL
+            if let resourceURL = bundle.resourceURL {
+                let candidate = resourceURL.appending(path: filename)
+                if fileManager.fileExists(atPath: candidate.path) {
+                    return candidate
+                }
             }
         }
         return nil
@@ -71,11 +80,7 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
     private var importedFunction: ImportedFunction?
     private var loadedResolution: Int = 0
 
-    /// Scratch CPU buffers reused across frames so that per-frame inference
-    /// does not churn the heap. Sized to the loaded resolution.
     private var inputBuffer: [Float] = []
-    private var alphaBuffer: [Float] = []
-    private var foregroundBuffer: [Float] = []
 
     init(cacheEntry: MetalDeviceCacheEntry) {
         self.cacheEntry = cacheEntry
@@ -101,9 +106,7 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
 
         if alreadyLoaded(rung: rung) { return }
 
-        // Load the compiled MLX graph outside the lock so that the lock is
-        // only held for the cheap state swap — we never block on I/O or
-        // kernel warm-up while holding it.
+        PluginLog.notice("Loading MLX bridge from \(bridgeURL.path).")
         let function: ImportedFunction
         do {
             function = try ImportedFunction(url: bridgeURL)
@@ -112,7 +115,6 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
                 "MLX could not load \(bridgeURL.lastPathComponent): \(error.localizedDescription)"
             )
         }
-
         storeFunction(function, rung: rung)
     }
 
@@ -124,7 +126,7 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
 
         // Step 1: stage the normalised tensor off the GPU into our CPU scratch
         // buffer. Apple Silicon's unified memory keeps this near-zero cost.
-        try readNormalisedInput(into: &inputBuffer, texture: request.normalisedInputTexture, rung: rung)
+        try readNormalisedInput(texture: request.normalisedInputTexture, rung: rung)
 
         // Step 2: hand the tensor to MLX as an `MLXArray` and invoke the
         // imported function. The graph returns `(alpha, foreground)` per
@@ -144,28 +146,20 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
             )
         }
 
-        // Step 3: force evaluation so the backing buffers are populated, then
-        // copy the floats out into our scratch arrays.
-        var alphaOut = results[0]
-        var foregroundOut = results[1]
-        eval(alphaOut, foregroundOut)
-        alphaBuffer = alphaOut.asArray(Float.self)
-        foregroundBuffer = foregroundOut.asArray(Float.self)
+        // Step 3: force evaluation so the backing buffers are populated.
+        eval(results[0], results[1])
 
-        // Step 4: upload the results into the Metal textures the render
-        // pipeline passed us so the rest of the pipeline can operate on them.
-        try writeBufferToTexture(
-            buffer: alphaBuffer,
-            width: rung,
-            height: rung,
-            channels: 1,
+        // Step 4: copy the results into the shared-storage Metal textures the
+        // render pipeline passed us.
+        let alphaValues = results[0].asArray(Float.self)
+        try writeScalarBuffer(
+            buffer: alphaValues,
             texture: output.alphaTexture
         )
-        try writeBufferToTexture(
-            buffer: foregroundBuffer,
-            width: rung,
-            height: rung,
-            channels: 3,
+
+        let foregroundValues = results[1].asArray(Float.self)
+        try writeForegroundBuffer(
+            buffer: foregroundValues,
             texture: output.foregroundTexture
         )
     }
@@ -191,26 +185,23 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         importedFunction = function
         loadedResolution = rung
         inputBuffer = Array(repeating: 0, count: rung * rung * 4)
-        alphaBuffer = Array(repeating: 0, count: rung * rung)
-        foregroundBuffer = Array(repeating: 0, count: rung * rung * 3)
     }
 
     // MARK: - Metal ↔ CPU staging
 
-    /// Copies the supplied texture's pixels into `buffer`. Assumes the caller
-    /// has already dispatched a blit/synchronise so the texture contents are
-    /// visible to the CPU.
-    private func readNormalisedInput(
-        into buffer: inout [Float],
-        texture: any MTLTexture,
-        rung: Int
-    ) throws {
-        let bytesPerRow = rung * 4 * MemoryLayout<Float>.size
+    /// Reads the supplied texture's pixels into `inputBuffer`. Assumes the
+    /// caller has already dispatched a blit/synchronise so the contents are
+    /// visible to the CPU — the render pipeline's `preCommandBuffer` does this
+    /// before calling us.
+    private func readNormalisedInput(texture: any MTLTexture, rung: Int) throws {
         let expected = rung * rung * 4
-        precondition(buffer.count == expected, "Input scratch buffer sized incorrectly.")
+        if inputBuffer.count != expected {
+            inputBuffer = Array(repeating: 0, count: expected)
+        }
 
+        let bytesPerRow = rung * 4 * MemoryLayout<Float>.size
         let region = MTLRegionMake2D(0, 0, rung, rung)
-        buffer.withUnsafeMutableBufferPointer { pointer in
+        inputBuffer.withUnsafeMutableBufferPointer { pointer in
             if let base = pointer.baseAddress {
                 texture.getBytes(
                     base,
@@ -222,37 +213,55 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         }
     }
 
-    /// Writes a float32 buffer back out to a destination Metal texture. The
-    /// foreground path expands tightly-packed RGB into RGBA to match the
-    /// render pipeline's 4-channel intermediate textures.
-    private func writeBufferToTexture(
+    /// Writes a tightly-packed single-channel Float32 buffer into an `.r32Float`
+    /// destination. Matches the MLX output for alpha.
+    private func writeScalarBuffer(
         buffer: [Float],
-        width: Int,
-        height: Int,
-        channels: Int,
         texture: any MTLTexture
     ) throws {
+        let width = texture.width
+        let height = texture.height
+        guard buffer.count >= width * height else {
+            throw KeyingInferenceError.modelUnavailable(
+                "MLX alpha buffer was \(buffer.count) floats; expected \(width * height)."
+            )
+        }
         let region = MTLRegionMake2D(0, 0, width, height)
-        if channels == 1 {
-            let bytesPerRow = width * MemoryLayout<Float>.size
-            buffer.withUnsafeBufferPointer { pointer in
-                if let base = pointer.baseAddress {
-                    texture.replace(region: region, mipmapLevel: 0, withBytes: base, bytesPerRow: bytesPerRow)
-                }
+        let bytesPerRow = width * MemoryLayout<Float>.size
+        buffer.withUnsafeBufferPointer { pointer in
+            if let base = pointer.baseAddress {
+                texture.replace(region: region, mipmapLevel: 0, withBytes: base, bytesPerRow: bytesPerRow)
             }
-        } else {
-            var rgba = [Float](repeating: 0, count: width * height * 4)
-            for i in 0..<(width * height) {
-                rgba[i * 4 + 0] = buffer[i * 3 + 0]
-                rgba[i * 4 + 1] = buffer[i * 3 + 1]
-                rgba[i * 4 + 2] = buffer[i * 3 + 2]
-                rgba[i * 4 + 3] = 1.0
-            }
-            let bytesPerRow = width * 4 * MemoryLayout<Float>.size
-            rgba.withUnsafeBufferPointer { pointer in
-                if let base = pointer.baseAddress {
-                    texture.replace(region: region, mipmapLevel: 0, withBytes: base, bytesPerRow: bytesPerRow)
-                }
+        }
+    }
+
+    /// Expands a tightly-packed RGB Float32 buffer into an `.rgba32Float`
+    /// destination by appending an opaque alpha channel.
+    private func writeForegroundBuffer(
+        buffer: [Float],
+        texture: any MTLTexture
+    ) throws {
+        let width = texture.width
+        let height = texture.height
+        let pixelCount = width * height
+        guard buffer.count >= pixelCount * 3 else {
+            throw KeyingInferenceError.modelUnavailable(
+                "MLX foreground buffer was \(buffer.count) floats; expected \(pixelCount * 3)."
+            )
+        }
+        var rgba = [Float](repeating: 0, count: pixelCount * 4)
+        for index in 0..<pixelCount {
+            rgba[index * 4 + 0] = buffer[index * 3 + 0]
+            rgba[index * 4 + 1] = buffer[index * 3 + 1]
+            rgba[index * 4 + 2] = buffer[index * 3 + 2]
+            rgba[index * 4 + 3] = 1
+        }
+
+        let region = MTLRegionMake2D(0, 0, width, height)
+        let bytesPerRow = width * 4 * MemoryLayout<Float>.size
+        rgba.withUnsafeBufferPointer { pointer in
+            if let base = pointer.baseAddress {
+                texture.replace(region: region, mipmapLevel: 0, withBytes: base, bytesPerRow: bytesPerRow)
             }
         }
     }

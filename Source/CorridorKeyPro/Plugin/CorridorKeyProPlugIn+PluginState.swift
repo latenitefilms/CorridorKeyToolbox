@@ -19,7 +19,7 @@ extension CorridorKeyProPlugIn {
         at renderTime: CMTime,
         quality qualityLevel: UInt
     ) throws {
-        guard let retrieval = apiManager.api(for: FxParameterRetrievalAPI_v6.self) as? FxParameterRetrievalAPI_v6 else {
+        guard let retrieval = apiManager.api(for: FxParameterRetrievalAPI_v6.self) as? any FxParameterRetrievalAPI_v6 else {
             throw NSError(
                 domain: FxPlugErrorDomain,
                 code: kFxError_APIUnavailable,
@@ -164,6 +164,7 @@ extension CorridorKeyProPlugIn {
 
         let nsData = try state.encodedForHost()
         pluginState?.pointee = nsData
+        PluginLog.debug("Plugin state captured: screen=\(state.screenColor.displayName), quality=\(state.qualityMode.displayName).")
     }
 
     // MARK: - Retrieval helpers

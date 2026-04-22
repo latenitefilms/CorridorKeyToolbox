@@ -13,17 +13,17 @@ extension CorridorKeyProPlugIn {
 
     @objc(properties:error:)
     func properties(_ properties: AutoreleasingUnsafeMutablePointer<NSDictionary>?) throws {
-        // The matte network benefits from linear input; ask Final Cut Pro to
-        // hand us linear Rec.709 whenever the project colour management allows
-        // it. `kFxImageColorInfo_RGB_LINEAR` keeps the gamma-correct path
-        // active across the entire GPU pipeline.
+        // ImageNet-trained networks expect gamma-encoded inputs (sRGB-ish), so
+        // ask Final Cut Pro for video-gamma pixels. We also take the whole
+        // image each render because the matte depends on spatial context
+        // outside any individual tile.
         let swiftProperties: [String: Any] = [
             kFxPropertyKey_MayRemapTime: NSNumber(value: false),
-            kFxPropertyKey_PixelTransformSupport: NSNumber(value: kFxPixelTransform_ScaleTranslate),
+            kFxPropertyKey_PixelTransformSupport: NSNumber(value: kFxPixelTransform_Full),
             kFxPropertyKey_VariesWhenParamsAreStatic: NSNumber(value: false),
             kFxPropertyKey_ChangesOutputSize: NSNumber(value: false),
-            kFxPropertyKey_DesiredProcessingColorInfo: NSNumber(value: kFxImageColorInfo_RGB_LINEAR),
-            kFxPropertyKey_NeedsFullBuffer: NSNumber(value: false)
+            kFxPropertyKey_DesiredProcessingColorInfo: NSNumber(value: kFxImageColorInfo_RGB_GAMMA_VIDEO),
+            kFxPropertyKey_NeedsFullBuffer: NSNumber(value: true)
         ]
         properties?.pointee = swiftProperties as NSDictionary
     }

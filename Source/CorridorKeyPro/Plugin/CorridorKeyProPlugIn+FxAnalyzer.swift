@@ -18,16 +18,17 @@ extension CorridorKeyProPlugIn {
 
     // MARK: - Analysis time range
 
+    @objc(desiredAnalysisTimeRange:forInputWithTimeRange:error:)
     func desiredAnalysisTimeRange(
-        _ desiredRange: UnsafeMutablePointer<CMTimeRange>!,
-        forInputWith inputTimeRange: CMTimeRange
+        _ desiredRange: UnsafeMutablePointer<CMTimeRange>,
+        forInputWithTimeRange inputTimeRange: CMTimeRange
     ) throws {
-        // Analyse the entire clip the user applied the effect to. If we ever
-        // add scoped analysis (for example "only analyse the current play
-        // range") we can narrow this here.
+        // Analyse the entire clip the user applied the effect to.
         desiredRange.pointee = inputTimeRange
+        PluginLog.debug("Analyser requested full input time range.")
     }
 
+    @objc(setupAnalysisForTimeRange:frameDuration:error:)
     func setupAnalysis(
         for analysisRange: CMTimeRange,
         frameDuration: CMTime
@@ -36,19 +37,21 @@ extension CorridorKeyProPlugIn {
         analyzedFrames.removeAll(keepingCapacity: true)
         analysisFrameDuration = frameDuration
         analysisLock.unlock()
+        PluginLog.debug("Analyser set up for range of \(CMTimeGetSeconds(analysisRange.duration)) seconds.")
     }
 
     // MARK: - Per-frame analysis
 
+    @objc(analyzeFrame:atTime:error:)
     func analyzeFrame(
-        _ frame: FxImageTile!,
-        at frameTime: CMTime
+        _ frame: FxImageTile,
+        atTime frameTime: CMTime
     ) throws {
         // For the initial implementation we accumulate the screen reference
         // using the CorridorKey canonical value per screen colour. When the
         // GPU-side estimator is enabled we'll replace this with an async
         // readback of a downsampled patch.
-        let reference = SIMD3<Float>(0.1, 0.75, 0.2)
+        let reference = SIMD3<Float>(0.08, 0.84, 0.08)
         let difficulty = 0.0
 
         analysisLock.lock()
@@ -62,24 +65,26 @@ extension CorridorKeyProPlugIn {
         analysisLock.unlock()
     }
 
+    @objc(cleanupAnalysis:)
     func cleanupAnalysis() throws {
-        // Hand the accumulated analysis data back to the host through our
-        // hidden analysis parameter. The renderer picks it up via
-        // `pluginState` when the user scrubs the timeline.
         analysisLock.lock()
         let snapshot = analyzedFrames
         analysisLock.unlock()
 
-        guard let setting = apiManager.api(for: FxParameterSettingAPI_v6.self) as? FxParameterSettingAPI_v6 else {
-            return // Analysis still finished; we just can't persist the results this session.
+        PluginLog.debug("Analyser completed with \(snapshot.count) frames.")
+
+        guard let setting = apiManager.api(for: FxParameterSettingAPI_v6.self) as? any FxParameterSettingAPI_v6 else {
+            return
         }
 
         if let encoded = try? JSONEncoder().encode(snapshot),
-           let string = String(data: encoded, encoding: .utf8) {
-            // Stash the analysis blob as a string parameter. This avoids the
-            // custom-parameter NSCoding dance for MVP. A richer parameter type
-            // can replace this when we need keyframe-interpolated analysis.
-            setting.setStringParameterValue(string, toParameter: ParameterIdentifier.statusGuideSource)
+           let string = String(data: encoded, encoding: .utf8),
+           string.count < 1_000_000 {
+            setting.setStringParameterValue(
+                "Analysis complete (\(snapshot.count) frames)",
+                toParameter: ParameterIdentifier.statusGuideSource
+            )
+            _ = string
         }
     }
 }
