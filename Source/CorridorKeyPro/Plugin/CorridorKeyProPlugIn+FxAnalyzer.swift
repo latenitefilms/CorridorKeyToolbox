@@ -91,6 +91,18 @@ extension CorridorKeyProPlugIn {
     // MARK: - Inspector wiring (called by the +Parameters extension)
 
     func startForwardAnalysisPass() {
+        guard let actionAPI = apiManager.api(for: (any FxCustomParameterActionAPI_v4).self) as? any FxCustomParameterActionAPI_v4 else {
+            PluginLog.error("Analyse Clip: FxCustomParameterActionAPI_v4 is unavailable.")
+            return
+        }
+        // FxPlug only vends the analysis / parameter APIs inside an action
+        // bracket when the call comes from a custom UI view. Without this
+        // wrapping, `apiManager.api(for:)` returns nil for both the analysis
+        // and parameter-setting APIs, which is exactly what "Analyse Clip is
+        // unavailable" in the logs was catching.
+        actionAPI.startAction(self)
+        defer { actionAPI.endAction(self) }
+
         guard let analysisAPI = apiManager.api(for: (any FxAnalysisAPI_v2).self) as? any FxAnalysisAPI_v2 else {
             PluginLog.error("Analyse Clip: FxAnalysisAPI_v2 is unavailable.")
             return
@@ -113,6 +125,13 @@ extension CorridorKeyProPlugIn {
         session.lock.lock()
         session.resetLocked()
         session.lock.unlock()
+
+        guard let actionAPI = apiManager.api(for: (any FxCustomParameterActionAPI_v4).self) as? any FxCustomParameterActionAPI_v4 else {
+            PluginLog.error("Reset Analysis: FxCustomParameterActionAPI_v4 is unavailable.")
+            return
+        }
+        actionAPI.startAction(self)
+        defer { actionAPI.endAction(self) }
 
         guard let setAPI = apiManager.api(for: (any FxParameterSettingAPI_v5).self) as? any FxParameterSettingAPI_v5 else {
             PluginLog.error("Reset Analysis: FxParameterSettingAPI_v5 is unavailable.")

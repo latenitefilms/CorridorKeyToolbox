@@ -44,19 +44,35 @@ final class CorridorKeyInspectorBridge: ObservableObject {
 
     /// Reads the analysis state from FxPlug and updates `snapshot`. Safe to
     /// call on a timer — it just consults the host and inspects the cached
-    /// analysis dictionary, neither of which is expensive.
+    /// analysis dictionary, neither of which is expensive. The reads are
+    /// wrapped in an `FxCustomParameterActionAPI_v4` bracket because FxPlug
+    /// refuses to vend the analysis / parameter APIs to a custom view when
+    /// no action is in flight.
     func refreshSnapshot() {
+        let updated = readSnapshotWithinActionScope() ?? .empty
+        if snapshot != updated {
+            snapshot = updated
+        }
+    }
+
+    // MARK: - Private helpers
+
+    private func readSnapshotWithinActionScope() -> CorridorKeyAnalysisSnapshot? {
+        guard let actionAPI = apiManager.api(for: (any FxCustomParameterActionAPI_v4).self) as? any FxCustomParameterActionAPI_v4 else {
+            return nil
+        }
+        actionAPI.startAction(self)
+        defer { actionAPI.endAction(self) }
+
         let state = currentAnalysisState()
         let (analysed, total, resolution) = currentAnalysisCounts()
-        snapshot = CorridorKeyAnalysisSnapshot(
+        return CorridorKeyAnalysisSnapshot(
             state: state,
             analyzedFrameCount: analysed,
             totalFrameCount: total,
             inferenceResolution: resolution
         )
     }
-
-    // MARK: - Private helpers
 
     private func currentAnalysisState() -> CorridorKeyAnalysisSnapshot.State {
         guard let analysisAPI = apiManager.api(for: (any FxAnalysisAPI_v2).self) as? any FxAnalysisAPI_v2 else {
