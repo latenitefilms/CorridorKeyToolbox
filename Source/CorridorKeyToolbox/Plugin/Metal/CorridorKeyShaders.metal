@@ -98,7 +98,77 @@ kernel void corridorKeyApplyScreenMatrixKernel(
     destination.write(float4(rgb, sample.a), gid);
 }
 
-// MARK: - Normalisation for neural inference
+// MARK: - Zero-copy MLX I/O
+
+/// Normalises the source+hint into the NHWC-packed float32 tensor MLX
+/// expects and writes it into a `device float*` buffer instead of a
+/// texture. The render pipeline then hands `buffer.contents()` to
+/// `MLXArray(rawPointer:)` so the inference graph reads this memory
+/// directly — no CPU `[Float]` copy in between.
+///
+/// Layout: row-major `[1, rung, rung, 4]` floats; channels packed as
+/// `(normR, normG, normB, hint)` per pixel.
+kernel void corridorKeyNormalizeToBufferKernel(
+    texture2d<float, access::sample> source [[texture(CKTextureIndexSource)]],
+    texture2d<float, access::sample> hint [[texture(CKTextureIndexHint)]],
+    device float *output [[buffer(0)]],
+    constant CKNormalizeParams &params [[buffer(CKBufferIndexNormalizeParams)]],
+    constant uint2 &dims [[buffer(1)]],
+    uint2 gid [[thread_position_in_grid]]
+) {
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    constexpr sampler areaSampler(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
+    float2 uv = (float2(gid) + 0.5) / float2(dims);
+    float4 rgba = source.sample(areaSampler, uv);
+    float hintValue = hint.sample(areaSampler, uv).r;
+    float3 rec709 = params.workingToRec709 * rgba.rgb;
+    float3 normalized = (rec709 - params.mean) * params.invStdDev;
+    uint pixelIndex = gid.y * dims.x + gid.x;
+    uint baseOffset = pixelIndex * 4u;
+    output[baseOffset + 0u] = normalized.x;
+    output[baseOffset + 1u] = normalized.y;
+    output[baseOffset + 2u] = normalized.z;
+    output[baseOffset + 3u] = hintValue;
+}
+
+/// Reads MLX's 1-channel alpha output buffer (layout `[1, H, W, 1]`) and
+/// writes it into an `r32Float` texture. Flips y so the y-up bridge
+/// layout matches the y-down texture convention the compose pass
+/// samples with — identical to what `uploadCachedAlpha` does on CPU for
+/// the analysed-cache path.
+kernel void corridorKeyAlphaBufferToTextureKernel(
+    device const float *input [[buffer(0)]],
+    texture2d<float, access::write> destination [[texture(CKTextureIndexOutput)]],
+    uint2 gid [[thread_position_in_grid]]
+) {
+    uint2 dims = uint2(destination.get_width(), destination.get_height());
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    uint srcY = dims.y - 1u - gid.y;
+    uint pixelIndex = srcY * dims.x + gid.x;
+    float alpha = input[pixelIndex];
+    destination.write(float4(alpha, 0.0, 0.0, 1.0), gid);
+}
+
+/// Reads MLX's 3-channel foreground output buffer (layout `[1, H, W, 3]`)
+/// and writes it into an `rgba32Float` texture with alpha = 1. Flips y
+/// for the same reason as the alpha kernel. Replaces the old CPU-side
+/// `cblas_scopy` RGB→RGBA interleave — now the channel expansion
+/// happens on the GPU in the same pass as the buffer read.
+kernel void corridorKeyForegroundBufferToTextureKernel(
+    device const float *input [[buffer(0)]],
+    texture2d<float, access::write> destination [[texture(CKTextureIndexOutput)]],
+    uint2 gid [[thread_position_in_grid]]
+) {
+    uint2 dims = uint2(destination.get_width(), destination.get_height());
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    uint srcY = dims.y - 1u - gid.y;
+    uint pixelIndex = srcY * dims.x + gid.x;
+    uint baseOffset = pixelIndex * 3u;
+    float3 rgb = float3(input[baseOffset], input[baseOffset + 1u], input[baseOffset + 2u]);
+    destination.write(float4(rgb, 1.0), gid);
+}
+
+// MARK: - Normalisation (texture output — used only by golden tests)
 
 /// Downsamples source and hint to the inference resolution and produces the
 /// four-channel tensor the neural model expects (RGB mean/stddev normalised,
@@ -106,6 +176,11 @@ kernel void corridorKeyApplyScreenMatrixKernel(
 /// inference resolution; bilinear filtering handles the rescale. The
 /// `workingToRec709` matrix converts whatever working colour space the host
 /// provided into the Rec.709-linear sRGB the model was trained on.
+///
+/// Production renders use `corridorKeyNormalizeToBufferKernel` above for
+/// zero-copy interop with MLX; this texture-output variant stays for
+/// test fixtures that want to read the normalised tensor back as a
+/// conventional `.rgba32Float` texture.
 kernel void corridorKeyCombineAndNormalizeKernel(
     texture2d<float, access::sample> source [[texture(CKTextureIndexSource)]],
     texture2d<float, access::sample> hint [[texture(CKTextureIndexHint)]],

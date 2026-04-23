@@ -16,7 +16,6 @@
 import Foundation
 import Metal
 import MLX
-import Accelerate
 import simd
 
 /// Names of the bundled `.mlxfn` artefacts. Matches CorridorKey-Runtime's
@@ -87,14 +86,6 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
     private var importedFunction: ImportedFunction?
     private var loadedResolution: Int = 0
 
-    /// Reusable scratch buffers sized at warm-up. We hold these for the
-    /// engine's lifetime so per-frame inference doesn't pay the [Float]
-    /// allocation cost (~67 MB per call at 2048²). `runLock` already
-    /// serialises the entire run path so single instances are safe without
-    /// further guarding.
-    private var inputScratch: [Float] = []
-    private var foregroundRGBAScratch: [Float] = []
-
     init(cacheEntry: MetalDeviceCacheEntry) {
         self.cacheEntry = cacheEntry
         self.backendDisplayName = "MLX on \(cacheEntry.device.name)"
@@ -163,22 +154,29 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         guard let function, rung > 0 else {
             throw KeyingInferenceError.modelUnavailable("MLX bridge not prepared.")
         }
-
         _ = request.rawSourceTexture
-        // Step 1: stage the normalised tensor off the GPU into our reusable
-        // scratch buffer. Apple Silicon's unified memory keeps this near
-        // zero cost; reusing the buffer across frames means we don't pay
-        // `[Float](repeating:count:)` on every render.
-        let expectedInputCount = rung * rung * 4
-        if inputScratch.count != expectedInputCount {
-            inputScratch = [Float](repeating: 0, count: expectedInputCount)
+        let expectedBytes = rung * rung * 4 * MemoryLayout<Float>.size
+        guard request.normalisedInputBuffer.length >= expectedBytes else {
+            throw KeyingInferenceError.modelUnavailable(
+                "MLX input buffer is \(request.normalisedInputBuffer.length) bytes; expected ≥ \(expectedBytes)."
+            )
         }
-        try readNormalisedInput(texture: request.normalisedInputTexture, into: &inputScratch, rung: rung)
 
-        // Step 2: hand the tensor to MLX as an `MLXArray` and invoke the
-        // imported function. The graph returns `(alpha, foreground)` per
-        // CorridorKey's bridge exporter.
-        let inputArray = MLXArray(inputScratch, [1, rung, rung, 4])
+        // Step 1: wrap the shared MTLBuffer directly as an MLXArray. On
+        // Apple Silicon's unified memory this is a zero-copy alias — MLX's
+        // backing storage IS the same bytes the Metal kernel wrote. The
+        // finalizer holds a strong reference to the buffer so it can't be
+        // freed while MLX still owns it.
+        let inputBuffer = request.normalisedInputBuffer
+        let inputArray = MLXArray(
+            rawPointer: inputBuffer.contents(),
+            [1, rung, rung, 4],
+            dtype: .float32,
+            finalizer: { _ = inputBuffer }
+        )
+
+        // Step 2: invoke the imported function. The graph returns
+        // `(alpha, foreground)` per CorridorKey's bridge exporter.
         let results: [MLXArray]
         do {
             results = try function(inputArray)
@@ -197,19 +195,78 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         // Step 3: force evaluation so the backing buffers are populated.
         eval(results[0], results[1])
 
-        // Step 4: copy the results into the shared-storage Metal textures the
-        // render pipeline passed us.
-        let alphaValues = results[0].asArray(Float.self)
-        try writeScalarBuffer(
-            buffer: alphaValues,
-            texture: output.alphaTexture
+        // Step 4: alias MLX's own output storage as MTLBuffers (still on
+        // the GPU, no CPU copy) and encode a compute pass that reads them
+        // into the output textures the caller provided. A completion
+        // handler retains the MLXArrays so their backing memory survives
+        // until the kernel finishes reading.
+        let device = cacheEntry.device
+        guard let alphaMLXBuffer = results[0].asMTLBuffer(device: device, noCopy: true) else {
+            throw KeyingInferenceError.modelUnavailable("MLX alpha output could not be exposed as MTLBuffer.")
+        }
+        guard let foregroundMLXBuffer = results[1].asMTLBuffer(device: device, noCopy: true) else {
+            throw KeyingInferenceError.modelUnavailable("MLX foreground output could not be exposed as MTLBuffer.")
+        }
+
+        guard let commandQueue = cacheEntry.borrowCommandQueue() else {
+            throw KeyingInferenceError.deviceUnavailable
+        }
+        defer { cacheEntry.returnCommandQueue(commandQueue) }
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            throw KeyingInferenceError.deviceUnavailable
+        }
+        commandBuffer.label = "Corridor Key Toolbox MLX Writeback"
+
+        try RenderStages.writeAlphaBufferToTexture(
+            buffer: alphaMLXBuffer,
+            destination: output.alphaTexture,
+            entry: cacheEntry,
+            commandBuffer: commandBuffer
+        )
+        try RenderStages.writeForegroundBufferToTexture(
+            buffer: foregroundMLXBuffer,
+            destination: output.foregroundTexture,
+            entry: cacheEntry,
+            commandBuffer: commandBuffer
         )
 
-        let foregroundValues = results[1].asArray(Float.self)
-        try writeForegroundBuffer(
-            buffer: foregroundValues,
-            texture: output.foregroundTexture
+        // Retain the MLXArrays (and the MTLBuffer aliases they back) until
+        // the GPU is done reading them. `asMTLBuffer(noCopy:true)` requires
+        // the MLXArray to outlive the MTLBuffer; `addCompletedHandler`
+        // fires after the kernels are done, so keeping a strong
+        // reference here is the simplest lifetime extension that works.
+        // The captures cross a `@Sendable` boundary — MLXArray and
+        // MTLBuffer aren't Sendable-typed, but they're safe to capture
+        // because we only use them to keep allocations alive, not mutate
+        // them. Wrap in a small `@unchecked Sendable` box to satisfy the
+        // concurrency checker.
+        final class RetainBox: @unchecked Sendable {
+            let alphaArray: MLXArray
+            let foregroundArray: MLXArray
+            let alphaBuffer: any MTLBuffer
+            let foregroundBuffer: any MTLBuffer
+            init(alphaArray: MLXArray, foregroundArray: MLXArray, alphaBuffer: any MTLBuffer, foregroundBuffer: any MTLBuffer) {
+                self.alphaArray = alphaArray
+                self.foregroundArray = foregroundArray
+                self.alphaBuffer = alphaBuffer
+                self.foregroundBuffer = foregroundBuffer
+            }
+        }
+        let retainBox = RetainBox(
+            alphaArray: results[0],
+            foregroundArray: results[1],
+            alphaBuffer: alphaMLXBuffer,
+            foregroundBuffer: foregroundMLXBuffer
         )
+        commandBuffer.addCompletedHandler { _ in
+            _ = retainBox
+        }
+
+        let semaphore = DispatchSemaphore(value: 0)
+        commandBuffer.addCompletedHandler { _ in semaphore.signal() }
+        commandBuffer.commit()
+        semaphore.wait()
+        if let error = commandBuffer.error { throw error }
     }
 
     // MARK: - Lock-guarded state helpers
@@ -250,111 +307,4 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         }
     }
 
-    // MARK: - Metal ↔ CPU staging
-
-    /// Reads the supplied texture's pixels into `buffer`. Assumes the caller
-    /// has already dispatched a blit/synchronise so the contents are visible to
-    /// the CPU — the render pipeline's `preCommandBuffer` does this before
-    /// calling us.
-    private func readNormalisedInput(
-        texture: any MTLTexture,
-        into buffer: inout [Float],
-        rung: Int
-    ) throws {
-        let expected = rung * rung * 4
-        if buffer.count != expected {
-            buffer = Array(repeating: 0, count: expected)
-        }
-
-        let bytesPerRow = rung * 4 * MemoryLayout<Float>.size
-        let region = MTLRegionMake2D(0, 0, rung, rung)
-        buffer.withUnsafeMutableBufferPointer { pointer in
-            if let base = pointer.baseAddress {
-                texture.getBytes(
-                    base,
-                    bytesPerRow: bytesPerRow,
-                    from: region,
-                    mipmapLevel: 0
-                )
-            }
-        }
-    }
-
-    /// Writes a tightly-packed single-channel Float32 buffer into an `.r32Float`
-    /// destination. Matches the MLX output for alpha.
-    private func writeScalarBuffer(
-        buffer: [Float],
-        texture: any MTLTexture
-    ) throws {
-        let width = texture.width
-        let height = texture.height
-        guard buffer.count >= width * height else {
-            throw KeyingInferenceError.modelUnavailable(
-                "MLX alpha buffer was \(buffer.count) floats; expected \(width * height)."
-            )
-        }
-        let region = MTLRegionMake2D(0, 0, width, height)
-        let bytesPerRow = width * MemoryLayout<Float>.size
-        buffer.withUnsafeBufferPointer { pointer in
-            if let base = pointer.baseAddress {
-                texture.replace(region: region, mipmapLevel: 0, withBytes: base, bytesPerRow: bytesPerRow)
-            }
-        }
-    }
-
-    /// Expands a tightly-packed RGB Float32 buffer into an `.rgba32Float`
-    /// destination by appending an opaque alpha channel.
-    ///
-    /// Uses Accelerate's strided copy for the channel interleave — on a
-    /// 2048² matte this takes ~2 ms vs ~35 ms for the pre-v1.0 scalar
-    /// loop. The scratch buffer is retained between calls to avoid the
-    /// `[Float](repeating:count:)` allocation entirely.
-    private func writeForegroundBuffer(
-        buffer: [Float],
-        texture: any MTLTexture
-    ) throws {
-        let width = texture.width
-        let height = texture.height
-        let pixelCount = width * height
-        guard buffer.count >= pixelCount * 3 else {
-            throw KeyingInferenceError.modelUnavailable(
-                "MLX foreground buffer was \(buffer.count) floats; expected \(pixelCount * 3)."
-            )
-        }
-
-        let expectedRGBACount = pixelCount * 4
-        if foregroundRGBAScratch.count != expectedRGBACount {
-            foregroundRGBAScratch = [Float](repeating: 0, count: expectedRGBACount)
-        }
-
-        foregroundRGBAScratch.withUnsafeMutableBufferPointer { rgbaPointer in
-            guard let rgbaBase = rgbaPointer.baseAddress else { return }
-            buffer.withUnsafeBufferPointer { sourcePointer in
-                guard let sourceBase = sourcePointer.baseAddress else { return }
-                // Strided copy: source stride 3 (packed RGB) → destination
-                // stride 4 (RGBA). BLAS `scopy` uses Accelerate's NEON path
-                // under the hood.
-                let count = Int32(pixelCount)
-                cblas_scopy(count, sourceBase + 0, 3, rgbaBase + 0, 4)
-                cblas_scopy(count, sourceBase + 1, 3, rgbaBase + 1, 4)
-                cblas_scopy(count, sourceBase + 2, 3, rgbaBase + 2, 4)
-                // Fill alpha = 1 at every RGBA pixel's 4th slot.
-                var one: Float = 1.0
-                vDSP_vfill(
-                    &one,
-                    rgbaBase + 3,
-                    4,
-                    vDSP_Length(pixelCount)
-                )
-            }
-        }
-
-        let region = MTLRegionMake2D(0, 0, width, height)
-        let bytesPerRow = width * 4 * MemoryLayout<Float>.size
-        foregroundRGBAScratch.withUnsafeBufferPointer { pointer in
-            if let base = pointer.baseAddress {
-                texture.replace(region: region, mipmapLevel: 0, withBytes: base, bytesPerRow: bytesPerRow)
-            }
-        }
-    }
 }

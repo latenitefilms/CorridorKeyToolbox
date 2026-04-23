@@ -139,7 +139,7 @@ final class RenderPipeline: @unchecked Sendable {
         )
         let inferenceOutput = try inferenceCoordinator.runInference(
             request: KeyingInferenceRequest(
-                normalisedInputTexture: pre.normalisedInput.texture,
+                normalisedInputBuffer: pre.normalisedInputBuffer,
                 rawSourceTexture: pre.rawSourceAtInferenceResolution.texture,
                 inferenceResolution: inferenceResolution
             ),
@@ -163,9 +163,10 @@ final class RenderPipeline: @unchecked Sendable {
         }
 
         // Return pre-inference pooled textures now that we've captured the
-        // alpha. The inference output textures live outside the pool.
+        // alpha. The inference output textures live outside the pool, and
+        // the normalised input buffer is cached per-rung on the entry so
+        // it is not returned here.
         pre.rotatedSource?.returnManually()
-        pre.normalisedInput.returnManually()
         pre.rawSourceAtInferenceResolution.returnManually()
 
         return (alpha, width, height, inferenceResolution)
@@ -187,7 +188,7 @@ final class RenderPipeline: @unchecked Sendable {
 
     private struct PreInferenceArtifacts {
         let rotatedSource: PooledTexture?
-        let normalisedInput: PooledTexture
+        let normalisedInputBuffer: any MTLBuffer
         let rawSourceAtInferenceResolution: PooledTexture
     }
 
@@ -370,7 +371,7 @@ final class RenderPipeline: @unchecked Sendable {
             )
         }
 
-        let normalisedInput = try RenderStages.combineAndNormalise(
+        let normalisedInputBuffer = try RenderStages.combineAndNormaliseIntoBuffer(
             source: rotatedSource,
             hint: hintTexturePooled.texture,
             inferenceResolution: inferenceResolution,
@@ -414,7 +415,7 @@ final class RenderPipeline: @unchecked Sendable {
 
         return PreInferenceArtifacts(
             rotatedSource: rotatedSourcePooled,
-            normalisedInput: normalisedInput,
+            normalisedInputBuffer: normalisedInputBuffer,
             rawSourceAtInferenceResolution: rawSource
         )
     }

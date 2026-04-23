@@ -135,10 +135,61 @@ enum RenderStages {
 
     // MARK: - Combine + normalise (pre-inference)
 
-    /// Downsamples source + hint to `inferenceResolution` and packs into the
-    /// four-channel ImageNet-normalised tensor MLX expects. `workingToRec709`
-    /// converts the host's working gamut to Rec.709-linear before
-    /// normalisation so HDR Rec.2020 projects predict as accurately as SDR.
+    /// Production variant: downsamples source + hint to
+    /// `inferenceResolution` and writes the NHWC float32 tensor directly
+    /// into a cached `MTLBuffer` so MLX can read it via `init(rawPointer:)`
+    /// without a CPU copy. Returns the cached buffer — callers don't own
+    /// it, the `MetalDeviceCacheEntry` does.
+    static func combineAndNormaliseIntoBuffer(
+        source: any MTLTexture,
+        hint: any MTLTexture,
+        inferenceResolution: Int,
+        workingToRec709: simd_float3x3,
+        entry: MetalDeviceCacheEntry,
+        commandBuffer: any MTLCommandBuffer
+    ) throws -> any MTLBuffer {
+        guard let buffer = entry.normalizedInputBuffer(forRung: inferenceResolution) else {
+            throw MetalDeviceCacheError.textureAllocationFailed
+        }
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            throw MetalDeviceCacheError.commandEncoderCreationFailed
+        }
+        encoder.label = "Corridor Key Toolbox Normalise → Buffer"
+        encoder.setComputePipelineState(entry.computePipelines.normalizeToBuffer)
+        encoder.setTexture(source, index: Int(CKTextureIndexSource.rawValue))
+        encoder.setTexture(hint, index: Int(CKTextureIndexHint.rawValue))
+        encoder.setBuffer(buffer, offset: 0, index: 0)
+
+        var params = CKNormalizeParams(
+            workingToRec709: workingToRec709,
+            mean: SIMD3<Float>(0.485, 0.456, 0.406),
+            invStdDev: SIMD3<Float>(1.0 / 0.229, 1.0 / 0.224, 1.0 / 0.225)
+        )
+        encoder.setBytes(
+            &params,
+            length: MemoryLayout<CKNormalizeParams>.size,
+            index: Int(CKBufferIndexNormalizeParams.rawValue)
+        )
+        var dims = SIMD2<UInt32>(UInt32(inferenceResolution), UInt32(inferenceResolution))
+        encoder.setBytes(
+            &dims,
+            length: MemoryLayout<SIMD2<UInt32>>.size,
+            index: 1
+        )
+        dispatch(
+            encoder: encoder,
+            pipeline: entry.computePipelines.normalizeToBuffer,
+            width: inferenceResolution,
+            height: inferenceResolution
+        )
+        encoder.endEncoding()
+        return buffer
+    }
+
+    /// Test-only variant: writes the normalised tensor into a pooled
+    /// `.rgba32Float` texture so the SPM golden tests can read it back
+    /// without having to pre-build a host-visible MTLBuffer. Kept intact
+    /// so any downstream code that wants the texture form can use it.
     static func combineAndNormalise(
         source: any MTLTexture,
         hint: any MTLTexture,
@@ -157,7 +208,7 @@ enum RenderStages {
             normalised.returnManually()
             throw MetalDeviceCacheError.commandEncoderCreationFailed
         }
-        encoder.label = "Corridor Key Toolbox Combine + Normalise"
+        encoder.label = "Corridor Key Toolbox Combine + Normalise (Texture)"
         encoder.setComputePipelineState(entry.computePipelines.combineAndNormalize)
         encoder.setTexture(source, index: Int(CKTextureIndexSource.rawValue))
         encoder.setTexture(hint, index: Int(CKTextureIndexHint.rawValue))
@@ -181,6 +232,56 @@ enum RenderStages {
         )
         encoder.endEncoding()
         return normalised
+    }
+
+    /// Encodes a compute pass that pulls MLX's 1-channel alpha output
+    /// buffer into the supplied `r32Float` texture, flipping y to the
+    /// Metal top-left origin the compose shader expects.
+    static func writeAlphaBufferToTexture(
+        buffer: any MTLBuffer,
+        destination: any MTLTexture,
+        entry: MetalDeviceCacheEntry,
+        commandBuffer: any MTLCommandBuffer
+    ) throws {
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            throw MetalDeviceCacheError.commandEncoderCreationFailed
+        }
+        encoder.label = "Corridor Key Toolbox Alpha Buffer → Texture"
+        encoder.setComputePipelineState(entry.computePipelines.alphaBufferToTexture)
+        encoder.setBuffer(buffer, offset: 0, index: 0)
+        encoder.setTexture(destination, index: Int(CKTextureIndexOutput.rawValue))
+        dispatch(
+            encoder: encoder,
+            pipeline: entry.computePipelines.alphaBufferToTexture,
+            width: destination.width,
+            height: destination.height
+        )
+        encoder.endEncoding()
+    }
+
+    /// Encodes a compute pass that pulls MLX's 3-channel foreground
+    /// output buffer into the supplied `rgba32Float` texture (alpha = 1),
+    /// flipping y and expanding RGB → RGBA in the same pass.
+    static func writeForegroundBufferToTexture(
+        buffer: any MTLBuffer,
+        destination: any MTLTexture,
+        entry: MetalDeviceCacheEntry,
+        commandBuffer: any MTLCommandBuffer
+    ) throws {
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            throw MetalDeviceCacheError.commandEncoderCreationFailed
+        }
+        encoder.label = "Corridor Key Toolbox Foreground Buffer → Texture"
+        encoder.setComputePipelineState(entry.computePipelines.foregroundBufferToTexture)
+        encoder.setBuffer(buffer, offset: 0, index: 0)
+        encoder.setTexture(destination, index: Int(CKTextureIndexOutput.rawValue))
+        dispatch(
+            encoder: encoder,
+            pipeline: entry.computePipelines.foregroundBufferToTexture,
+            width: destination.width,
+            height: destination.height
+        )
+        encoder.endEncoding()
     }
 
     // MARK: - Resample (bilinear + Lanczos)

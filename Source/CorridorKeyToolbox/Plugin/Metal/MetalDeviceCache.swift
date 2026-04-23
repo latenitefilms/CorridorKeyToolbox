@@ -46,6 +46,9 @@ enum MetalDeviceCacheError: Error, CustomStringConvertible {
 /// pixel format because compute shaders write untyped floats.
 final class CorridorKeyComputePipelines: Sendable {
     let combineAndNormalize: any MTLComputePipelineState
+    let normalizeToBuffer: any MTLComputePipelineState
+    let alphaBufferToTexture: any MTLComputePipelineState
+    let foregroundBufferToTexture: any MTLComputePipelineState
     let despill: any MTLComputePipelineState
     let alphaLevelsGamma: any MTLComputePipelineState
     let morphologyHorizontal: any MTLComputePipelineState
@@ -74,6 +77,9 @@ final class CorridorKeyComputePipelines: Sendable {
             return try device.makeComputePipelineState(function: function)
         }
         combineAndNormalize = try compute("corridorKeyCombineAndNormalizeKernel")
+        normalizeToBuffer = try compute("corridorKeyNormalizeToBufferKernel")
+        alphaBufferToTexture = try compute("corridorKeyAlphaBufferToTextureKernel")
+        foregroundBufferToTexture = try compute("corridorKeyForegroundBufferToTextureKernel")
         despill = try compute("corridorKeyDespillKernel")
         alphaLevelsGamma = try compute("corridorKeyAlphaLevelsGammaKernel")
         morphologyHorizontal = try compute("corridorKeyMorphologyHorizontalKernel")
@@ -141,6 +147,9 @@ final class MetalDeviceCacheEntry {
 
     private let weightsLock = NSLock()
     private var weightBuffers: [GaussianWeightsKey: any MTLBuffer] = [:]
+
+    private let normalizedInputLock = NSLock()
+    private var normalizedInputBuffers: [Int: any MTLBuffer] = [:]
 
     private let mpsLock = NSLock()
     private var gaussianBlurs: [MPSGaussianKey: MPSImageGaussianBlur] = [:]
@@ -330,6 +339,43 @@ final class MetalDeviceCacheEntry {
             for index in weights.indices { weights[index] /= total }
         }
         return weights
+    }
+
+    // MARK: - Normalised-input buffer cache (zero-copy MLX)
+
+    /// Returns a shared MTLBuffer sized for one rung's normalised NHWC
+    /// tensor (`rung * rung * 4` floats). We cache one per rung because
+    /// the plug-in rotates through at most five rungs (512/768/1024/
+    /// 1536/2048) in a session, and each buffer is 4–67 MB — wastes a
+    /// few hundred MB if we allocate fresh per frame, is near-zero
+    /// steady state if we cache. `.storageModeShared` so
+    /// `MLXArray(rawPointer:)` can read it without a copy on Apple
+    /// Silicon's unified memory.
+    func normalizedInputBuffer(forRung rung: Int) -> (any MTLBuffer)? {
+        precondition(rung > 0, "rung must be positive")
+        normalizedInputLock.lock()
+        if let existing = normalizedInputBuffers[rung] {
+            normalizedInputLock.unlock()
+            return existing
+        }
+        normalizedInputLock.unlock()
+
+        let byteCount = rung * rung * 4 * MemoryLayout<Float>.size
+        guard let buffer = device.makeBuffer(length: byteCount, options: .storageModeShared) else {
+            return nil
+        }
+        buffer.label = "CK Normalized Input \(rung)px"
+
+        normalizedInputLock.lock()
+        // Race: another thread may have just cached one. Keep theirs to
+        // keep identity stable for callers.
+        if let existing = normalizedInputBuffers[rung] {
+            normalizedInputLock.unlock()
+            return existing
+        }
+        normalizedInputBuffers[rung] = buffer
+        normalizedInputLock.unlock()
+        return buffer
     }
 
     // MARK: - MPS kernel caches
