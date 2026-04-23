@@ -96,14 +96,6 @@ extension CorridorKeyToolboxPlugIn {
         )
 
         create.addPopupMenu(
-            withName: "Screen Colour",
-            parameterID: ParameterIdentifier.screenColor,
-            defaultValue: UInt32(ScreenColor.green.rawValue),
-            menuEntries: ScreenColor.allCases.map(\.displayName),
-            parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
-        )
-
-        create.addPopupMenu(
             withName: "Quality",
             parameterID: ParameterIdentifier.qualityMode,
             defaultValue: UInt32(QualityMode.maximum2048.rawValue),
@@ -112,10 +104,10 @@ extension CorridorKeyToolboxPlugIn {
         )
 
         create.addPopupMenu(
-            withName: "Output",
-            parameterID: ParameterIdentifier.outputMode,
-            defaultValue: UInt32(OutputMode.processed.rawValue),
-            menuEntries: OutputMode.allCases.map(\.displayName),
+            withName: "Screen Colour",
+            parameterID: ParameterIdentifier.screenColor,
+            defaultValue: UInt32(ScreenColor.green.rawValue),
+            menuEntries: ScreenColor.allCases.map(\.displayName),
             parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
 
@@ -127,6 +119,14 @@ extension CorridorKeyToolboxPlugIn {
             parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
 
+        create.addPopupMenu(
+            withName: "Output",
+            parameterID: ParameterIdentifier.outputMode,
+            defaultValue: UInt32(OutputMode.processed.rawValue),
+            menuEntries: OutputMode.allCases.map(\.displayName),
+            parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
+        )
+        
         create.endParameterSubGroup()
     }
 
