@@ -12,6 +12,8 @@ Niko explains:
 >
 > No more fighting with garbage mattes or agonizing over "core" vs "edge" keys. Give CorridorKey a hint of what you want, and it separates the light for you.
 
+You can download and learn more on the [Corridor Key Toolbox website](https://corridorkeytoolbox.fcp.cafe).
+
 ---
 
 ## Targets
