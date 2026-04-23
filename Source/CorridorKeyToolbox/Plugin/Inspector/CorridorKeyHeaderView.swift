@@ -59,7 +59,7 @@ struct CorridorKeyHeaderView: View {
             }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .padding(.vertical, 0)
         .task(id: ObjectIdentifier(bridge)) {
             // SwiftUI cancels this task automatically when the view leaves
             // the hierarchy, which removes the Timer-retain-cycle risk the

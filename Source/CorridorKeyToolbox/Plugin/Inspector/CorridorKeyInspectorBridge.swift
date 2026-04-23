@@ -65,7 +65,7 @@ final class CorridorKeyInspectorBridge: ObservableObject {
         defer { actionAPI.endAction(self) }
 
         let state = currentAnalysisState()
-        let (analysed, total, resolution) = currentAnalysisCounts()
+        let (analysed, total, resolution) = currentAnalysisCounts(for: state)
         return CorridorKeyAnalysisSnapshot(
             state: state,
             analyzedFrameCount: analysed,
@@ -92,7 +92,17 @@ final class CorridorKeyInspectorBridge: ObservableObject {
         }
     }
 
-    private func currentAnalysisCounts() -> (analysed: Int, total: Int, resolution: Int) {
+    private func currentAnalysisCounts(for state: CorridorKeyAnalysisSnapshot.State) -> (analysed: Int, total: Int, resolution: Int) {
+        // While an analysis pass is in flight, the persisted `AnalysisData`
+        // inside the custom parameter lags behind: the analyser only flushes
+        // it every 10 frames. Read the in-memory session counters instead so
+        // the progress bar and resolution label update continuously from
+        // frame one.
+        if (state == .running || state == .requested),
+           let plugin, let live = plugin.liveAnalysisProgress() {
+            return live
+        }
+
         guard let retrieval = apiManager.api(for: (any FxParameterRetrievalAPI_v6).self) as? any FxParameterRetrievalAPI_v6 else {
             return (0, 0, 0)
         }

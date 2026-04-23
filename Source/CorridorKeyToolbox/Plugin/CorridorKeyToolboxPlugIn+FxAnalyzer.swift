@@ -14,11 +14,17 @@ import CoreMedia
 import Metal
 import simd
 
-// Mirrors NSLock lifetime with the plug-in instance. Accessed from the main
-// render thread and from background analysis callbacks, so every touch of the
-// mutable state below must take this lock.
-private final class AnalysisSessionState: @unchecked Sendable {
-    var lock = NSLock()
+/// Per-plug-in analysis state. Accessed from the render thread and from the
+/// background analysis callbacks, so every touch of the mutable fields below
+/// must take `lock`.
+///
+/// Held as a stored property on `CorridorKeyToolboxPlugIn` so its lifetime is
+/// pinned to the plug-in instance. Holding the state in a process-level
+/// registry (as an earlier version did) leaked one full clip's worth of
+/// compressed mattes per plug-in instance because the registry never learned
+/// when an instance was released.
+final class AnalysisSessionState: @unchecked Sendable {
+    let lock = NSLock()
     var frameDuration: CMTime = .invalid
     var firstFrameTime: CMTime = .invalid
     var frameCount: Int = 0
@@ -63,32 +69,6 @@ private final class AnalysisSessionState: @unchecked Sendable {
     }
 }
 
-// Sidecar registry that maps plug-in instances to their analysis state. Wrapped
-// in a `@unchecked Sendable` class so Swift 6's data-race checker trusts the
-// internal NSLock to serialise concurrent accesses from render and analysis.
-private final class AnalysisStateRegistry: @unchecked Sendable {
-    private let lock = NSLock()
-    private var states: [ObjectIdentifier: AnalysisSessionState] = [:]
-
-    func state(for plugin: CorridorKeyToolboxPlugIn) -> AnalysisSessionState {
-        let identifier = ObjectIdentifier(plugin)
-        lock.lock()
-        defer { lock.unlock() }
-        if let existing = states[identifier] {
-            return existing
-        }
-        let fresh = AnalysisSessionState()
-        states[identifier] = fresh
-        return fresh
-    }
-}
-
-private let analysisStateRegistry = AnalysisStateRegistry()
-
-private func analysisState(for plugin: CorridorKeyToolboxPlugIn) -> AnalysisSessionState {
-    analysisStateRegistry.state(for: plugin)
-}
-
 extension CorridorKeyToolboxPlugIn {
 
     // MARK: - Inspector wiring (called by the +Parameters extension)
@@ -124,7 +104,7 @@ extension CorridorKeyToolboxPlugIn {
     }
 
     func clearAnalysisCache() {
-        let session = analysisState(for: self)
+        let session = analysisSession
         session.lock.lock()
         session.resetLocked()
         session.lock.unlock()
@@ -197,7 +177,7 @@ extension CorridorKeyToolboxPlugIn {
         let inferenceResolution = qualityMode.resolvedInferenceResolution(forLongEdge: longEdge)
 
         let frameCount = Self.frameCount(in: analysisRange, frameDuration: frameDuration)
-        let session = analysisState(for: self)
+        let session = analysisSession
         session.lock.lock()
         session.resetLocked()
         session.frameDuration = frameDuration
@@ -220,7 +200,7 @@ extension CorridorKeyToolboxPlugIn {
         _ frame: FxImageTile,
         atTime frameTime: CMTime
     ) throws {
-        let session = analysisState(for: self)
+        let session = analysisSession
 
         session.lock.lock()
         let frameDuration = session.frameDuration
@@ -311,14 +291,36 @@ extension CorridorKeyToolboxPlugIn {
 
     @objc(cleanupAnalysis:)
     func cleanupAnalysis() throws {
-        let session = analysisState(for: self)
+        let session = analysisSession
         session.lock.lock()
         let snapshot = session.snapshotLocked()
         session.lock.unlock()
         persist(snapshot: snapshot)
+        // The persisted copy inside the FCP Library is now the source of
+        // truth for the render path — drop the in-memory mattes to free up
+        // the working set. For a 2048px matte cache on a long clip this can
+        // reclaim hundreds of MB.
+        session.lock.lock()
+        session.mattes.removeAll(keepingCapacity: false)
+        session.lock.unlock()
         PluginLog.notice(
             "Analyse: complete — \(snapshot.analyzedCount) of \(snapshot.frameCount) frame(s) cached."
         )
+    }
+
+    // MARK: - Live progress for the inspector header
+
+    /// Lightweight view into the in-memory session state used by the
+    /// inspector bridge while analysis is running. Reading the persisted
+    /// `AnalysisData` would only catch up every 10 frames (and wouldn't
+    /// surface the chosen inference resolution until the first flush), which
+    /// left the header stuck at "Analysing at 0px…" for long clips.
+    func liveAnalysisProgress() -> (analysed: Int, total: Int, resolution: Int)? {
+        let session = analysisSession
+        session.lock.lock()
+        defer { session.lock.unlock() }
+        guard session.frameCount > 0 else { return nil }
+        return (session.analyzedCount, session.frameCount, session.inferenceResolution)
     }
 
     // MARK: - Persistence + lookup helpers

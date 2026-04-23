@@ -32,12 +32,24 @@ final class CorridorKeyToolboxPlugIn: NSObject, FxTileableEffect, FxAnalyzer {
     /// for internal performance tracing.
     let lastFrameMilliseconds = AtomicDouble(0)
 
+    /// Per-instance analysis session. Holds the in-flight matte cache while a
+    /// forward-analysis pass is running; dropped back to empty once cleanup
+    /// has flushed the final result to the Library. Owned by the plug-in
+    /// (rather than a separate registry) so it deallocates automatically when
+    /// Final Cut Pro releases the instance — previously, a process-level
+    /// registry leaked a full clip's worth of mattes per instance.
+    let analysisSession = AnalysisSessionState()
+
     // MARK: - Init
 
     @objc required init?(apiManager: any PROAPIAccessing) {
         self.apiManager = apiManager
         super.init()
         PluginLog.notice("CorridorKeyToolboxPlugIn instantiated.")
+    }
+
+    deinit {
+        PluginLog.notice("CorridorKeyToolboxPlugIn deallocated.")
     }
 }
 
