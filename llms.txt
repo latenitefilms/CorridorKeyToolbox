@@ -7,7 +7,7 @@
 - [System Requirements](https://CorridorKeyToolbox.fcp.cafe/system-requirements.md): Corridor Key Toolbox requires Final Cut Pro 11 or later on macOS 26 Tahoe.
 - [How To Use](https://CorridorKeyToolbox.fcp.cafe/how-to-use.md): Corridor Key Toolbox is currently in a public beta testing phase.
 - [Support](https://CorridorKeyToolbox.fcp.cafe/support.md): The best place to get support is the FCP Cafe Discord.
-- [Frequently Asked Questions](https://CorridorKeyToolbox.fcp.cafe/faq.md): Coming soon!
+- [Frequently Asked Questions](https://CorridorKeyToolbox.fcp.cafe/faq.md): Here's some cool projects:
 - [Troubleshooting](https://CorridorKeyToolbox.fcp.cafe/troubleshooting.md): Apologies in advance if you have any trouble using Corridor Key Toolbox.
 - [Release Notes](https://CorridorKeyToolbox.fcp.cafe/release-notes.md): 🎉 Released:
 - [Uninstall](https://CorridorKeyToolbox.fcp.cafe/uninstall.md): To uninstall Corridor Key Toolbox, simply drag the application to the trash/bin.
