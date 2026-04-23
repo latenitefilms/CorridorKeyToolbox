@@ -696,6 +696,8 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = CorridorKeyToolbox/WrapperApp/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Corridor Key Toolbox";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.latenitefilms.CorridorKeyToolbox;
 				PRODUCT_MODULE_NAME = CorridorKeyToolboxApp;
@@ -727,6 +729,8 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = CorridorKeyToolbox/WrapperApp/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Corridor Key Toolbox";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.latenitefilms.CorridorKeyToolbox;
 				PRODUCT_MODULE_NAME = CorridorKeyToolboxApp;
