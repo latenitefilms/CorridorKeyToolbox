@@ -77,7 +77,7 @@ struct PluginStateData: Codable, Sendable {
 
     init(
         screenColor: ScreenColor = .green,
-        qualityMode: QualityMode = .maximum2048,
+        qualityMode: QualityMode = .automatic,
         sourcePassthroughEnabled: Bool = true,
         passthroughErodeNormalized: Double = 3.0,
         passthroughBlurNormalized: Double = 7.0,
@@ -177,7 +177,7 @@ struct PluginStateData: Codable, Sendable {
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.screenColor = try container.decodeIfPresent(ScreenColor.self, forKey: .screenColor) ?? .green
-        self.qualityMode = try container.decodeIfPresent(QualityMode.self, forKey: .qualityMode) ?? .maximum2048
+        self.qualityMode = try container.decodeIfPresent(QualityMode.self, forKey: .qualityMode) ?? .automatic
         self.sourcePassthroughEnabled = try container.decodeIfPresent(Bool.self, forKey: .sourcePassthroughEnabled) ?? true
         self.passthroughErodeNormalized = try container.decodeIfPresent(Double.self, forKey: .passthroughErodeNormalized) ?? 3.0
         self.passthroughBlurNormalized = try container.decodeIfPresent(Double.self, forKey: .passthroughBlurNormalized) ?? 7.0

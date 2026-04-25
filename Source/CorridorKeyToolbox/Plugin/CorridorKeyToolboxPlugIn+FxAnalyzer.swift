@@ -396,7 +396,11 @@ extension CorridorKeyToolboxPlugIn {
         // log — we lost a diagnosis session without this and it was not a
         // fun investigation. Includes extract time so an MLX stall is
         // immediately obvious in the timeline.
-        let engineDescription = renderPipeline.inferenceCoordinator.backendDescription
+        // Use the engine description that came back with this frame's
+        // inference, NOT the coordinator's "current" backend — which can
+        // be the warm MLX engine even when this particular frame was
+        // served by the rough-matte fallback while MLX was warming up.
+        let engineDescription = extracted.engineDescription
         let extractSecondsText = extractDurationSeconds
             .formatted(.number.precision(.fractionLength(3)))
         PluginLog.notice(

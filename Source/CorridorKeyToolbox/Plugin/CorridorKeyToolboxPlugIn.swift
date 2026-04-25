@@ -53,11 +53,12 @@ final class CorridorKeyToolboxPlugIn: NSObject, FxTileableEffect, FxAnalyzer {
         // dedupes across multiple plug-in instances — adding the effect
         // to ten clips still loads the model once, not ten times.
         //
-        // We warm at the Maximum (2048) rung because that's the default
-        // Quality setting. If the user picks a smaller rung, the first
-        // analyse pass re-warms for that rung; warming the wrong rung
-        // eagerly costs a few hundred MB of memory temporarily but
-        // doesn't hurt correctness.
+        // We warm at the rung the `.automatic` default would resolve to
+        // for an HD-baseline clip on this machine. That keeps the eager
+        // warm-up appropriate for the host's RAM (1024 on a 32 GB Mac,
+        // 1536 on 64 GB, 2048 on 96 GB+) — over-warming at 2048 on
+        // smaller machines costs gigabytes of unified memory before the
+        // user has even picked a clip.
         Self.kickOffDefaultWarmup()
     }
 
@@ -67,7 +68,7 @@ final class CorridorKeyToolboxPlugIn: NSObject, FxTileableEffect, FxAnalyzer {
     private static func kickOffDefaultWarmup() {
         guard let device = MTLCreateSystemDefaultDevice() else { return }
         guard let entry = try? MetalDeviceCache.shared.entry(for: device) else { return }
-        let defaultRung = QualityMode.maximum2048.resolvedInferenceResolution(forLongEdge: 1920)
+        let defaultRung = QualityMode.automatic.resolvedInferenceResolution(forLongEdge: 1920)
         SharedMLXBridgeRegistry.shared.beginWarmup(
             deviceRegistryID: device.registryID,
             rung: defaultRung,

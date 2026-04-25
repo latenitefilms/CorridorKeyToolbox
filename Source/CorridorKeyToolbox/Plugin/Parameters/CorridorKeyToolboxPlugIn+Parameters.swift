@@ -100,7 +100,7 @@ extension CorridorKeyToolboxPlugIn {
         create.addPopupMenu(
             withName: "Quality",
             parameterID: ParameterIdentifier.qualityMode,
-            defaultValue: UInt32(QualityMode.maximum2048.rawValue),
+            defaultValue: UInt32(QualityMode.automatic.rawValue),
             menuEntries: QualityMode.allCases.map(\.displayName),
             parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )

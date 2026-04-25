@@ -46,6 +46,17 @@ struct InferenceCacheKey: Hashable, Sendable {
     }
 }
 
+/// Result bundle from `runInference`. The `engineDescription` records
+/// **which engine actually processed this frame** (MLX or the rough-matte
+/// fallback), not whichever engine happens to be ready when a log line
+/// fires. Without this distinction the analyse log misreports rough-matte
+/// frames as MLX, which masked the "first analysis is mostly rough-matte
+/// because MLX is still warming up" diagnosis for ages.
+struct InferenceRunResult {
+    let output: KeyingInferenceOutput
+    let engineDescription: String
+}
+
 final class InferenceCoordinator: @unchecked Sendable {
 
     /// Enables the MLX bridge. When `true` the coordinator asks the
@@ -118,9 +129,9 @@ final class InferenceCoordinator: @unchecked Sendable {
         request: KeyingInferenceRequest,
         cacheEntry: MetalDeviceCacheEntry,
         cacheKey: InferenceCacheKey
-    ) throws -> KeyingInferenceOutput {
+    ) throws -> InferenceRunResult {
         if let cached = cachedOutput(for: cacheKey) {
-            return cached
+            return InferenceRunResult(output: cached, engineDescription: "MLX cache hit")
         }
 
         let output = try makeOutputTextures(request: request, cacheEntry: cacheEntry)
@@ -141,7 +152,7 @@ final class InferenceCoordinator: @unchecked Sendable {
                 do {
                     try mlx.run(request: request, output: output)
                     storeCachedOutput(output, for: cacheKey)
-                    return output
+                    return InferenceRunResult(output: output, engineDescription: mlx.backendDisplayName)
                 } catch {
                     PluginLog.error(
                         "MLX inference failed; using rough matte for this frame. Error: \(error.localizedDescription)"
@@ -155,7 +166,7 @@ final class InferenceCoordinator: @unchecked Sendable {
         try fallback.run(request: request, output: output)
         // The fallback path intentionally isn't cached — it's already cheap
         // and caching it would starve later MLX-ready frames of a valid slot.
-        return output
+        return InferenceRunResult(output: output, engineDescription: fallback.backendDisplayName)
     }
 
     /// Asks the shared registry to start warm-up for `(device, rung)`

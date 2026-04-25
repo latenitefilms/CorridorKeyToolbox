@@ -105,12 +105,16 @@ final class RenderPipeline: @unchecked Sendable {
     /// float buffer; `source` is an optional width*height*4 interleaved RGBA
     /// float buffer at the same resolution as the alpha (only produced when
     /// `readbackSource` is true, used by the temporal-blend motion gate).
+    /// `engineDescription` records which engine actually processed this
+    /// frame so the analyser log accurately reports MLX vs rough-matte
+    /// per frame instead of guessing from the registry's current state.
     struct AnalysisExtraction {
         let alpha: [Float]
         let source: [Float]?
         let width: Int
         let height: Int
         let inferenceResolution: Int
+        let engineDescription: String
     }
 
     /// Runs pre-inference + MLX (no post-processing) and returns the raw alpha
@@ -156,7 +160,7 @@ final class RenderPipeline: @unchecked Sendable {
             inferenceResolution: inferenceResolution,
             cacheEntry: entry
         )
-        let inferenceOutput = try inferenceCoordinator.runInference(
+        let inferenceResult = try inferenceCoordinator.runInference(
             request: KeyingInferenceRequest(
                 normalisedInputBuffer: pre.normalisedInputBuffer,
                 rawSourceTexture: pre.rawSourceAtInferenceResolution.texture,
@@ -165,6 +169,7 @@ final class RenderPipeline: @unchecked Sendable {
             cacheEntry: entry,
             cacheKey: cacheKey
         )
+        let inferenceOutput = inferenceResult.output
 
         let width = inferenceOutput.alphaTexture.width
         let height = inferenceOutput.alphaTexture.height
@@ -202,7 +207,8 @@ final class RenderPipeline: @unchecked Sendable {
             source: sourceReadback,
             width: width,
             height: height,
-            inferenceResolution: inferenceResolution
+            inferenceResolution: inferenceResolution,
+            engineDescription: inferenceResult.engineDescription
         )
     }
 
