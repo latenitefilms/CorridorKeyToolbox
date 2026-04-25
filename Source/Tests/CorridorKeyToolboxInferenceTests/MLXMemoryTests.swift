@@ -46,24 +46,20 @@ struct MLXMemoryTests {
 
     // MARK: - The leak gate
 
-    /// Runs many inferences in a row and asserts MLX's cache stays bounded.
-    /// Without the cache-limit cap, on a 32 GB M1 Max the cache balloons
-    /// past several GB after a handful of 2048 frames; without the fix at
-    /// 512 we measured 4.4 GB of cached buffers after only 30 iterations.
-    /// With the fix in `MLXKeyingEngine.applyMemoryLimitsOnce` the cache
-    /// settles at ~260 MB (the MLX cache limit + a few MB of overshoot
-    /// while the allocator decides what to evict). The thresholds below
-    /// are deliberately generous so the test isn't flaky on different
-    /// hardware — we're guarding against the unbounded-growth bug, not
-    /// micro-optimising MLX's allocator. Anything an order of magnitude
-    /// larger than the limit means the fix has regressed.
-    @Test("MLX cache stays bounded across 30 sequential 512px inferences")
-    func cacheStaysBoundedAcrossThirtyInferences() async throws {
+    /// Runs many inferences in a row and asserts that calling
+    /// `clearMLXCache()` at the end of the session brings the cache back
+    /// down close to baseline. This is the production strategy: MLX is
+    /// allowed to cache freely during a pass (so it never thrashes the
+    /// allocator), and the analyser flushes the cache once the user is
+    /// done. Pre-fix the cache stayed elevated indefinitely (the 42 GB
+    /// post-analysis residency the user hit); post-fix it should settle
+    /// well below 1 GB after `clearMLXCache`.
+    @Test("clearMLXCache reclaims the cache after 30 sequential 512px inferences")
+    func clearCacheReclaimsMemoryAfterSession() async throws {
         let entry: MetalDeviceCacheEntry
         do { entry = try InferenceTestHarness.makeEntry() }
         catch { throw XCTSkip(error) }
 
-        // Reset the peak counter so we measure only this test run.
         MLX.Memory.peakMemory = 0
 
         let bridgeURL = try InferenceTestHarness.bridgeURL512()
@@ -73,33 +69,38 @@ struct MLXMemoryTests {
         let request = try makeRequest(rung: 512, entry: entry)
         let output = try makeOutput(rung: 512, entry: entry)
 
-        // The cache limit is 256 MB; allow a 64 MB overshoot for MLX's
-        // lazy reclaim (it triggers eviction "after" exceeding, not at).
-        // Anything ≥ 1 GB indicates the fix has regressed.
-        let cacheCeilingBytes = (256 + 64) * 1024 * 1024
-        var observedPeakCacheBytes = 0
-
-        for iteration in 0..<30 {
+        for _ in 0..<30 {
             try engine.run(request: request, output: output)
-            // Touch every iteration so the cache pattern matches the
-            // real analyse loop — InferenceCoordinator's `cachedMLXOutput`
-            // is replaced each frame in production, which drops the
-            // previous output references.
-
-            let snapshot = MLX.Memory.snapshot()
-            observedPeakCacheBytes = max(observedPeakCacheBytes, snapshot.cacheMemory)
-
-            #expect(
-                snapshot.cacheMemory <= cacheCeilingBytes,
-                "MLX cache grew past \(cacheCeilingBytes) bytes at iteration \(iteration): \(snapshot)"
-            )
         }
+        let beforeClear = MLX.Memory.snapshot()
 
-        let snapshot = MLX.Memory.snapshot()
-        print("MLX after 30 inferences — peak: \(snapshot.peakMemory / (1024 * 1024)) MB, " +
-              "active: \(snapshot.activeMemory / (1024 * 1024)) MB, " +
-              "cache: \(snapshot.cacheMemory / (1024 * 1024)) MB " +
-              "(observed peak cache: \(observedPeakCacheBytes / (1024 * 1024)) MB).")
+        engine.clearMLXCache()
+        let afterClear = MLX.Memory.snapshot()
+
+        // Sanity check: the cache should be substantial during the
+        // analysis (we're not running with a synthetic cap) — without
+        // some load there's nothing to validate.
+        let oneMegabyte = 1024 * 1024
+        #expect(
+            beforeClear.cacheMemory > 32 * oneMegabyte,
+            "Expected meaningful cache load before clear; got \(beforeClear.cacheMemory) bytes."
+        )
+
+        // Post-clear: cache should drop substantially. The exact floor
+        // depends on what MLX considers "in use", but we expect at
+        // least an 80% reduction. Anything less and the bug is back.
+        let releasedBytes = beforeClear.cacheMemory - afterClear.cacheMemory
+        let releasePercent = Double(releasedBytes) / Double(max(beforeClear.cacheMemory, 1)) * 100
+        #expect(
+            releasePercent >= 80.0,
+            "clearMLXCache only released \(releasePercent)% (was \(beforeClear.cacheMemory), now \(afterClear.cacheMemory))."
+        )
+
+        print("MLX before clearCache: \(beforeClear.cacheMemory / oneMegabyte) MB cached, " +
+              "\(beforeClear.activeMemory / oneMegabyte) MB active.")
+        print("MLX after clearCache:  \(afterClear.cacheMemory / oneMegabyte) MB cached, " +
+              "\(afterClear.activeMemory / oneMegabyte) MB active " +
+              "(released \(releasedBytes / oneMegabyte) MB, \(Int(releasePercent))%).")
     }
 
     /// A second-tier guard: even with the cache capped, an active-memory

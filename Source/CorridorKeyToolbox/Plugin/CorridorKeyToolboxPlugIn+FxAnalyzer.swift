@@ -436,6 +436,13 @@ extension CorridorKeyToolboxPlugIn {
                 entry.clearAnalysisReadbackTextures()
             }
         }
+        // Drop MLX's per-process buffer cache. During an analysis pass
+        // MLX caches every intermediate (model activations, transient
+        // tensors) for re-use; without this hook it would persist
+        // multiple GB of buffers between editing sessions. Clearing
+        // here gives us bounded steady-state memory while leaving the
+        // hot path inside an analysis pass completely untouched.
+        renderPipeline.inferenceCoordinator.releaseCacheBetweenSessions()
         PluginLog.notice(
             "Analyse: complete — \(snapshot.analyzedCount) of \(snapshot.frameCount) frame(s) cached."
         )

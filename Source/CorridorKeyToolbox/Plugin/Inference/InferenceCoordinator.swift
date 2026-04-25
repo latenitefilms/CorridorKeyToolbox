@@ -172,6 +172,30 @@ final class InferenceCoordinator: @unchecked Sendable {
         )
     }
 
+    /// Releases the cached MLX output and asks MLX to drain its internal
+    /// Metal buffer cache. Called by the analyser at the end of an
+    /// Analyse Clip pass so memory doesn't ramp across long editing
+    /// sessions. The MLX cache is documented to grow unboundedly across
+    /// successive inferences with different shapes — clearing it once
+    /// per session strikes the right balance: zero per-frame thrashing,
+    /// memory back to baseline once the user is done analysing.
+    func releaseCacheBetweenSessions() {
+        stateLock.lock()
+        cachedMLXKey = nil
+        cachedMLXOutput = nil
+        let deviceRegistryID = trackedDeviceRegistryID
+        let rung = trackedRung
+        stateLock.unlock()
+
+        if rung > 0,
+           let mlx = SharedMLXBridgeRegistry.shared.readyEngine(
+               deviceRegistryID: deviceRegistryID,
+               rung: rung
+           ) {
+            mlx.clearMLXCache()
+        }
+    }
+
     // MARK: - MLX frame cache
 
     private func cachedOutput(for key: InferenceCacheKey) -> KeyingInferenceOutput? {

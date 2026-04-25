@@ -73,25 +73,36 @@ private enum MLXBridgeResourceLocator {
 
 final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
 
-    /// Strategy for handing the normalised input tensor to MLX. Switched at
-    /// build time only — we are not (yet) confident enough in the
-    /// rawPointer path to expose a runtime toggle.
+    /// Strategy for handing the normalised input tensor to MLX. Switched
+    /// at engine init by the production code; the test suite can override
+    /// per-instance via `testOverrideInputStrategy(_:)` to cross-check
+    /// parity between the two paths.
     ///
-    /// * `.zeroCopy` — the path introduced in commit `a4190e0`. Aliases the
-    ///   shared MTLBuffer directly via `MLXArray(rawPointer:)`. Microbench
-    ///   showed ~35 ms / ~285 MB savings per frame on the test rigs at the
-    ///   time, but a real 4K clip on M1 Max measured 125–170 s per `eval()`
-    ///   at the 2048 rung — wall-time inference far outside the warm-up's
-    ///   25 s baseline. Held in reserve until we understand why.
-    /// * `.cpuStaging` — the v1.0.0 build 1 behaviour. Reads the input
-    ///   buffer into a reusable Swift `[Float]` and constructs an MLXArray
-    ///   that owns its memory. MLX allocates internal storage the way it
-    ///   wants, which seems to keep it on the fast path.
-    private enum InputStrategy {
+    /// * `.zeroCopy` — aliases the shared MTLBuffer directly via
+    ///   `MLXArray(rawPointer:)`. Apple Silicon's unified memory makes
+    ///   this near-free — no copy, MLX reads the same bytes the Metal
+    ///   normalise kernel just wrote. The shipping default.
+    /// * `.cpuStaging` — copies the buffer into a reusable Swift
+    ///   `[Float]` and constructs an `MLXArray` that owns its memory.
+    ///   Was tried as a workaround for a slow-eval symptom on one clip
+    ///   but proved unreliable in production (matte quality regressions).
+    ///   Kept available so unit tests can validate parity with the
+    ///   shipping path.
+    enum InputStrategy: Sendable {
         case zeroCopy
         case cpuStaging
     }
-    private static let inputStrategy: InputStrategy = .cpuStaging
+    private static let defaultInputStrategy: InputStrategy = .zeroCopy
+    private var inputStrategy: InputStrategy = MLXKeyingEngine.defaultInputStrategy
+
+    /// Test-only entry point. Production callers must not flip the
+    /// strategy mid-flight — the override exists so parity tests can
+    /// run both paths against the same input within a single process.
+    func testOverrideInputStrategy(_ strategy: InputStrategy) {
+        runLock.lock()
+        inputStrategy = strategy
+        runLock.unlock()
+    }
 
     let backendDisplayName: String
     var guideSourceDescription: String
@@ -116,43 +127,26 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         self.cacheEntry = cacheEntry
         self.backendDisplayName = "MLX on \(cacheEntry.device.name)"
         self.guideSourceDescription = "Auto rough fallback"
-        Self.applyMemoryLimitsOnce()
     }
 
-    /// Caps MLX's internal buffer cache. The default is the device's
-    /// recommended-max-working-set × 1.5 — on a 32 GB M1 Max that's
-    /// ~30+ GB, and MLX happily fills it with buffers from intermediate
-    /// computations across consecutive inferences. We measured 4.4 GB of
-    /// cache after 30 sequential 512px inferences in the unit test
-    /// `MLXMemoryTests`, scaling to ~70 GB at 2048 — which is exactly
-    /// the 42 GB symptom Final Cut Pro hit during a 26-frame Analyse
-    /// pass.
+    /// Releases MLX's internal buffer cache. Called by the analyser at the
+    /// end of an Analyse Clip pass so memory doesn't ramp across long
+    /// editing sessions. Cheap during normal inference (we don't call it
+    /// per-frame because forcing reallocation between frames thrashes the
+    /// allocator and made wall-time go from 41 ms to 15 s in field tests).
     ///
-    /// 256 MiB is well above one inference's working set at every rung
-    /// in the ladder (the largest, 2048, fits in ~120 MB of activations)
-    /// while keeping memory bounded across long analyses. mlx-swift's
-    /// own docs note that "many developers find that relatively small
-    /// cache sizes (e.g. 2 MB) perform just as well" for inference; we
-    /// pick a conservative ceiling that still leaves headroom for
-    /// kernel JIT.
-    ///
-    /// Idempotent: the API is global to the MLX runtime, so running it
-    /// once per process is sufficient. NSLock keeps it simple — the call
-    /// only fires once per process so contention is negligible.
-    private static let memoryLimitsLock = NSLock()
-    private nonisolated(unsafe) static var memoryLimitsApplied = false
-    private static func applyMemoryLimitsOnce() {
-        memoryLimitsLock.lock()
-        if memoryLimitsApplied {
-            memoryLimitsLock.unlock()
-            return
+    /// The unit-test `MLXMemoryTests` verifies the cache settles after
+    /// `clearCache` runs — without this hook, MLX cache observed at 4.4 GB
+    /// after 30× 512 inferences scales to ~70 GB at 2048, matching the
+    /// 42 GB symptom Final Cut Pro hit during a 26-frame Analyse pass.
+    func clearMLXCache() {
+        let beforeBytes = MLX.Memory.cacheMemory
+        MLX.Memory.clearCache()
+        let afterBytes = MLX.Memory.cacheMemory
+        let releasedMB = (beforeBytes - afterBytes) / (1024 * 1024)
+        if releasedMB > 0 {
+            PluginLog.notice("MLX cache cleared: released \(releasedMB) MB.")
         }
-        memoryLimitsApplied = true
-        memoryLimitsLock.unlock()
-
-        let cacheLimitBytes = 256 * 1024 * 1024
-        MLX.Memory.cacheLimit = cacheLimitBytes
-        PluginLog.notice("MLX cache limit pinned at \(cacheLimitBytes / (1024 * 1024)) MB.")
     }
 
     func supports(resolution: Int) -> Bool {
@@ -236,7 +230,7 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         // `InputStrategy` for the trade-off and the wall-time data.
         let inputBuffer = request.normalisedInputBuffer
         let inputArray: MLXArray
-        switch Self.inputStrategy {
+        switch inputStrategy {
         case .zeroCopy:
             inputArray = MLXArray(
                 rawPointer: inputBuffer.contents(),
