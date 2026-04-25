@@ -2,11 +2,18 @@
 //  InferenceCoordinator.swift
 //  Corridor Key Toolbox
 //
-//  Chooses a keying engine, manages the per-frame cache, and falls back
-//  to the rough-matte engine when MLX isn't ready yet. Engines live in
-//  `SharedMLXBridgeRegistry` — the coordinator no longer owns them —
-//  so multiple plug-in instances share a single warmed bridge per
-//  `(device, rung)`.
+//  The inference adapter for the analyser path. Every analyse-time call
+//  goes through MLX — there is intentionally **no** fallback engine, so
+//  the cached matte sequence is always 100% neural-network output. If
+//  MLX isn't warm yet, `runInference` blocks (via the registry's
+//  `waitForReady`) until the bridge is ready or the warm-up fails.
+//  Engines live in `SharedMLXBridgeRegistry` so multiple plug-in
+//  instances share a single warmed bridge per `(device, rung)`.
+//
+//  Note: the green-bias "rough matte" still exists, but as a *hint*
+//  fed into MLX as the 4th input channel by the pre-inference pass
+//  (`extractHint` / `combineAndNormaliseIntoBuffer`). It is never used
+//  as a final output matte.
 //
 //  A single-frame MLX output cache is layered on top: if the user
 //  changes a post-process parameter (output mode, despill, matte
@@ -59,13 +66,13 @@ struct InferenceRunResult {
 
 final class InferenceCoordinator: @unchecked Sendable {
 
-    /// Enables the MLX bridge. When `true` the coordinator asks the
-    /// shared registry to warm a bridge matching the requested rung;
-    /// falls back to `RoughMatteKeyingEngine` on any error.
+    /// Master switch for the MLX bridge. Always `true` in shipping
+    /// builds — the analyser refuses to run without MLX. Kept as a
+    /// constant so a future development build can flip it for debugging
+    /// the pre-/post-inference pipeline without paying for the warm-up.
     private static let mlxEnabled = true
 
     private let stateLock = NSLock()
-    private var roughMatteEngine: RoughMatteKeyingEngine?
 
     /// The `(device, rung)` this coordinator most recently asked the
     /// registry to warm. Used by `warmupStatus` and `cancelWarmup` to
@@ -73,9 +80,9 @@ final class InferenceCoordinator: @unchecked Sendable {
     private var trackedDeviceRegistryID: UInt64 = 0
     private var trackedRung: Int = 0
 
-    /// Single-frame cache of the latest MLX inference. The rough-matte path
-    /// writes to freshly-allocated textures every frame so it's cheap enough
-    /// to re-run; only the expensive MLX result is worth caching.
+    /// Single-frame cache of the latest MLX inference output. Used so a
+    /// post-process slider tweak at the same play-head doesn't re-run
+    /// the model — see `cachedOutput(for:)`.
     private var cachedMLXKey: InferenceCacheKey?
     private var cachedMLXOutput: KeyingInferenceOutput?
 
@@ -84,13 +91,9 @@ final class InferenceCoordinator: @unchecked Sendable {
         stateLock.lock()
         let device = trackedDeviceRegistryID
         let rung = trackedRung
-        let rough = roughMatteEngine
         stateLock.unlock()
         if rung > 0, let engine = SharedMLXBridgeRegistry.shared.readyEngine(deviceRegistryID: device, rung: rung) {
             return engine.backendDisplayName
-        }
-        if let rough {
-            return rough.backendDisplayName
         }
         return "Idle"
     }
@@ -134,39 +137,36 @@ final class InferenceCoordinator: @unchecked Sendable {
             return InferenceRunResult(output: cached, engineDescription: "MLX cache hit")
         }
 
-        let output = try makeOutputTextures(request: request, cacheEntry: cacheEntry)
+        guard Self.mlxEnabled else {
+            throw KeyingInferenceError.modelUnavailable("MLX is disabled in this build.")
+        }
 
-        if Self.mlxEnabled {
-            let deviceRegistryID = cacheEntry.device.registryID
-            trackRequestedBridge(deviceRegistryID: deviceRegistryID, rung: request.inferenceResolution)
-            SharedMLXBridgeRegistry.shared.beginWarmup(
+        let deviceRegistryID = cacheEntry.device.registryID
+        trackRequestedBridge(deviceRegistryID: deviceRegistryID, rung: request.inferenceResolution)
+
+        // Block until the MLX bridge is warm. Earlier builds fell
+        // through to a green-bias rough-matte engine when MLX wasn't
+        // ready yet, which silently degraded the first ~15 s of every
+        // analysis to a shape-only matte. We now wait — the green
+        // hint is still used inside MLX (as the 4th input channel via
+        // `extractHint` in pre-inference), but the *output* matte is
+        // always the neural one.
+        let engine: MLXKeyingEngine
+        do {
+            engine = try SharedMLXBridgeRegistry.shared.waitForReady(
                 deviceRegistryID: deviceRegistryID,
                 rung: request.inferenceResolution,
                 cacheEntry: cacheEntry
             )
-
-            if let mlx = SharedMLXBridgeRegistry.shared.readyEngine(
-                deviceRegistryID: deviceRegistryID,
-                rung: request.inferenceResolution
-            ) {
-                do {
-                    try mlx.run(request: request, output: output)
-                    storeCachedOutput(output, for: cacheKey)
-                    return InferenceRunResult(output: output, engineDescription: mlx.backendDisplayName)
-                } catch {
-                    PluginLog.error(
-                        "MLX inference failed; using rough matte for this frame. Error: \(error.localizedDescription)"
-                    )
-                    // Intentional fall-through to the rough-matte path below.
-                }
-            }
+        } catch {
+            PluginLog.error("MLX bridge unavailable: \(error.localizedDescription)")
+            throw error
         }
 
-        let fallback = getOrCreateRoughMatteEngine(cacheEntry: cacheEntry)
-        try fallback.run(request: request, output: output)
-        // The fallback path intentionally isn't cached — it's already cheap
-        // and caching it would starve later MLX-ready frames of a valid slot.
-        return InferenceRunResult(output: output, engineDescription: fallback.backendDisplayName)
+        let output = try makeOutputTextures(request: request, cacheEntry: cacheEntry)
+        try engine.run(request: request, output: output)
+        storeCachedOutput(output, for: cacheKey)
+        return InferenceRunResult(output: output, engineDescription: engine.backendDisplayName)
     }
 
     /// Asks the shared registry to start warm-up for `(device, rung)`
@@ -261,21 +261,5 @@ final class InferenceCoordinator: @unchecked Sendable {
             throw KeyingInferenceError.deviceUnavailable
         }
         return KeyingInferenceOutput(alphaTexture: alpha, foregroundTexture: foreground)
-    }
-
-    // MARK: - Rough matte fallback
-
-    private func getOrCreateRoughMatteEngine(cacheEntry: MetalDeviceCacheEntry) -> RoughMatteKeyingEngine {
-        stateLock.lock()
-        if let existing = roughMatteEngine {
-            stateLock.unlock()
-            return existing
-        }
-        stateLock.unlock()
-        let created = RoughMatteKeyingEngine(cacheEntry: cacheEntry)
-        stateLock.lock()
-        roughMatteEngine = created
-        stateLock.unlock()
-        return created
     }
 }

@@ -63,6 +63,43 @@ final class SharedMLXBridgeRegistry: @unchecked Sendable {
         return engines[key]
     }
 
+    /// Blocks the calling thread until the `(device, rung)` engine is
+    /// ready, the warm-up has failed, or warm-up is cancelled. Kicks off
+    /// the warm-up itself if one isn't already running. Used by the
+    /// analyser, which **must** key with MLX — falling through to the
+    /// rough-matte fallback for a few frames while MLX warms would
+    /// silently mix two engines' output into the cached matte sequence
+    /// and produce a low-quality, inconsistent result.
+    ///
+    /// Returns the engine on success, throws `KeyingInferenceError` on
+    /// permanent failure.
+    func waitForReady(
+        deviceRegistryID: UInt64,
+        rung: Int,
+        cacheEntry: MetalDeviceCacheEntry,
+        pollInterval: TimeInterval = 0.05,
+        timeout: TimeInterval = 120
+    ) throws -> MLXKeyingEngine {
+        let deadline = Date().addingTimeInterval(timeout)
+        beginWarmup(deviceRegistryID: deviceRegistryID, rung: rung, cacheEntry: cacheEntry)
+        while Date() < deadline {
+            switch status(deviceRegistryID: deviceRegistryID, rung: rung) {
+            case .ready:
+                if let engine = readyEngine(deviceRegistryID: deviceRegistryID, rung: rung) {
+                    return engine
+                }
+                // Status flicked to ready but engine vanished — keep polling.
+            case .failed(let message):
+                throw KeyingInferenceError.modelUnavailable(message)
+            case .cold, .warming:
+                Thread.sleep(forTimeInterval: pollInterval)
+            }
+        }
+        throw KeyingInferenceError.modelUnavailable(
+            "MLX bridge for \(rung)px did not become ready within \(Int(timeout))s."
+        )
+    }
+
     /// Kicks off a background warm-up for `(device, rung)` if one isn't
     /// already running and the engine isn't already warm. Idempotent —
     /// repeated calls return immediately when a task is in flight or the

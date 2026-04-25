@@ -77,7 +77,6 @@ let package = Package(
                 "Inference/InferenceCoordinator.swift",
                 "Inference/KeyingInferenceEngine.swift",
                 "Inference/MLXKeyingEngine.swift",
-                "Inference/RoughMatteKeyingEngine.swift",
                 "Inference/SharedMLXBridgeRegistry.swift",
                 "Inspector/CorridorKeyToolboxPlugIn+CustomViews.swift",
                 "Inspector/CorridorKeyInspectorBridge.swift",
@@ -147,7 +146,6 @@ let package = Package(
                 "Render/RenderStages.swift",
                 "Inference/KeyingInferenceEngine.swift",
                 "Inference/MLXKeyingEngine.swift",
-                "Inference/RoughMatteKeyingEngine.swift",
                 "Inference/InferenceCoordinator.swift",
                 "Inference/SharedMLXBridgeRegistry.swift"
             ],

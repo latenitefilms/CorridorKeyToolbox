@@ -29,7 +29,6 @@
 		CK010000000000000000000D /* CorridorKeyShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = CK020000000000000000000D /* CorridorKeyShaders.metal */; };
 		CK010000000000000000000E /* ScreenColorEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK020000000000000000000E /* ScreenColorEstimator.swift */; };
 		CK010000000000000000000F /* KeyingInferenceEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK020000000000000000000F /* KeyingInferenceEngine.swift */; };
-		CK0100000000000000000010 /* RoughMatteKeyingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000010 /* RoughMatteKeyingEngine.swift */; };
 		CK0100000000000000000012 /* InferenceCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000012 /* InferenceCoordinator.swift */; };
 		CK0100000000000000000013 /* RenderPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000013 /* RenderPipeline.swift */; };
 		CK0100000000000000000014 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000014 /* InfoPlist.strings */; };
@@ -125,7 +124,6 @@
 		CK020000000000000000000D /* CorridorKeyShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; name = CorridorKeyShaders.metal; path = CorridorKeyToolbox/Plugin/Metal/CorridorKeyShaders.metal; sourceTree = "<group>"; };
 		CK020000000000000000000E /* ScreenColorEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ScreenColorEstimator.swift; path = CorridorKeyToolbox/Plugin/PostProcess/ScreenColorEstimator.swift; sourceTree = "<group>"; };
 		CK020000000000000000000F /* KeyingInferenceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = KeyingInferenceEngine.swift; path = CorridorKeyToolbox/Plugin/Inference/KeyingInferenceEngine.swift; sourceTree = "<group>"; };
-		CK0200000000000000000010 /* RoughMatteKeyingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RoughMatteKeyingEngine.swift; path = CorridorKeyToolbox/Plugin/Inference/RoughMatteKeyingEngine.swift; sourceTree = "<group>"; };
 		CK0200000000000000000012 /* InferenceCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InferenceCoordinator.swift; path = CorridorKeyToolbox/Plugin/Inference/InferenceCoordinator.swift; sourceTree = "<group>"; };
 		CK0200000000000000000013 /* RenderPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RenderPipeline.swift; path = CorridorKeyToolbox/Plugin/Render/RenderPipeline.swift; sourceTree = "<group>"; };
 		CK0200000000000000000015 /* CorridorKeyToolboxApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyToolboxApp.swift; path = CorridorKeyToolbox/WrapperApp/CorridorKeyToolboxApp.swift; sourceTree = "<group>"; };
@@ -318,7 +316,6 @@
 			isa = PBXGroup;
 			children = (
 				CK020000000000000000000F /* KeyingInferenceEngine.swift */,
-				CK0200000000000000000010 /* RoughMatteKeyingEngine.swift */,
 				MX0100000000000000000003 /* MLXKeyingEngine.swift */,
 				CK0200000000000000000076 /* SharedMLXBridgeRegistry.swift */,
 				CK0200000000000000000012 /* InferenceCoordinator.swift */,
@@ -543,7 +540,6 @@
 				CK010000000000000000000D /* CorridorKeyShaders.metal in Sources */,
 				CK010000000000000000000E /* ScreenColorEstimator.swift in Sources */,
 				CK010000000000000000000F /* KeyingInferenceEngine.swift in Sources */,
-				CK0100000000000000000010 /* RoughMatteKeyingEngine.swift in Sources */,
 				MX0200000000000000000002 /* MLXKeyingEngine.swift in Sources */,
 				CK0100000000000000000012 /* InferenceCoordinator.swift in Sources */,
 				CK0100000000000000000013 /* RenderPipeline.swift in Sources */,
