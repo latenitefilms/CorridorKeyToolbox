@@ -43,6 +43,12 @@ extension CorridorKeyToolboxPlugIn {
             time: renderTime,
             default: .automatic
         )
+        state.autoSubjectHintEnabled = boolValue(
+            retrieval: retrieval,
+            parameterID: ParameterIdentifier.autoSubjectHintEnabled,
+            time: renderTime,
+            default: true
+        )
 
         // Interior
         state.sourcePassthroughEnabled = boolValue(
@@ -99,7 +105,7 @@ extension CorridorKeyToolboxPlugIn {
             retrieval: retrieval,
             parameterID: ParameterIdentifier.autoDespeckle,
             time: renderTime,
-            default: false
+            default: true
         )
         state.despeckleSize = intValue(
             retrieval: retrieval,
@@ -151,13 +157,13 @@ extension CorridorKeyToolboxPlugIn {
             retrieval: retrieval,
             parameterID: ParameterIdentifier.temporalStabilityEnabled,
             time: renderTime,
-            default: false
+            default: true
         )
         state.temporalStabilityStrength = floatValue(
             retrieval: retrieval,
             parameterID: ParameterIdentifier.temporalStabilityStrength,
             time: renderTime,
-            default: 0.5
+            default: 0.35
         )
 
         // Edge & spill
@@ -165,13 +171,13 @@ extension CorridorKeyToolboxPlugIn {
             retrieval: retrieval,
             parameterID: ParameterIdentifier.despillStrength,
             time: renderTime,
-            default: 0.5
+            default: 1.0
         )
         state.spillMethod = popupValue(
             retrieval: retrieval,
             parameterID: ParameterIdentifier.spillMethod,
             time: renderTime,
-            default: .average
+            default: .screenSubtract
         )
 
         // Output and performance
@@ -198,6 +204,10 @@ extension CorridorKeyToolboxPlugIn {
             state.cachedMatteBlob = blob
             state.cachedMatteInferenceResolution = analysis.inferenceResolution
         }
+
+        // Load the user's OSC-placed hint dots. Stored in a hidden custom
+        // parameter so they round-trip through the FCP Library.
+        state.hintPointSet = loadHintPointSet(using: retrieval)
 
         let nsData = try state.encodedForHost()
         pluginState?.pointee = nsData
@@ -251,5 +261,21 @@ extension CorridorKeyToolboxPlugIn {
         var value: ObjCBool = ObjCBool(defaultValue)
         retrieval.getBoolValue(&value, fromParameter: parameterID, at: time)
         return value.boolValue
+    }
+
+    /// Decodes the hidden Subject Points custom parameter into a
+    /// `HintPointSet`. Returns an empty set when the parameter has
+    /// never been written (the typical case until the user clicks the
+    /// canvas with the OSC active).
+    fileprivate func loadHintPointSet(
+        using retrieval: any FxParameterRetrievalAPI_v6
+    ) -> HintPointSet {
+        var rawValue: (any NSCopying & NSObjectProtocol & NSSecureCoding)?
+        retrieval.getCustomParameterValue(
+            &rawValue,
+            fromParameter: ParameterIdentifier.subjectPoints,
+            at: CMTime.zero
+        )
+        return HintPointSet.fromParameterDictionary(rawValue as? NSDictionary)
     }
 }

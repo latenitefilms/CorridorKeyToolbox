@@ -48,7 +48,8 @@ extension CorridorKeyToolboxPlugIn {
     /// here would open the plug-in to decoding attacker-supplied payloads.
     func classes(forCustomParameterID parameterID: UInt32) -> Set<AnyHashable> {
         switch parameterID {
-        case ParameterIdentifier.analysisData:
+        case ParameterIdentifier.analysisData,
+             ParameterIdentifier.subjectPoints:
             let classes: [AnyClass] = [
                 NSDictionary.self,
                 NSString.self,
@@ -83,6 +84,12 @@ extension CorridorKeyToolboxPlugIn {
         create.addCustomParameter(
             withName: "Analysis Data",
             parameterID: ParameterIdentifier.analysisData,
+            defaultValue: NSDictionary(),
+            parameterFlags: hiddenFlags.fxFlags
+        )
+        create.addCustomParameter(
+            withName: "Subject Points",
+            parameterID: ParameterIdentifier.subjectPoints,
             defaultValue: NSDictionary(),
             parameterFlags: hiddenFlags.fxFlags
         )
@@ -128,7 +135,14 @@ extension CorridorKeyToolboxPlugIn {
             menuEntries: OutputMode.allCases.map(\.displayName),
             parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
-        
+
+        create.addToggleButton(
+            withName: "Auto Subject Hint",
+            parameterID: ParameterIdentifier.autoSubjectHintEnabled,
+            defaultValue: true,
+            parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
+        )
+
         create.endParameterSubGroup()
     }
 
@@ -243,7 +257,7 @@ extension CorridorKeyToolboxPlugIn {
         create.addToggleButton(
             withName: "Auto Despeckle",
             parameterID: ParameterIdentifier.autoDespeckle,
-            defaultValue: false,
+            defaultValue: true,
             parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
 
@@ -281,10 +295,14 @@ extension CorridorKeyToolboxPlugIn {
             parameterFlags: CorridorKeyParameterFlags.default.fxFlags
         )
 
+        // Despill defaults to full strength because most green-screen
+        // shots expect a fully de-spilled foreground; the previous 0.5
+        // default sat halfway between "spill removed" and "spill
+        // visible" which read as a bug to users new to the plug-in.
         create.addFloatSlider(
             withName: "Despill Strength",
             parameterID: ParameterIdentifier.despillStrength,
-            defaultValue: 0.5,
+            defaultValue: 1.0,
             parameterMin: 0,
             parameterMax: 1,
             sliderMin: 0,
@@ -293,10 +311,15 @@ extension CorridorKeyToolboxPlugIn {
             parameterFlags: CorridorKeyParameterFlags.default.fxFlags
         )
 
+        // Screen Subtract is the Keylight-style method most Nuke /
+        // Fusion artists default to: it scales spill removal by pixel
+        // saturation so neutral whites and hair specular stay neutral
+        // instead of getting pushed magenta. The legacy Average method
+        // is kept for backwards compatibility / parity testing.
         create.addPopupMenu(
             withName: "Spill Method",
             parameterID: ParameterIdentifier.spillMethod,
-            defaultValue: UInt32(SpillMethod.average.rawValue),
+            defaultValue: UInt32(SpillMethod.screenSubtract.rawValue),
             menuEntries: SpillMethod.allCases.map(\.displayName),
             parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
@@ -384,14 +407,19 @@ extension CorridorKeyToolboxPlugIn {
         create.addToggleButton(
             withName: "Reduce Edge Flicker",
             parameterID: ParameterIdentifier.temporalStabilityEnabled,
-            defaultValue: false,
+            defaultValue: true,
             parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
 
+        // Strength of 0.35 is the sweet spot from the NikoDruid benchmark:
+        // edge-band σ drops from 0.42 to ~0.18 (over 2× reduction in
+        // visible flicker) without smearing fast hand motion. The legacy
+        // default of 0.5 was a starting point picked before the benchmark
+        // suite landed; with measured data we can tighten it.
         create.addFloatSlider(
             withName: "Stability Strength",
             parameterID: ParameterIdentifier.temporalStabilityStrength,
-            defaultValue: 0.5,
+            defaultValue: 0.35,
             parameterMin: 0,
             parameterMax: 1,
             sliderMin: 0,

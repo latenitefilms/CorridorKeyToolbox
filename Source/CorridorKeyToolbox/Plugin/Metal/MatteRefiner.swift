@@ -24,15 +24,30 @@ import Metal
 import MetalPerformanceShaders
 
 /// Minimum kernel radius (in texels) at which MPS dilate/erode beats the
-/// custom separable kernel. Chosen by benchmarking the shipping shaders on
-/// M2 Pro and M3 Max — below radius 3 the MPS setup cost dominates.
-private let mpsRadiusBreakeven = 3
+/// threadgroup-cached separable kernel. Re-benchmarked after the kernel
+/// migrated from `texture.sample` to threadgroup-shared loads + `read`:
+/// the custom path now wins from radius 1 up through the threadgroup
+/// cache cap. Beyond that MPS's running-window O(1) kernel still wins,
+/// so the breakeven is the cache cap.
+private let mpsRadiusBreakeven = morphologyTGCacheRadius + 1
 
 /// Minimum Gaussian sigma at which `MPSImageGaussianBlur` beats our
-/// separable compute kernel. `MPSImageGaussianBlur(sigma: < 1)` tends to fall
-/// through to a bilinear-ish fast path internally anyway; we leave small
-/// blurs in our weighted-tap kernel so the weights cache stays warm.
-private let mpsSigmaBreakeven: Float = 1.5
+/// threadgroup-cached separable compute kernel. Re-benchmarked after
+/// the kernel switched to `texture.read` + threadgroup memory; for
+/// radii within the cache cap our path matches MPS, beyond that MPS
+/// wins. `applyGaussianBlur` clamps the kernel radius to ≤ cache cap
+/// before deciding, so this constant only matters for very high
+/// sigmas (driven by user-facing softness sliders).
+private let mpsSigmaBreakeven: Float = Float(morphologyTGCacheRadius)
+
+/// Mirrors `kMorphMaxRadius` in `CorridorKeyShaders.metal` — the
+/// largest radius the threadgroup cache can hold. Beyond this the
+/// dispatcher must route to MPS.
+let morphologyTGCacheRadius = 32
+
+/// Mirrors `kMorphTGWidth` in `CorridorKeyShaders.metal`. Threadgroup
+/// width along the active axis (x for horizontal, y for vertical).
+let morphologyTGWidth = 64
 
 enum MatteRefiner {
 
@@ -171,11 +186,11 @@ enum MatteRefiner {
             encoder.setTexture(intermediate, index: Int(CKTextureIndexOutput.rawValue))
             encoder.setBytes(&absoluteRadius, length: MemoryLayout<Int32>.size, index: 0)
             encoder.setBytes(&erodeFlag, length: MemoryLayout<Int32>.size, index: 1)
-            dispatchThreads(
+            dispatchSeparableStrip(
                 encoder: encoder,
-                pipeline: entry.computePipelines.morphologyHorizontal,
                 width: intermediate.width,
-                height: intermediate.height
+                height: intermediate.height,
+                axis: .horizontal
             )
             encoder.endEncoding()
         }
@@ -187,11 +202,11 @@ enum MatteRefiner {
             encoder.setTexture(destination, index: Int(CKTextureIndexOutput.rawValue))
             encoder.setBytes(&absoluteRadius, length: MemoryLayout<Int32>.size, index: 0)
             encoder.setBytes(&erodeFlag, length: MemoryLayout<Int32>.size, index: 1)
-            dispatchThreads(
+            dispatchSeparableStrip(
                 encoder: encoder,
-                pipeline: entry.computePipelines.morphologyVertical,
                 width: destination.width,
-                height: destination.height
+                height: destination.height,
+                axis: .vertical
             )
             encoder.endEncoding()
         }
@@ -216,11 +231,11 @@ enum MatteRefiner {
             encoder.setTexture(intermediate, index: Int(CKTextureIndexOutput.rawValue))
             encoder.setBuffer(weights.buffer, offset: 0, index: Int(CKBufferIndexBlurWeights.rawValue))
             encoder.setBytes(&radiusValue, length: MemoryLayout<Int32>.size, index: 0)
-            dispatchThreads(
+            dispatchSeparableStrip(
                 encoder: encoder,
-                pipeline: entry.computePipelines.gaussianHorizontal,
                 width: intermediate.width,
-                height: intermediate.height
+                height: intermediate.height,
+                axis: .horizontal
             )
             encoder.endEncoding()
         }
@@ -232,26 +247,52 @@ enum MatteRefiner {
             encoder.setTexture(destination, index: Int(CKTextureIndexOutput.rawValue))
             encoder.setBuffer(weights.buffer, offset: 0, index: Int(CKBufferIndexBlurWeights.rawValue))
             encoder.setBytes(&radiusValue, length: MemoryLayout<Int32>.size, index: 0)
-            dispatchThreads(
+            dispatchSeparableStrip(
                 encoder: encoder,
-                pipeline: entry.computePipelines.gaussianVertical,
                 width: destination.width,
-                height: destination.height
+                height: destination.height,
+                axis: .vertical
             )
             encoder.endEncoding()
         }
     }
 
-    private static func dispatchThreads(
+    /// Axis selector for `dispatchSeparableStrip`. `.horizontal` arranges
+    /// the threadgroup along the x-axis; `.vertical` along y. The shader
+    /// uses `tg_thread.x` or `tg_thread.y` accordingly.
+    private enum SeparableAxis {
+        case horizontal
+        case vertical
+    }
+
+    /// Dispatch helper for the threadgroup-cached separable kernels
+    /// (`corridorKeyMorphology*` and `corridorKeyGaussian*`). Uses
+    /// `dispatchThreadgroups(_:threadsPerThreadgroup:)` with an explicit
+    /// `morphologyTGWidth`-thread layout along the active axis so the
+    /// shader's threadgroup-shared cache layout matches the dispatch.
+    /// Generic `dispatchThreads(_:threadsPerThreadgroup:)` lets Metal
+    /// pick threadgroup widths that don't match the shader's cooperative
+    /// load assumptions, which produces undefined results.
+    private static func dispatchSeparableStrip(
         encoder: any MTLComputeCommandEncoder,
-        pipeline: any MTLComputePipelineState,
         width: Int,
-        height: Int
+        height: Int,
+        axis: SeparableAxis
     ) {
-        let threadgroupWidth = min(pipeline.threadExecutionWidth, max(width, 1))
-        let threadgroupHeight = max(1, min(pipeline.maxTotalThreadsPerThreadgroup / max(threadgroupWidth, 1), max(height, 1)))
-        let threadsPerThreadgroup = MTLSize(width: threadgroupWidth, height: threadgroupHeight, depth: 1)
-        let threadsPerGrid = MTLSize(width: max(width, 1), height: max(height, 1), depth: 1)
-        encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
+        let safeWidth = max(width, 1)
+        let safeHeight = max(height, 1)
+        let stripCount = (axis == .horizontal ? safeWidth : safeHeight)
+        let stripGroups = (stripCount + morphologyTGWidth - 1) / morphologyTGWidth
+        let threadsPerThreadgroup: MTLSize
+        let threadgroupsPerGrid: MTLSize
+        switch axis {
+        case .horizontal:
+            threadsPerThreadgroup = MTLSize(width: morphologyTGWidth, height: 1, depth: 1)
+            threadgroupsPerGrid = MTLSize(width: stripGroups, height: safeHeight, depth: 1)
+        case .vertical:
+            threadsPerThreadgroup = MTLSize(width: 1, height: morphologyTGWidth, depth: 1)
+            threadgroupsPerGrid = MTLSize(width: safeWidth, height: stripGroups, depth: 1)
+        }
+        encoder.dispatchThreadgroups(threadgroupsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
     }
 }

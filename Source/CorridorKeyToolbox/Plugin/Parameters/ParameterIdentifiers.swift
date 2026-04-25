@@ -28,6 +28,12 @@ enum ParameterIdentifier {
     static let screenColor: UInt32 = 1001
     static let qualityMode: UInt32 = 1002
 
+    /// When on, the analyser uses Vision's foreground-subject detector
+    /// to seed the MLX bridge's hint channel. Falls back to the legacy
+    /// green-bias hint when Vision finds no salient subject (rare) or
+    /// when running on a build without Vision available.
+    static let autoSubjectHintEnabled: UInt32 = 1004
+
     // Interior Detail
     static let sourcePassthrough: UInt32 = 2001
     static let passthroughErode: UInt32 = 2002
@@ -76,6 +82,13 @@ enum ParameterIdentifier {
     /// the Final Cut Pro Library so editors can move projects between
     /// machines without losing the analysed cache.
     static let analysisData: UInt32 = 7003
+
+    /// Hidden custom parameter that persists the user-placed foreground /
+    /// background hint dots from the on-screen control. Stored alongside
+    /// the analysis data inside the FCP Library so the points travel
+    /// with the project. The OSC reads/writes this; the renderer reads
+    /// it during pre-inference to overlay the dots on the upstream hint.
+    static let subjectPoints: UInt32 = 7004
 }
 
 /// Convenience wrapper that makes the raw `kFxParameterFlag_*` constants feel at

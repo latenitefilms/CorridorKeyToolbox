@@ -17,10 +17,32 @@ import Foundation
 import Metal
 import MLX
 import simd
+#if CORRIDOR_KEY_SPM_MIRROR
+import CorridorKeyToolboxLogic
+#endif
 
 /// Names of the bundled `.mlxfn` artefacts. Matches CorridorKey-Runtime's
 /// `corridorkey_mlx_bridge_{N}.mlxfn` convention so the same Hugging Face
 /// release can be used unmodified.
+///
+/// **Tiled inference** (deferred — needs upstream model export):
+/// The reference `corridorkey-mlx` Python implementation supports
+/// 512 px tiles with 64 px overlap so users on a 32 GB Mac can run
+/// effective resolutions up to 4K without exceeding RAM. To enable
+/// the same path here we'd need:
+///
+/// 1. An upstream `.mlxfn` exported at a "tile" shape (e.g. fixed
+///    512 px with shape-flexibility on the batch axis) — the current
+///    bundles are exported per-rung at fixed shape because Hiera's
+///    shape-dependent reshapes don't compile shape-flexibly.
+/// 2. A pre/post tiling helper in `MLXKeyingEngine.run` that
+///    chunks the input, runs N inferences, and Lanczos-blends the
+///    overlap. Without the upstream model this can't be tested
+///    end-to-end so it's left as a TODO.
+///
+/// Once the upstream model lands, the change is local to
+/// `MLXKeyingEngine`; nothing in the renderer assumes single-tile
+/// inference.
 enum MLXBridgeArtifact {
     static let filenameStem = "corridorkey_mlx_bridge"
 
@@ -219,8 +241,23 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         // hang around in the calling thread's outer pool — Final Cut
         // Pro's analyse loop never drains that pool, which is what
         // turned the cache into a 40+ GB sink in production.
+        let runStart = ContinuousClock.now
         try autoreleasepool {
             try runBody(request: request, output: output)
+        }
+        let elapsed = ContinuousClock.now - runStart
+        let elapsedSeconds = Double(elapsed.components.seconds)
+            + Double(elapsed.components.attoseconds) / 1e18
+        // Feed the device capability cache so subsequent `automatic`
+        // ceiling decisions reflect real measurements, not the static
+        // RAM-tier heuristic.
+        let (_, rung) = loadedState()
+        if rung > 0 {
+            DeviceCapabilityCache.shared.record(
+                deviceRegistryID: cacheEntry.device.registryID,
+                rung: rung,
+                milliseconds: elapsedSeconds * 1000
+            )
         }
     }
 

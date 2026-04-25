@@ -58,6 +58,10 @@ struct CorridorKeyHeaderView: View {
                 warmupBadge
 
                 statusLine
+
+                hintPointsBadge
+
+                renderStatsFooter
             }
         }
         .padding(.horizontal, 10)
@@ -113,7 +117,7 @@ struct CorridorKeyHeaderView: View {
             statusBadge(
                 systemImage: "hourglass",
                 tint: .blue,
-                text: "Loading \(resolutionText) — first play may stutter."
+                text: "Loading \(resolutionText) — first play may stutter (about 2–5 seconds)."
             )
         case .failed(let message):
             statusBadge(
@@ -121,6 +125,32 @@ struct CorridorKeyHeaderView: View {
                 tint: .red,
                 text: "Neural model unavailable: \(message)"
             )
+        }
+    }
+
+    @ViewBuilder
+    private var renderStatsFooter: some View {
+        if let milliseconds = bridge.snapshot.lastRenderMilliseconds, milliseconds > 0 {
+            statusBadge(
+                systemImage: "speedometer",
+                tint: .secondary,
+                text: "Last frame: \(milliseconds, format: .number.precision(.fractionLength(1))) ms"
+            )
+        } else {
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var hintPointsBadge: some View {
+        if bridge.snapshot.hintPointCount > 0 {
+            statusBadge(
+                systemImage: "circle.dotted",
+                tint: .blue,
+                text: "\(bridge.snapshot.hintPointCount) subject point\(bridge.snapshot.hintPointCount == 1 ? "" : "s") guiding the keyer."
+            )
+        } else {
+            EmptyView()
         }
     }
 

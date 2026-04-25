@@ -68,7 +68,15 @@ final class CorridorKeyToolboxPlugIn: NSObject, FxTileableEffect, FxAnalyzer {
     private static func kickOffDefaultWarmup() {
         guard let device = MTLCreateSystemDefaultDevice() else { return }
         guard let entry = try? MetalDeviceCache.shared.entry(for: device) else { return }
-        let defaultRung = QualityMode.automatic.resolvedInferenceResolution(forLongEdge: 1920)
+        // Consult the per-device capability cache so the eager warm-up
+        // matches the rung this device will actually use at render time —
+        // otherwise we warm 1024 only to discover the cache has lifted us
+        // to 1536, then pay a second warm-up the moment the user clicks
+        // Analyse Clip.
+        let defaultRung = QualityMode.automatic.resolvedInferenceResolution(
+            forLongEdge: 1920,
+            deviceRegistryID: device.registryID
+        )
         SharedMLXBridgeRegistry.shared.beginWarmup(
             deviceRegistryID: device.registryID,
             rung: defaultRung,

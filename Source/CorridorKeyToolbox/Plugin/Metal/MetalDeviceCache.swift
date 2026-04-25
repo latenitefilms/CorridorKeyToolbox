@@ -71,6 +71,8 @@ final class CorridorKeyComputePipelines: Sendable {
     let matteRefineFused: any MTLComputePipelineState
     let foregroundPostProcess: any MTLComputePipelineState
     let temporalBlend: any MTLComputePipelineState
+    let applyHintPoints: any MTLComputePipelineState
+    let drawOSC: any MTLComputePipelineState
 
     init(device: any MTLDevice, library: any MTLLibrary) throws {
         func compute(_ name: String) throws -> any MTLComputePipelineState {
@@ -105,6 +107,8 @@ final class CorridorKeyComputePipelines: Sendable {
         matteRefineFused = try compute("corridorKeyMatteRefineKernel")
         foregroundPostProcess = try compute("corridorKeyForegroundPostProcessKernel")
         temporalBlend = try compute("corridorKeyTemporalBlendKernel")
+        applyHintPoints = try compute("corridorKeyApplyHintPointsKernel")
+        drawOSC = try compute("corridorKeyDrawOSCKernel")
     }
 }
 
@@ -179,6 +183,14 @@ final class MetalDeviceCacheEntry: @unchecked Sendable {
     }
     private let analysisReadbackLock = NSLock()
     private var analysisReadbackTextures: [AnalysisReadbackKey: any MTLTexture] = [:]
+
+    /// Lazily-created Vision hint engine. Pinned to the cache entry so the
+    /// CVMetalTextureCache and `VNGenerateForegroundInstanceMaskRequest`
+    /// stay warm across analyse frames. `nil` means we tried and failed
+    /// to create one — `visionHintEngine()` will not retry.
+    private let visionHintLock = NSLock()
+    private var visionHintEngineStorage: AnyObject?
+    private var visionHintEngineFailedToInit: Bool = false
 
     /// Signals completion of command buffers back to CPU-waiting callers
     /// without a busy-spin `waitUntilCompleted`. Every entry owns its own
@@ -557,6 +569,102 @@ final class MetalDeviceCacheEntry: @unchecked Sendable {
         analysisReadbackLock.lock()
         analysisReadbackTextures.removeAll(keepingCapacity: false)
         analysisReadbackLock.unlock()
+    }
+
+    // MARK: - Cached-alpha decode buffer
+
+    /// Per-(width, height) host-coherent MTLBuffer that the cached
+    /// matte's vImage decode writes into. Cached because the user
+    /// rotates through at most a handful of inference resolutions in a
+    /// session; allocating fresh per render-from-cache frame would
+    /// cost ~4 MB / allocation at 1024 and 67 MB at 2048, which the
+    /// autorelease pool can't reclaim fast enough during scrubbing.
+    private struct CachedAlphaBufferKey: Hashable {
+        let width: Int
+        let height: Int
+    }
+    private let cachedAlphaLock = NSLock()
+    private var cachedAlphaBuffers: [CachedAlphaBufferKey: any MTLBuffer] = [:]
+
+    func cachedAlphaBuffer(width: Int, height: Int) -> (any MTLBuffer)? {
+        let key = CachedAlphaBufferKey(width: width, height: height)
+        cachedAlphaLock.lock()
+        if let existing = cachedAlphaBuffers[key] {
+            cachedAlphaLock.unlock()
+            return existing
+        }
+        cachedAlphaLock.unlock()
+
+        let byteCount = width * height * MemoryLayout<Float>.size
+        guard let buffer = device.makeBuffer(length: byteCount, options: .storageModeShared) else {
+            return nil
+        }
+        buffer.label = "CK Cached Alpha \(width)x\(height)"
+        cachedAlphaLock.lock()
+        if let existing = cachedAlphaBuffers[key] {
+            cachedAlphaLock.unlock()
+            return existing
+        }
+        cachedAlphaBuffers[key] = buffer
+        cachedAlphaLock.unlock()
+        return buffer
+    }
+
+    // MARK: - Vision hint engine
+
+    /// Lazily creates and returns a `VisionHintEngine` for this device.
+    /// Returns `nil` on macOS < 14 or when the texture cache could not
+    /// be created. The engine is cached for the lifetime of the device
+    /// entry so per-frame analyse calls don't pay the texture-cache
+    /// setup cost. `AnyObject` storage avoids hard-linking the
+    /// availability-gated type into this file's signature.
+    func visionHintEngine() -> AnyObject? {
+        if #available(macOS 14.0, *) {
+            visionHintLock.lock()
+            if let engine = visionHintEngineStorage {
+                visionHintLock.unlock()
+                return engine
+            }
+            if visionHintEngineFailedToInit {
+                visionHintLock.unlock()
+                return nil
+            }
+            visionHintLock.unlock()
+
+            let engine: VisionHintEngine
+            do {
+                engine = try VisionHintEngine(cacheEntry: self)
+            } catch {
+                PluginLog.error("Vision hint engine init failed: \(error.localizedDescription)")
+                visionHintLock.lock()
+                visionHintEngineFailedToInit = true
+                visionHintLock.unlock()
+                return nil
+            }
+
+            visionHintLock.lock()
+            // Race: keep the first-stored engine if another thread won.
+            if let existing = visionHintEngineStorage {
+                visionHintLock.unlock()
+                return existing
+            }
+            visionHintEngineStorage = engine
+            visionHintLock.unlock()
+            return engine
+        }
+        return nil
+    }
+
+    /// Drops the Vision engine's compiled inference graph and texture
+    /// cache. Called at the end of an analyse session so long editing
+    /// sessions don't accumulate Vision state.
+    func releaseVisionHintEngine() {
+        if #available(macOS 14.0, *) {
+            visionHintLock.lock()
+            let engine = visionHintEngineStorage as? VisionHintEngine
+            visionHintLock.unlock()
+            engine?.releaseCachedResources()
+        }
     }
 
     // MARK: - Shared-event value allocation

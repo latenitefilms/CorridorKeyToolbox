@@ -416,6 +416,137 @@ struct ShaderGoldenTests {
         matte.returnManually()
     }
 
+    // MARK: - Morphology (threadgroup-cached kernels)
+
+    @Test("Custom morphology dilate (radius 2) covers a 5×5 neighbourhood")
+    func morphologyDilateRadius2() async throws {
+        let entry: MetalDeviceCacheEntry
+        do { entry = try TestHarness.makeEntry() } catch { throw XCTSkipError("\(error)") }
+
+        // 100×100 matte with a single 1.0 pixel at (50, 50). After dilate
+        // by radius 2 the result should be 1.0 in a 5×5 box around (50,50)
+        // and 0 elsewhere. Larger size than the threadgroup width (64) so
+        // we exercise multi-threadgroup boundary loads.
+        let width = 100
+        let height = 100
+        let matte = try makeOriginPulseTexture(entry: entry, width: width, height: height)
+        let intermediate = try makeScalarTexture(entry: entry, width: width, height: height, value: 0)
+        let destination = try makeScalarTexture(entry: entry, width: width, height: height, value: 0)
+
+        let commandQueue = try makeCommandQueue(entry: entry)
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            Issue.record("Could not create command buffer.")
+            return
+        }
+        try MatteRefiner.applyMorphology(
+            source: matte,
+            intermediate: intermediate,
+            destination: destination,
+            radius: 2, // positive = dilate
+            entry: entry,
+            commandBuffer: commandBuffer
+        )
+        try commitAndWait(commandBuffer)
+
+        let pixels = readScalarTexture(destination, width: width, height: height)
+        // Inside the 5×5 box around (50, 50): expect 1.0
+        for dy in -2...2 {
+            for dx in -2...2 {
+                let index = (50 + dy) * width + (50 + dx)
+                #expect(pixels[index] > 0.99,
+                        "Dilate failed at offset (\(dx),\(dy)): \(pixels[index])")
+            }
+        }
+        // Outside the box: expect 0
+        let farIndex = 10 * width + 10
+        #expect(pixels[farIndex] < 0.01, "Far pixel should still be zero: \(pixels[farIndex])")
+    }
+
+    @Test("Custom morphology erode (radius 1) shrinks a solid block")
+    func morphologyErodeRadius1() async throws {
+        let entry: MetalDeviceCacheEntry
+        do { entry = try TestHarness.makeEntry() } catch { throw XCTSkipError("\(error)") }
+
+        let width = 80
+        let height = 80
+        // Solid block from (20,20) to (60,60), zero elsewhere.
+        let matte = try makeBlockTexture(
+            entry: entry, width: width, height: height,
+            blockOriginX: 20, blockOriginY: 20, blockWidth: 40, blockHeight: 40
+        )
+        let intermediate = try makeScalarTexture(entry: entry, width: width, height: height, value: 0)
+        let destination = try makeScalarTexture(entry: entry, width: width, height: height, value: 0)
+
+        let commandQueue = try makeCommandQueue(entry: entry)
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            Issue.record("Could not create command buffer.")
+            return
+        }
+        try MatteRefiner.applyMorphology(
+            source: matte,
+            intermediate: intermediate,
+            destination: destination,
+            radius: -1, // negative = erode
+            entry: entry,
+            commandBuffer: commandBuffer
+        )
+        try commitAndWait(commandBuffer)
+
+        let pixels = readScalarTexture(destination, width: width, height: height)
+        // Erosion radius 1: block shrinks to (21,21)..(59,59).
+        // Centre of the eroded block should still be 1.0.
+        let centreIndex = 40 * width + 40
+        #expect(pixels[centreIndex] > 0.99, "Centre eroded out: \(pixels[centreIndex])")
+        // Original block edge at (20,40): should now be 0.
+        let edgeIndex = 40 * width + 20
+        #expect(pixels[edgeIndex] < 0.01, "Original edge wasn't eroded: \(pixels[edgeIndex])")
+    }
+
+    @Test("Gaussian blur with σ=1 preserves total mass")
+    func gaussianBlurPreservesMass() async throws {
+        let entry: MetalDeviceCacheEntry
+        do { entry = try TestHarness.makeEntry() } catch { throw XCTSkipError("\(error)") }
+
+        // Single-pixel impulse → after a small Gaussian, total mass should
+        // be preserved (modulo edge clamp leakage at ~0). Use a 64×64
+        // canvas with the impulse near the centre so the kernel stays
+        // entirely inside.
+        let width = 64
+        let height = 64
+        let matte = try makeOriginPulseTextureAt(
+            entry: entry, width: width, height: height, x: 32, y: 32
+        )
+        let intermediate = try makeScalarTexture(entry: entry, width: width, height: height, value: 0)
+        let destination = try makeScalarTexture(entry: entry, width: width, height: height, value: 0)
+
+        let commandQueue = try makeCommandQueue(entry: entry)
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            Issue.record("Could not create command buffer.")
+            return
+        }
+        // sigma=1 → kernel radius = 2, falls under MPS breakeven and
+        // stays on the custom path.
+        try MatteRefiner.applyGaussianBlur(
+            source: matte,
+            intermediate: intermediate,
+            destination: destination,
+            radiusPixels: 2,
+            entry: entry,
+            commandBuffer: commandBuffer
+        )
+        try commitAndWait(commandBuffer)
+
+        let pixels = readScalarTexture(destination, width: width, height: height)
+        let totalMass = pixels.reduce(0, +)
+        // Expect mass conservation within 1% (Gaussian weights normalise to
+        // 1 by construction).
+        #expect(abs(totalMass - 1.0) < 0.01, "Mass not preserved: total=\(totalMass)")
+        // Centre tap should have the largest weight.
+        let centre = pixels[32 * width + 32]
+        let neighbour = pixels[32 * width + 33]
+        #expect(centre > neighbour, "Centre weight not largest: centre=\(centre), neighbour=\(neighbour)")
+    }
+
     // MARK: - Helpers
 
     private func makeColourTexture(
@@ -509,6 +640,118 @@ struct ShaderGoldenTests {
         }
         queue.label = "CorridorKey Test"
         return queue
+    }
+
+    /// Builds an `r32Float` texture full of zeros with a single 1.0 pixel
+    /// at the centre. Used as the impulse input for morphology + blur
+    /// golden tests so the expected output is trivially analytically
+    /// derivable.
+    private func makeOriginPulseTexture(
+        entry: MetalDeviceCacheEntry,
+        width: Int,
+        height: Int
+    ) throws -> any MTLTexture {
+        return try makeOriginPulseTextureAt(
+            entry: entry,
+            width: width,
+            height: height,
+            x: width / 2,
+            y: height / 2
+        )
+    }
+
+    private func makeOriginPulseTextureAt(
+        entry: MetalDeviceCacheEntry,
+        width: Int,
+        height: Int,
+        x: Int,
+        y: Int
+    ) throws -> any MTLTexture {
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .r32Float,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        descriptor.usage = [.shaderRead, .shaderWrite]
+        descriptor.storageMode = .shared
+        guard let texture = entry.device.makeTexture(descriptor: descriptor) else {
+            throw MetalUnavailable(reason: "Could not allocate impulse texture.")
+        }
+        var pixels = [Float](repeating: 0, count: width * height)
+        pixels[y * width + x] = 1.0
+        pixels.withUnsafeBufferPointer { pointer in
+            if let base = pointer.baseAddress {
+                texture.replace(
+                    region: MTLRegionMake2D(0, 0, width, height),
+                    mipmapLevel: 0,
+                    withBytes: base,
+                    bytesPerRow: width * MemoryLayout<Float>.size
+                )
+            }
+        }
+        return texture
+    }
+
+    /// Builds an `r32Float` texture with a solid 1.0 block in the
+    /// specified rectangle and 0.0 elsewhere.
+    private func makeBlockTexture(
+        entry: MetalDeviceCacheEntry,
+        width: Int,
+        height: Int,
+        blockOriginX: Int,
+        blockOriginY: Int,
+        blockWidth: Int,
+        blockHeight: Int
+    ) throws -> any MTLTexture {
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .r32Float,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        descriptor.usage = [.shaderRead, .shaderWrite]
+        descriptor.storageMode = .shared
+        guard let texture = entry.device.makeTexture(descriptor: descriptor) else {
+            throw MetalUnavailable(reason: "Could not allocate block texture.")
+        }
+        var pixels = [Float](repeating: 0, count: width * height)
+        for y in blockOriginY..<min(blockOriginY + blockHeight, height) {
+            for x in blockOriginX..<min(blockOriginX + blockWidth, width) {
+                pixels[y * width + x] = 1.0
+            }
+        }
+        pixels.withUnsafeBufferPointer { pointer in
+            if let base = pointer.baseAddress {
+                texture.replace(
+                    region: MTLRegionMake2D(0, 0, width, height),
+                    mipmapLevel: 0,
+                    withBytes: base,
+                    bytesPerRow: width * MemoryLayout<Float>.size
+                )
+            }
+        }
+        return texture
+    }
+
+    /// Reads back an `r32Float` texture into a Swift `[Float]`.
+    private func readScalarTexture(
+        _ texture: any MTLTexture,
+        width: Int,
+        height: Int
+    ) -> [Float] {
+        var pixels = [Float](repeating: 0, count: width * height)
+        pixels.withUnsafeMutableBufferPointer { pointer in
+            if let base = pointer.baseAddress {
+                texture.getBytes(
+                    base,
+                    bytesPerRow: width * MemoryLayout<Float>.size,
+                    from: MTLRegionMake2D(0, 0, width, height),
+                    mipmapLevel: 0
+                )
+            }
+        }
+        return pixels
     }
 
     private func commitAndWait(_ commandBuffer: any MTLCommandBuffer) throws {

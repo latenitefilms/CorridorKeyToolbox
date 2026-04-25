@@ -133,6 +133,63 @@ enum RenderStages {
         return output
     }
 
+    // MARK: - Hint-point overlay
+
+    /// In-place applies user-placed hint points (foreground / background
+    /// dots from the on-screen control) on top of an existing hint
+    /// texture. The texture must be created with `.shaderRead | .shaderWrite`
+    /// usage because the kernel reads-modifies-writes each pixel. Skipped
+    /// entirely when `points` is empty so a render with no OSC dots
+    /// pays zero cost.
+    static func applyHintPoints(
+        hint: any MTLTexture,
+        points: [HintPoint],
+        entry: MetalDeviceCacheEntry,
+        commandBuffer: any MTLCommandBuffer
+    ) throws {
+        guard !points.isEmpty else { return }
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            throw MetalDeviceCacheError.commandEncoderCreationFailed
+        }
+        encoder.label = "Corridor Key Toolbox Hint Points"
+        encoder.setComputePipelineState(entry.computePipelines.applyHintPoints)
+        encoder.setTexture(hint, index: Int(CKTextureIndexOutput.rawValue))
+
+        // Pack the points into a contiguous SIMD-friendly byte buffer.
+        // 16 bytes per point (4 × float32) is small enough to inline as
+        // setBytes — typical sessions will have <50 points so we never
+        // exceed the 4 KB inline limit.
+        struct PackedPoint {
+            var x: Float32
+            var y: Float32
+            var radius: Float32
+            var kind: Int32
+        }
+        var packed: [PackedPoint] = points.map {
+            PackedPoint(
+                x: Float($0.x),
+                y: Float($0.y),
+                radius: Float($0.radiusNormalized),
+                kind: Int32($0.kind.rawValue)
+            )
+        }
+        var pointCount: Int32 = Int32(packed.count)
+        packed.withUnsafeMutableBytes { rawBytes in
+            if let base = rawBytes.baseAddress {
+                encoder.setBytes(base, length: rawBytes.count, index: 0)
+            }
+        }
+        encoder.setBytes(&pointCount, length: MemoryLayout<Int32>.size, index: 1)
+
+        dispatch(
+            encoder: encoder,
+            pipeline: entry.computePipelines.applyHintPoints,
+            width: hint.width,
+            height: hint.height
+        )
+        encoder.endEncoding()
+    }
+
     // MARK: - Combine + normalise (pre-inference)
 
     /// Production variant: downsamples source + hint to

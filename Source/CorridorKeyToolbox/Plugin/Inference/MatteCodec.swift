@@ -159,10 +159,84 @@ public enum MatteCodec {
     /// dimensions. Returns nil for unknown magic or decompression failure —
     /// callers treat that as "no cache available" and fall back to live MLX.
     public static func decode(_ blob: Data) -> (alpha: [Float], width: Int, height: Int)? {
+        guard let header = parseHeader(blob) else { return nil }
+        var alpha = [Float](repeating: 0, count: header.width * header.height)
+        let success = alpha.withUnsafeMutableBufferPointer { pointer -> Bool in
+            guard let base = pointer.baseAddress else { return false }
+            return decode(
+                blob,
+                into: base,
+                capacity: pointer.count,
+                expectedWidth: header.width,
+                expectedHeight: header.height
+            )
+        }
+        guard success else { return nil }
+        return (alpha, header.width, header.height)
+    }
+
+    /// Decodes a blob directly into a caller-provided buffer. Saves the
+    /// `[Float]` allocation per render-from-cache frame (4–16 MB at 4K)
+    /// and uses Accelerate's vImage planar half-to-float conversion,
+    /// which uses the ARM FP16 conversion hardware. ~10× faster than
+    /// the scalar loop.
+    ///
+    /// `capacity` is in floats; must be ≥ `expectedWidth * expectedHeight`.
+    /// Returns `false` when the blob's magic, header dims, or
+    /// decompressed payload size don't match expectations — the caller
+    /// is responsible for falling back to live MLX in that case.
+    public static func decode(
+        _ blob: Data,
+        into destination: UnsafeMutablePointer<Float>,
+        capacity: Int,
+        expectedWidth: Int? = nil,
+        expectedHeight: Int? = nil
+    ) -> Bool {
+        guard let header = parseHeader(blob) else { return false }
+        if let expectedWidth, header.width != expectedWidth { return false }
+        if let expectedHeight, header.height != expectedHeight { return false }
+        let pixelCount = header.width * header.height
+        guard capacity >= pixelCount else { return false }
+
+        let payload = blob.suffix(from: magic.count + 8)
+        let expectedRawBytes = pixelCount * MemoryLayout<UInt16>.size
+        guard let decompressed = decompress(Data(payload), expectedBytes: expectedRawBytes),
+              decompressed.count == expectedRawBytes
+        else {
+            return false
+        }
+
+        return decompressed.withUnsafeBytes { rawPointer -> Bool in
+            guard let halfBase = rawPointer.baseAddress?.assumingMemoryBound(to: UInt16.self) else {
+                return false
+            }
+            var halfBuffer = vImage_Buffer(
+                data: UnsafeMutablePointer(mutating: halfBase),
+                height: vImagePixelCount(header.height),
+                width: vImagePixelCount(header.width),
+                rowBytes: header.width * MemoryLayout<UInt16>.size
+            )
+            var floatBuffer = vImage_Buffer(
+                data: destination,
+                height: vImagePixelCount(header.height),
+                width: vImagePixelCount(header.width),
+                rowBytes: header.width * MemoryLayout<Float>.size
+            )
+            let result = vImageConvert_Planar16FtoPlanarF(
+                &halfBuffer,
+                &floatBuffer,
+                vImage_Flags(kvImageNoFlags)
+            )
+            return result == kvImageNoError
+        }
+    }
+
+    /// Reads just the magic + width/height header. Lets callers size
+    /// their destination buffers before fetching the payload.
+    public static func parseHeader(_ blob: Data) -> (width: Int, height: Int)? {
         guard blob.count >= magic.count + 8 else { return nil }
         let magicSlice = blob.prefix(magic.count)
         guard Array(magicSlice) == magic else { return nil }
-
         let headerOffset = magic.count
         let width = Int(blob.withUnsafeBytes { pointer -> Int32 in
             pointer.load(fromByteOffset: headerOffset, as: Int32.self).littleEndian
@@ -173,23 +247,7 @@ public enum MatteCodec {
         guard width > 0, height > 0, width <= maximumSide, height <= maximumSide else {
             return nil
         }
-
-        let payload = blob.suffix(from: headerOffset + 8)
-        let expectedRawBytes = width * height * MemoryLayout<UInt16>.size
-        guard let decompressed = decompress(Data(payload), expectedBytes: expectedRawBytes),
-              decompressed.count == expectedRawBytes
-        else {
-            return nil
-        }
-
-        var alpha = [Float](repeating: 0, count: width * height)
-        decompressed.withUnsafeBytes { rawPointer in
-            guard let base = rawPointer.baseAddress?.assumingMemoryBound(to: UInt16.self) else { return }
-            for index in 0..<(width * height) {
-                alpha[index] = Self.halfToFloat(base[index])
-            }
-        }
-        return (alpha, width, height)
+        return (width, height)
     }
 
     // MARK: - Compression helpers

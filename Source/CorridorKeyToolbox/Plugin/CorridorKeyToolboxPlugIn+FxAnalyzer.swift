@@ -197,7 +197,20 @@ extension CorridorKeyToolboxPlugIn {
         // for 1024px which is the practical sweet spot between storage cost
         // and edge fidelity; the user can still pick Ultra/Maximum manually.
         let longEdge = Int(1920)
-        let inferenceResolution = qualityMode.resolvedInferenceResolution(forLongEdge: longEdge)
+        // Setup uses the system default device's recorded capability so
+        // the analyse pass picks the same rung the render path will
+        // pick. Hosts that route to a different device per frame fall
+        // through to the static ceiling.
+        let setupDeviceID = MTLCreateSystemDefaultDevice()?.registryID
+        let inferenceResolution: Int
+        if let setupDeviceID {
+            inferenceResolution = qualityMode.resolvedInferenceResolution(
+                forLongEdge: longEdge,
+                deviceRegistryID: setupDeviceID
+            )
+        } else {
+            inferenceResolution = qualityMode.resolvedInferenceResolution(forLongEdge: longEdge)
+        }
 
         // Temporal stability settings are also snapshotted at setup so the
         // per-frame analyser doesn't hit the parameter retrieval API from a
@@ -437,6 +450,7 @@ extension CorridorKeyToolboxPlugIn {
         for device in MTLCopyAllDevices() {
             if let entry = try? MetalDeviceCache.shared.entry(for: device) {
                 entry.clearAnalysisReadbackTextures()
+                entry.releaseVisionHintEngine()
             }
         }
         // Drop MLX's per-process buffer cache. During an analysis pass

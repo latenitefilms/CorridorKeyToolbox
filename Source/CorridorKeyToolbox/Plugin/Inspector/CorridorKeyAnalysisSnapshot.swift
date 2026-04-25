@@ -28,6 +28,18 @@ struct CorridorKeyAnalysisSnapshot: Equatable, Sendable {
     /// per-frame wall-time tracker.
     let analysisETASeconds: Double?
 
+    /// Last observed render-frame wall time, in milliseconds. The
+    /// inspector surfaces this in a footer line so users can tune the
+    /// Quality dropdown without guessing — they see exactly how
+    /// expensive the current rung is on their hardware.
+    let lastRenderMilliseconds: Double?
+
+    /// `true` when the user has placed at least one foreground or
+    /// background hint dot via the on-screen control. The inspector
+    /// header surfaces this so the user knows their dots are
+    /// affecting the analysis.
+    let hintPointCount: Int
+
     /// Default-valued init so the legacy call sites (snapshot logic tests)
     /// keep compiling. `warmup` defaults to `.cold` and `analysisETASeconds`
     /// to `nil`, which matches the pre-v1.0 behaviour before this file
@@ -38,7 +50,9 @@ struct CorridorKeyAnalysisSnapshot: Equatable, Sendable {
         totalFrameCount: Int,
         inferenceResolution: Int,
         warmup: WarmupStatus = .cold,
-        analysisETASeconds: Double? = nil
+        analysisETASeconds: Double? = nil,
+        lastRenderMilliseconds: Double? = nil,
+        hintPointCount: Int = 0
     ) {
         self.state = state
         self.analyzedFrameCount = analyzedFrameCount
@@ -46,6 +60,8 @@ struct CorridorKeyAnalysisSnapshot: Equatable, Sendable {
         self.inferenceResolution = inferenceResolution
         self.warmup = warmup
         self.analysisETASeconds = analysisETASeconds
+        self.lastRenderMilliseconds = lastRenderMilliseconds
+        self.hintPointCount = hintPointCount
     }
 
     static let empty = CorridorKeyAnalysisSnapshot(
@@ -54,7 +70,9 @@ struct CorridorKeyAnalysisSnapshot: Equatable, Sendable {
         totalFrameCount: 0,
         inferenceResolution: 0,
         warmup: .cold,
-        analysisETASeconds: nil
+        analysisETASeconds: nil,
+        lastRenderMilliseconds: nil,
+        hintPointCount: 0
     )
 
     /// Progress fraction in the range `0…1`. Returns `0` when no frames are

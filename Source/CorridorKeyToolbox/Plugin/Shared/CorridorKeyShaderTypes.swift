@@ -89,11 +89,13 @@ enum CorridorKeySpillMethod: Int32 {
     case CKSpillMethodAverage = 0
     case CKSpillMethodDoubleLimit = 1
     case CKSpillMethodNeutral = 2
+    case CKSpillMethodScreenSubtract = 3
 }
 
 let CKSpillMethodAverage = CorridorKeySpillMethod.CKSpillMethodAverage
 let CKSpillMethodDoubleLimit = CorridorKeySpillMethod.CKSpillMethodDoubleLimit
 let CKSpillMethodNeutral = CorridorKeySpillMethod.CKSpillMethodNeutral
+let CKSpillMethodScreenSubtract = CorridorKeySpillMethod.CKSpillMethodScreenSubtract
 
 enum CorridorKeyOutputMode: Int32 {
     case CKOutputModeProcessed = 0

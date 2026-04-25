@@ -48,6 +48,11 @@ public enum QualityMode: Int, Sendable, CaseIterable, Codable {
         return 1024
     }
 
+    /// Full ladder of available rungs, in ascending order. Used by the
+    /// device capability cache to walk upward from the static ceiling
+    /// when looking for an empirically-faster rung.
+    public static let inferenceLadder: [Int] = [512, 768, 1024, 1536, 2048]
+
     /// Returns the inference resolution that should be used for a given input
     /// frame long-edge. Mirrors the automatic rung mapping used by the OFX
     /// plugin so that behaviour matches across hosts. The `.automatic` path
@@ -61,12 +66,46 @@ public enum QualityMode: Int, Sendable, CaseIterable, Codable {
         )
     }
 
+    /// Returns the inference resolution including any device-capability
+    /// upgrade observed by `DeviceCapabilityCache`. On a fast Mac that
+    /// has previously run inference at a rung above the static RAM
+    /// ceiling under the real-time budget, the `automatic` path lifts
+    /// to that rung instead of the conservative default.
+    public func resolvedInferenceResolution(
+        forLongEdge longEdgePixels: Int,
+        deviceRegistryID: UInt64
+    ) -> Int {
+        resolvedInferenceResolution(
+            forLongEdge: longEdgePixels,
+            physicalMemoryBytes: ProcessInfo.processInfo.physicalMemory,
+            deviceRegistryID: deviceRegistryID,
+            cache: DeviceCapabilityCache.shared
+        )
+    }
+
     /// Test seam. Production callers use `resolvedInferenceResolution(forLongEdge:)`
     /// which reads `ProcessInfo.processInfo.physicalMemory`; tests pass an
     /// explicit value so the mapping is deterministic across machines.
     public func resolvedInferenceResolution(
         forLongEdge longEdgePixels: Int,
         physicalMemoryBytes: UInt64
+    ) -> Int {
+        resolvedInferenceResolution(
+            forLongEdge: longEdgePixels,
+            physicalMemoryBytes: physicalMemoryBytes,
+            deviceRegistryID: nil,
+            cache: nil
+        )
+    }
+
+    /// Full-resolution implementation. The cache lift only applies to
+    /// `.automatic`; explicit rungs always honour the user's choice
+    /// (those skip the RAM ceiling too).
+    public func resolvedInferenceResolution(
+        forLongEdge longEdgePixels: Int,
+        physicalMemoryBytes: UInt64,
+        deviceRegistryID: UInt64?,
+        cache: DeviceCapabilityCache?
     ) -> Int {
         switch self {
         case .automatic:
@@ -77,7 +116,18 @@ public enum QualityMode: Int, Sendable, CaseIterable, Codable {
             case 2001...3000: preferred = 1536
             default: preferred = 2048
             }
-            return min(preferred, Self.automaticInferenceCeiling(physicalMemoryBytes: physicalMemoryBytes))
+            let staticCeiling = Self.automaticInferenceCeiling(physicalMemoryBytes: physicalMemoryBytes)
+            let liftedCeiling: Int
+            if let cache, let deviceRegistryID {
+                liftedCeiling = cache.recommendedCeiling(
+                    deviceRegistryID: deviceRegistryID,
+                    staticCeiling: staticCeiling,
+                    ladder: Self.inferenceLadder
+                )
+            } else {
+                liftedCeiling = staticCeiling
+            }
+            return min(preferred, liftedCeiling)
         case .draft512: return 512
         case .high1024: return 1024
         case .ultra1536: return 1536
@@ -102,6 +152,7 @@ public enum SpillMethod: Int, Sendable, CaseIterable, Codable {
     case average = 0
     case doubleLimit = 1
     case neutral = 2
+    case screenSubtract = 3
 
     public var shaderValue: Int32 { Int32(rawValue) }
 
@@ -110,6 +161,7 @@ public enum SpillMethod: Int, Sendable, CaseIterable, Codable {
         case .average: return "Average"
         case .doubleLimit: return "Double Limit"
         case .neutral: return "Neutral"
+        case .screenSubtract: return "Screen Subtract"
         }
     }
 }

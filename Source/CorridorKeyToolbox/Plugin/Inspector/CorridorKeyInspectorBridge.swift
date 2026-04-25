@@ -83,14 +83,32 @@ final class CorridorKeyInspectorBridge: ObservableObject {
         let (analysed, total, resolution) = currentAnalysisCounts(for: state)
         let warmup = plugin?.renderPipeline.inferenceCoordinator.warmupStatus ?? .cold
         let eta = updatedETA(forState: state, analysed: analysed, total: total)
+        let lastRender = plugin?.lastFrameMilliseconds.read()
+        let lastRenderForFooter: Double? = (lastRender ?? 0) > 0 ? lastRender : nil
+        let hintCount = currentHintPointCount()
         return CorridorKeyAnalysisSnapshot(
             state: state,
             analyzedFrameCount: analysed,
             totalFrameCount: total,
             inferenceResolution: resolution,
             warmup: warmup,
-            analysisETASeconds: eta
+            analysisETASeconds: eta,
+            lastRenderMilliseconds: lastRenderForFooter,
+            hintPointCount: hintCount
         )
+    }
+
+    private func currentHintPointCount() -> Int {
+        guard let retrieval = apiManager.api(for: (any FxParameterRetrievalAPI_v6).self) as? any FxParameterRetrievalAPI_v6 else {
+            return 0
+        }
+        var raw: (any NSCopying & NSObjectProtocol & NSSecureCoding)?
+        retrieval.getCustomParameterValue(
+            &raw,
+            fromParameter: ParameterIdentifier.subjectPoints,
+            at: CMTime.zero
+        )
+        return HintPointSet.fromParameterDictionary(raw as? NSDictionary).points.count
     }
 
     /// Updates the rolling per-frame timer and returns the ETA seconds for

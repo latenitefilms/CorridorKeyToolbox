@@ -18,6 +18,11 @@ struct PluginStateData: Codable, Sendable {
     var screenColor: ScreenColor
     var qualityMode: QualityMode
 
+    /// When on, the analyser feeds the MLX bridge a Vision-derived
+    /// foreground-subject mask as the 4th input channel. Falls back to
+    /// the green-bias hint when Vision finds no salient subject.
+    var autoSubjectHintEnabled: Bool
+
     // Interior detail
     var sourcePassthroughEnabled: Bool
     var passthroughErodeNormalized: Double
@@ -75,9 +80,16 @@ struct PluginStateData: Codable, Sendable {
     /// matches the quality mode the user is currently requesting.
     var cachedMatteInferenceResolution: Int
 
+    /// User-placed foreground / background hint dots from the on-screen
+    /// control. Empty by default; populated when the user clicks on the
+    /// canvas with the OSC active. Rasterised on top of the upstream
+    /// hint (Vision or green-bias) before inference.
+    var hintPointSet: HintPointSet
+
     init(
         screenColor: ScreenColor = .green,
         qualityMode: QualityMode = .automatic,
+        autoSubjectHintEnabled: Bool = true,
         sourcePassthroughEnabled: Bool = true,
         passthroughErodeNormalized: Double = 3.0,
         passthroughBlurNormalized: Double = 7.0,
@@ -86,28 +98,30 @@ struct PluginStateData: Codable, Sendable {
         alphaErodeNormalized: Double = 0.0,
         alphaSoftnessNormalized: Double = 0.0,
         alphaGamma: Double = 1.0,
-        autoDespeckleEnabled: Bool = false,
+        autoDespeckleEnabled: Bool = true,
         despeckleSize: Int = 100,
         refinerStrength: Double = 1.0,
-        despillStrength: Double = 0.5,
-        spillMethod: SpillMethod = .average,
+        despillStrength: Double = 1.0,
+        spillMethod: SpillMethod = .screenSubtract,
         lightWrapEnabled: Bool = false,
         lightWrapStrength: Double = 0.25,
         lightWrapRadius: Double = 10.0,
         edgeDecontaminateEnabled: Bool = false,
         edgeDecontaminateStrength: Double = 0.5,
-        temporalStabilityEnabled: Bool = false,
-        temporalStabilityStrength: Double = 0.5,
+        temporalStabilityEnabled: Bool = true,
+        temporalStabilityStrength: Double = 0.35,
         outputMode: OutputMode = .processed,
         upscaleMethod: UpscaleMethod = .lanczos,
         renderQualityLevel: Int = 2,
         longEdgeBaseline: Double = 1920.0,
         destinationLongEdgePixels: Int = 1920,
         cachedMatteBlob: Data? = nil,
-        cachedMatteInferenceResolution: Int = 0
+        cachedMatteInferenceResolution: Int = 0,
+        hintPointSet: HintPointSet = HintPointSet()
     ) {
         self.screenColor = screenColor
         self.qualityMode = qualityMode
+        self.autoSubjectHintEnabled = autoSubjectHintEnabled
         self.sourcePassthroughEnabled = sourcePassthroughEnabled
         self.passthroughErodeNormalized = passthroughErodeNormalized
         self.passthroughBlurNormalized = passthroughBlurNormalized
@@ -135,6 +149,7 @@ struct PluginStateData: Codable, Sendable {
         self.destinationLongEdgePixels = destinationLongEdgePixels
         self.cachedMatteBlob = cachedMatteBlob
         self.cachedMatteInferenceResolution = cachedMatteInferenceResolution
+        self.hintPointSet = hintPointSet
     }
 
     // MARK: - Codable
@@ -145,6 +160,7 @@ struct PluginStateData: Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case screenColor
         case qualityMode
+        case autoSubjectHintEnabled
         case sourcePassthroughEnabled
         case passthroughErodeNormalized
         case passthroughBlurNormalized
@@ -172,12 +188,14 @@ struct PluginStateData: Codable, Sendable {
         case destinationLongEdgePixels
         case cachedMatteBlob
         case cachedMatteInferenceResolution
+        case hintPointSet
     }
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.screenColor = try container.decodeIfPresent(ScreenColor.self, forKey: .screenColor) ?? .green
         self.qualityMode = try container.decodeIfPresent(QualityMode.self, forKey: .qualityMode) ?? .automatic
+        self.autoSubjectHintEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoSubjectHintEnabled) ?? true
         self.sourcePassthroughEnabled = try container.decodeIfPresent(Bool.self, forKey: .sourcePassthroughEnabled) ?? true
         self.passthroughErodeNormalized = try container.decodeIfPresent(Double.self, forKey: .passthroughErodeNormalized) ?? 3.0
         self.passthroughBlurNormalized = try container.decodeIfPresent(Double.self, forKey: .passthroughBlurNormalized) ?? 7.0
@@ -186,18 +204,18 @@ struct PluginStateData: Codable, Sendable {
         self.alphaErodeNormalized = try container.decodeIfPresent(Double.self, forKey: .alphaErodeNormalized) ?? 0.0
         self.alphaSoftnessNormalized = try container.decodeIfPresent(Double.self, forKey: .alphaSoftnessNormalized) ?? 0.0
         self.alphaGamma = try container.decodeIfPresent(Double.self, forKey: .alphaGamma) ?? 1.0
-        self.autoDespeckleEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoDespeckleEnabled) ?? false
+        self.autoDespeckleEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoDespeckleEnabled) ?? true
         self.despeckleSize = try container.decodeIfPresent(Int.self, forKey: .despeckleSize) ?? 100
         self.refinerStrength = try container.decodeIfPresent(Double.self, forKey: .refinerStrength) ?? 1.0
-        self.despillStrength = try container.decodeIfPresent(Double.self, forKey: .despillStrength) ?? 0.5
-        self.spillMethod = try container.decodeIfPresent(SpillMethod.self, forKey: .spillMethod) ?? .average
+        self.despillStrength = try container.decodeIfPresent(Double.self, forKey: .despillStrength) ?? 1.0
+        self.spillMethod = try container.decodeIfPresent(SpillMethod.self, forKey: .spillMethod) ?? .screenSubtract
         self.lightWrapEnabled = try container.decodeIfPresent(Bool.self, forKey: .lightWrapEnabled) ?? false
         self.lightWrapStrength = try container.decodeIfPresent(Double.self, forKey: .lightWrapStrength) ?? 0.25
         self.lightWrapRadius = try container.decodeIfPresent(Double.self, forKey: .lightWrapRadius) ?? 10.0
         self.edgeDecontaminateEnabled = try container.decodeIfPresent(Bool.self, forKey: .edgeDecontaminateEnabled) ?? false
         self.edgeDecontaminateStrength = try container.decodeIfPresent(Double.self, forKey: .edgeDecontaminateStrength) ?? 0.5
-        self.temporalStabilityEnabled = try container.decodeIfPresent(Bool.self, forKey: .temporalStabilityEnabled) ?? false
-        self.temporalStabilityStrength = try container.decodeIfPresent(Double.self, forKey: .temporalStabilityStrength) ?? 0.5
+        self.temporalStabilityEnabled = try container.decodeIfPresent(Bool.self, forKey: .temporalStabilityEnabled) ?? true
+        self.temporalStabilityStrength = try container.decodeIfPresent(Double.self, forKey: .temporalStabilityStrength) ?? 0.35
         self.outputMode = try container.decodeIfPresent(OutputMode.self, forKey: .outputMode) ?? .processed
         self.upscaleMethod = try container.decodeIfPresent(UpscaleMethod.self, forKey: .upscaleMethod) ?? .lanczos
         self.renderQualityLevel = try container.decodeIfPresent(Int.self, forKey: .renderQualityLevel) ?? 2
@@ -205,6 +223,7 @@ struct PluginStateData: Codable, Sendable {
         self.destinationLongEdgePixels = try container.decodeIfPresent(Int.self, forKey: .destinationLongEdgePixels) ?? 1920
         self.cachedMatteBlob = try container.decodeIfPresent(Data.self, forKey: .cachedMatteBlob)
         self.cachedMatteInferenceResolution = try container.decodeIfPresent(Int.self, forKey: .cachedMatteInferenceResolution) ?? 0
+        self.hintPointSet = try container.decodeIfPresent(HintPointSet.self, forKey: .hintPointSet) ?? HintPointSet()
     }
 
     /// Encodes the snapshot for hand-off to the FxPlug host. Binary plist is

@@ -78,9 +78,11 @@ let package = Package(
                 "Inference/KeyingInferenceEngine.swift",
                 "Inference/MLXKeyingEngine.swift",
                 "Inference/SharedMLXBridgeRegistry.swift",
+                "Inference/VisionHintEngine.swift",
                 "Inspector/CorridorKeyToolboxPlugIn+CustomViews.swift",
                 "Inspector/CorridorKeyInspectorBridge.swift",
                 "Inspector/CorridorKeyHeaderView.swift",
+                "Inspector/CorridorKeyHintOSC.swift",
                 "Render",
                 "Metal",
                 "Resources",
@@ -93,8 +95,10 @@ let package = Package(
                 "PostProcess/ColorGamutMatrix.swift",
                 "PostProcess/TemporalBlender.swift",
                 "Inference/AnalysisData.swift",
+                "Inference/DeviceCapabilityCache.swift",
                 "Inference/MatteCodec.swift",
                 "Inspector/CorridorKeyAnalysisSnapshot.swift",
+                "Inspector/HintPointSet.swift",
                 "Inspector/WarmupStatus.swift"
             ],
             swiftSettings: [
@@ -134,6 +138,7 @@ let package = Package(
                 "Render/RenderPipeline.swift",
                 "Shared/CorridorKeyToolbox-Bridging-Header.h",
                 "Inference/AnalysisData.swift",
+                "Inference/DeviceCapabilityCache.swift",
                 "Inference/MatteCodec.swift"
             ],
             sources: [
@@ -147,7 +152,8 @@ let package = Package(
                 "Inference/KeyingInferenceEngine.swift",
                 "Inference/MLXKeyingEngine.swift",
                 "Inference/InferenceCoordinator.swift",
-                "Inference/SharedMLXBridgeRegistry.swift"
+                "Inference/SharedMLXBridgeRegistry.swift",
+                "Inference/VisionHintEngine.swift"
             ],
             resources: [
                 .copy("Metal/CorridorKeyShaders.metal"),

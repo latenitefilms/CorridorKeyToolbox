@@ -64,6 +64,10 @@
 		MX0200000000000000000002 /* MLXKeyingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = MX0100000000000000000003 /* MLXKeyingEngine.swift */; };
 		MX0500000000000000000001 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = MX0400000000000000000001 /* MLX */; };
 		MX0500000000000000000002 /* MLXNN in Frameworks */ = {isa = PBXBuildFile; productRef = MX0400000000000000000002 /* MLXNN */; };
+		VH0100000000000000000001 /* VisionHintEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = VH0200000000000000000001 /* VisionHintEngine.swift */; };
+		DC0100000000000000000001 /* DeviceCapabilityCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0200000000000000000001 /* DeviceCapabilityCache.swift */; };
+		HP0100000000000000000001 /* HintPointSet.swift in Sources */ = {isa = PBXBuildFile; fileRef = HP0200000000000000000001 /* HintPointSet.swift */; };
+		OS0100000000000000000001 /* CorridorKeyHintOSC.swift in Sources */ = {isa = PBXBuildFile; fileRef = OS0200000000000000000001 /* CorridorKeyHintOSC.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -165,6 +169,10 @@
 		CK0400000000000000000008 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
 		CK0400000000000000000009 /* PluginManager.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PluginManager.framework; path = /Library/Developer/Frameworks/PluginManager.framework; sourceTree = "<absolute>"; };
 		MX0100000000000000000003 /* MLXKeyingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MLXKeyingEngine.swift; path = CorridorKeyToolbox/Plugin/Inference/MLXKeyingEngine.swift; sourceTree = "<group>"; };
+		VH0200000000000000000001 /* VisionHintEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VisionHintEngine.swift; path = CorridorKeyToolbox/Plugin/Inference/VisionHintEngine.swift; sourceTree = "<group>"; };
+		DC0200000000000000000001 /* DeviceCapabilityCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DeviceCapabilityCache.swift; path = CorridorKeyToolbox/Plugin/Inference/DeviceCapabilityCache.swift; sourceTree = "<group>"; };
+		HP0200000000000000000001 /* HintPointSet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = HintPointSet.swift; path = CorridorKeyToolbox/Plugin/Inspector/HintPointSet.swift; sourceTree = "<group>"; };
+		OS0200000000000000000001 /* CorridorKeyHintOSC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyHintOSC.swift; path = CorridorKeyToolbox/Plugin/Inspector/CorridorKeyHintOSC.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -317,10 +325,12 @@
 			children = (
 				CK020000000000000000000F /* KeyingInferenceEngine.swift */,
 				MX0100000000000000000003 /* MLXKeyingEngine.swift */,
+				VH0200000000000000000001 /* VisionHintEngine.swift */,
 				CK0200000000000000000076 /* SharedMLXBridgeRegistry.swift */,
 				CK0200000000000000000012 /* InferenceCoordinator.swift */,
 				CK0200000000000000000051 /* AnalysisData.swift */,
 				CK0200000000000000000052 /* MatteCodec.swift */,
+				DC0200000000000000000001 /* DeviceCapabilityCache.swift */,
 			);
 			name = Inference;
 			sourceTree = "<group>";
@@ -372,6 +382,8 @@
 				CK0200000000000000000062 /* CorridorKeyHeaderView.swift */,
 				CK0200000000000000000063 /* CorridorKeyAnalysisSnapshot.swift */,
 				CK0200000000000000000074 /* WarmupStatus.swift */,
+				HP0200000000000000000001 /* HintPointSet.swift */,
+				OS0200000000000000000001 /* CorridorKeyHintOSC.swift */,
 			);
 			name = Inspector;
 			sourceTree = "<group>";
@@ -541,6 +553,8 @@
 				CK010000000000000000000E /* ScreenColorEstimator.swift in Sources */,
 				CK010000000000000000000F /* KeyingInferenceEngine.swift in Sources */,
 				MX0200000000000000000002 /* MLXKeyingEngine.swift in Sources */,
+				VH0100000000000000000001 /* VisionHintEngine.swift in Sources */,
+				DC0100000000000000000001 /* DeviceCapabilityCache.swift in Sources */,
 				CK0100000000000000000012 /* InferenceCoordinator.swift in Sources */,
 				CK0100000000000000000013 /* RenderPipeline.swift in Sources */,
 				CK0100000000000000000040 /* PluginLog.swift in Sources */,
@@ -551,6 +565,8 @@
 				CK0100000000000000000061 /* CorridorKeyInspectorBridge.swift in Sources */,
 				CK0100000000000000000062 /* CorridorKeyHeaderView.swift in Sources */,
 				CK0100000000000000000063 /* CorridorKeyAnalysisSnapshot.swift in Sources */,
+				HP0100000000000000000001 /* HintPointSet.swift in Sources */,
+				OS0100000000000000000001 /* CorridorKeyHintOSC.swift in Sources */,
 				CK0100000000000000000070 /* IntermediateTexturePool.swift in Sources */,
 				CK0100000000000000000071 /* MatteRefiner.swift in Sources */,
 				CK0100000000000000000072 /* ColorGamutMatrix.swift in Sources */,
