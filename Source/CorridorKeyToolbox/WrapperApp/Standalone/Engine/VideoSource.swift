@@ -197,12 +197,20 @@ final class VideoSource: @unchecked Sendable {
         )
     }
 
-    /// Snaps `time` to the nearest source frame. Used by the transport
-    /// so scrubbing rests on whole frames, never between them.
+    /// Snaps `time` to the nearest source frame and clamps to the
+    /// last valid frame index. The asset's duration is one frame
+    /// past the last frame's presentation time (because each frame
+    /// covers one frame-duration interval), so a naïve nearest-
+    /// frame mapping at `duration` would return frame N for an
+    /// N-frame clip and surface as "5/4 f" in the transport bar.
+    /// Capping to `totalFrameCount() - 1` here keeps every
+    /// downstream display lined up with the actual frame range.
     func nearestFrameTime(to time: CMTime) -> CMTime {
         let fps = max(Double(info.nominalFrameRate), 0.001)
-        let frameIndex = (time.seconds * fps).rounded()
-        return CMTime(seconds: frameIndex / fps, preferredTimescale: info.timescale)
+        let lastFrameIndex = max(0, totalFrameCount() - 1)
+        let rawFrameIndex = (time.seconds * fps).rounded()
+        let clampedFrameIndex = max(0, min(Double(lastFrameIndex), rawFrameIndex))
+        return CMTime(seconds: clampedFrameIndex / fps, preferredTimescale: info.timescale)
     }
 
     /// Returns the total whole-frame count in the clip. The transport

@@ -122,8 +122,11 @@ struct EditorView: View {
                     device: viewModel.renderEngine.device,
                     frame: viewModel.latestPreview,
                     aspectFitSize: viewModel.renderSize,
-                    drawCheckerboardBackdrop: showCheckerboard
+                    backdrop: viewModel.previewBackdrop
                 )
+                .contextMenu {
+                    PreviewBackdropMenu(viewModel: viewModel)
+                }
                 OnScreenControlOverlay(
                     viewModel: viewModel,
                     renderSize: viewModel.renderSize
@@ -147,17 +150,6 @@ struct EditorView: View {
             guard let url = viewModel.clipInfo?.url else { return "Corridor Key Toolbox" }
             return url.deletingPathExtension().lastPathComponent
         case .loadFailed: return "Couldn't load clip"
-        }
-    }
-
-    /// Show the checkerboard backdrop when the user has chosen an
-    /// output mode that produces transparency (matte alone, foreground
-    /// alone, or a foreground+matte composite). Final Cut Pro shows
-    /// the same affordance.
-    private var showCheckerboard: Bool {
-        switch viewModel.state.outputMode {
-        case .matteOnly, .foregroundOnly, .foregroundPlusMatte: return true
-        case .processed, .sourcePlusMatte, .hint: return false
         }
     }
 
@@ -188,6 +180,25 @@ struct EditorView: View {
         Task {
             await viewModel.loadClip(at: url)
         }
+    }
+}
+
+/// Right-click context menu on the preview surface. Lets the user
+/// pick the backdrop they want behind the keyed image — defaulting
+/// to a transparency-aware checkerboard, with solid colour
+/// alternatives for matching specific monitors / colour-grade
+/// references.
+private struct PreviewBackdropMenu: View {
+    @Bindable var viewModel: EditorViewModel
+
+    var body: some View {
+        Picker("Player Background", selection: $viewModel.previewBackdrop) {
+            ForEach(PreviewBackdrop.allCases) { option in
+                Label(option.displayName, systemImage: option.systemImage)
+                    .tag(option)
+            }
+        }
+        .pickerStyle(.inline)
     }
 }
 

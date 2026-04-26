@@ -30,9 +30,10 @@ struct MetalPreviewView: NSViewRepresentable {
     let device: any MTLDevice
     let frame: PreviewFrame?
     let aspectFitSize: CGSize
-    /// Optional checkerboard pattern shown behind the preview when the
-    /// matte is included (so transparency is visually obvious).
-    let drawCheckerboardBackdrop: Bool
+    /// User-selected backdrop drawn behind the keyed preview image.
+    /// Right-click on the preview surfaces a picker that mutates this
+    /// value through the editor view model.
+    let backdrop: PreviewBackdrop
 
     func makeCoordinator() -> Coordinator {
         Coordinator(device: device)
@@ -55,7 +56,7 @@ struct MetalPreviewView: NSViewRepresentable {
         context.coordinator.update(
             sourceTexture: frame?.texture,
             aspectFitSize: aspectFitSize,
-            drawCheckerboardBackdrop: drawCheckerboardBackdrop,
+            backdrop: backdrop,
             previewFrame: frame
         )
         nsView.setNeedsDisplay(nsView.bounds)
@@ -73,7 +74,7 @@ struct MetalPreviewView: NSViewRepresentable {
 
         private var sourceTexture: (any MTLTexture)?
         private var aspectFitSize: CGSize = .zero
-        private var drawCheckerboardBackdrop: Bool = false
+        private var backdrop: PreviewBackdrop = .checkerboard
         /// Holding the whole `PreviewFrame` keeps the IOSurface backing
         /// the texture alive for the lifetime of the GPU work that
         /// draws it.
@@ -124,12 +125,12 @@ struct MetalPreviewView: NSViewRepresentable {
         func update(
             sourceTexture: (any MTLTexture)?,
             aspectFitSize: CGSize,
-            drawCheckerboardBackdrop: Bool,
+            backdrop: PreviewBackdrop,
             previewFrame: PreviewFrame?
         ) {
             self.sourceTexture = sourceTexture
             self.aspectFitSize = aspectFitSize
-            self.drawCheckerboardBackdrop = drawCheckerboardBackdrop
+            self.backdrop = backdrop
             self.heldFrame = previewFrame
         }
 
@@ -146,7 +147,12 @@ struct MetalPreviewView: NSViewRepresentable {
             else { return }
             commandBuffer.label = "Corridor Key Standalone Preview"
 
-            descriptor.colorAttachments[0].clearColor = view.clearColor
+            // Use the solid-colour backdrops as the layer's clear
+            // colour so the area outside the aspect-fit quad picks
+            // up the same colour. The checkerboard option clears
+            // to a neutral dark grey and paints the actual chequer
+            // pattern inside the quad in a separate pass.
+            descriptor.colorAttachments[0].clearColor = clearColorForBackdrop()
             descriptor.colorAttachments[0].loadAction = .clear
             descriptor.colorAttachments[0].storeAction = .store
 
@@ -165,7 +171,7 @@ struct MetalPreviewView: NSViewRepresentable {
                 in: drawableSize
             )
 
-            if drawCheckerboardBackdrop {
+            if backdrop == .checkerboard {
                 encoder.setRenderPipelineState(checkerPipelineState)
                 var quad = quadVertices(for: quadRect, drawableSize: drawableSize)
                 encoder.setVertexBytes(&quad, length: MemoryLayout<PreviewVertex>.stride * 4, index: 0)
@@ -183,6 +189,27 @@ struct MetalPreviewView: NSViewRepresentable {
             encoder.endEncoding()
             commandBuffer.present(drawable)
             commandBuffer.commit()
+        }
+
+        /// Maps the user-selected backdrop to a clear colour that
+        /// fills the area outside the aspect-fit quad. The
+        /// checkerboard mode picks a neutral dark grey so the
+        /// chequer pattern's edges blend into the surrounding
+        /// letterbox area; solid-colour modes use the picked
+        /// colour directly.
+        private func clearColorForBackdrop() -> MTLClearColor {
+            switch backdrop {
+            case .checkerboard:
+                return MTLClearColorMake(0.05, 0.05, 0.05, 1.0)
+            case .white:
+                return MTLClearColorMake(1.0, 1.0, 1.0, 1.0)
+            case .black:
+                return MTLClearColorMake(0.0, 0.0, 0.0, 1.0)
+            case .yellow:
+                return MTLClearColorMake(1.0, 0.85, 0.0, 1.0)
+            case .red:
+                return MTLClearColorMake(0.95, 0.20, 0.18, 1.0)
+            }
         }
 
         // MARK: - Layout helpers

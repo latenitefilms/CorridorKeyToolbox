@@ -66,6 +66,40 @@ enum EditorExportStatus: @unchecked Sendable, Equatable {
     }
 }
 
+/// Backdrop the preview surface composites the keyed image over.
+/// Defaults to a transparency-aware checkerboard so users can read
+/// the matte at a glance, with solid-colour options for alternate
+/// reference looks.
+enum PreviewBackdrop: Hashable, Sendable, CaseIterable, Identifiable {
+    case checkerboard
+    case white
+    case black
+    case yellow
+    case red
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .checkerboard: return "Checkerboard"
+        case .white: return "White"
+        case .black: return "Black"
+        case .yellow: return "Yellow"
+        case .red: return "Red"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .checkerboard: return "checkerboard.rectangle"
+        case .white: return "rectangle.fill"
+        case .black: return "rectangle.fill"
+        case .yellow: return "rectangle.fill"
+        case .red: return "rectangle.fill"
+        }
+    }
+}
+
 /// Modes the on-screen control overlay can be in. The user picks one
 /// from the inspector; clicking the preview surface in any mode other
 /// than `.disabled` adds or removes a hint point.
@@ -151,6 +185,10 @@ final class EditorViewModel {
     /// Currently-active OSC tool — drives the click handler on the
     /// preview surface.
     var oscTool: OnScreenControlTool = .disabled
+    /// Backdrop drawn behind the keyed preview image. Defaults to
+    /// the transparency-aware checkerboard pattern; right-clicking
+    /// the preview surfaces the picker.
+    var previewBackdrop: PreviewBackdrop = .checkerboard
 
     // MARK: - Internal state
 

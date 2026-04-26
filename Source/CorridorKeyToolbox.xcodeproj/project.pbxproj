@@ -125,6 +125,7 @@
 		EB0000000000000000000002 /* NikoDruidEndToEndTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ER0000000000000000000002 /* NikoDruidEndToEndTests.swift */; };
 				OS0400000000000000000001 /* OnScreenControlOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = OS0300000000000000000001 /* OnScreenControlOverlay.swift */; };
 				FT0400000000000000000001 /* FourFrameUserFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT0300000000000000000001 /* FourFrameUserFlowTests.swift */; };
+				TP0400000000000000000001 /* TransportPolishTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TP0300000000000000000001 /* TransportPolishTests.swift */; };
 		/* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -265,6 +266,7 @@
 		ER0000000000000000000002 /* NikoDruidEndToEndTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NikoDruidEndToEndTests.swift; path = "Tests/WrapperAppTests/NikoDruidEndToEndTests.swift"; sourceTree = "<group>"; };
 				OS0300000000000000000001 /* OnScreenControlOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OnScreenControlOverlay.swift; path = "CorridorKeyToolbox/WrapperApp/Standalone/Views/OnScreenControlOverlay.swift"; sourceTree = "<group>"; };
 				FT0300000000000000000001 /* FourFrameUserFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FourFrameUserFlowTests.swift; path = "Tests/WrapperAppTests/FourFrameUserFlowTests.swift"; sourceTree = "<group>"; };
+				TP0300000000000000000001 /* TransportPolishTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TransportPolishTests.swift; path = "Tests/WrapperAppTests/TransportPolishTests.swift"; sourceTree = "<group>"; };
 		/* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -553,6 +555,7 @@
 				WT0A00000000000000000001 /* WrapperAppTests */ = {
 			isa = PBXGroup;
 			children = (
+				TP0300000000000000000001 /* TransportPolishTests.swift */,
 				FT0300000000000000000001 /* FourFrameUserFlowTests.swift */,
 				ER0000000000000000000001 /* RealClipFixture.swift */,
 				ER0000000000000000000002 /* NikoDruidEndToEndTests.swift */,
@@ -818,6 +821,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				TP0400000000000000000001 /* TransportPolishTests.swift in Sources */,
 				FT0400000000000000000001 /* FourFrameUserFlowTests.swift in Sources */,
 				EB0000000000000000000001 /* RealClipFixture.swift in Sources */,
 				EB0000000000000000000002 /* NikoDruidEndToEndTests.swift in Sources */,
