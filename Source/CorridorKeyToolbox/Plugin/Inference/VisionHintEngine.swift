@@ -201,49 +201,112 @@ final class VisionHintEngine: @unchecked Sendable {
         return try wrapAsMetalTexture(pixelBuffer: maskBuffer)
     }
 
-    /// Wraps a Vision mask CVPixelBuffer as an `.r8Unorm` MTLTexture
-    /// via `CVMetalTextureCache`, then immediately blits it into a
-    /// plain Metal-owned `.private` texture and returns that. See
-    /// `generateMask`'s doc-comment for why the blit step is
-    /// necessary on macOS 26.
+    /// Wraps a Vision mask CVPixelBuffer as an `.r8Unorm` MTLTexture.
+    /// Vision returns the mask as a host-memory CVPixelBuffer in
+    /// `kCVPixelFormatType_OneComponent32Float` (4 bytes/pixel) — not
+    /// the `OneComponent8` Apple's older docs implied — so we must
+    /// convert the float bytes to `UInt8` ourselves before uploading;
+    /// `CVMetalTextureCache` silently produces a garbage texture when
+    /// the buffer format and the requested Metal format don't agree.
+    /// The CPU loop is a few ms on M-series so it's not a hot-path
+    /// concern.
     private func wrapAsMetalTexture(pixelBuffer: CVPixelBuffer) throws -> VisionMask {
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
-        let textureAttributes: [String: Any] = [
-            kCVMetalTextureUsage as String: NSNumber(value: MTLTextureUsage.shaderRead.rawValue)
-        ]
-        var cvTexture: CVMetalTexture?
-        let status = CVMetalTextureCacheCreateTextureFromImage(
-            kCFAllocatorDefault,
-            textureCache,
-            pixelBuffer,
-            textureAttributes as CFDictionary,
-            .r8Unorm,
-            width,
-            height,
-            0,
-            &cvTexture
-        )
-        guard status == kCVReturnSuccess,
-              let cvTexture,
-              let wrappedTexture = CVMetalTextureGetTexture(cvTexture)
-        else {
-            throw VisionHintError.textureWrappingFailed(status)
+        let pixelFormat = CVPixelBufferGetPixelFormatType(pixelBuffer)
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
+        let isIOSurface = CVPixelBufferGetIOSurface(pixelBuffer) != nil
+        PluginLog.notice("Vision hint: mask buffer pixelFormat=0x\(String(pixelFormat, radix: 16)), IOSurface=\(isIOSurface), \(width)x\(height), bytesPerRow=\(bytesPerRow).")
+
+        let lockResult = CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        guard lockResult == kCVReturnSuccess else {
+            throw VisionHintError.textureWrappingFailed(lockResult)
+        }
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+        guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else {
+            throw VisionHintError.textureWrappingFailed(0)
         }
 
-        // Copy into a plain Metal texture. Private storage is the
-        // tightest format for downstream sampling and avoids any
-        // CVPixelBuffer-driven access quirks. Owned by Swift ARC,
-        // no completion-handler lifetime juggling needed.
-        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+        // Convert the buffer to a packed `UInt8` array regardless of
+        // the source format. Float / half / byte all collapse to a
+        // 0…255 byte where >= 128 ≈ subject. Using a packed buffer
+        // lets Metal's `replace(region:)` honour our `bytesPerRow`
+        // straightforwardly with no stride-mismatch surprises.
+        var packed = [UInt8](repeating: 0, count: width * height)
+        try packed.withUnsafeMutableBufferPointer { packedPtr in
+            guard let packedBase = packedPtr.baseAddress else {
+                throw VisionHintError.textureWrappingFailed(0)
+            }
+            switch pixelFormat {
+            case kCVPixelFormatType_OneComponent8:
+                // Direct row-by-row copy honouring source stride.
+                for row in 0..<height {
+                    let src = baseAddress.advanced(by: row * bytesPerRow)
+                    let dst = packedBase.advanced(by: row * width)
+                    memcpy(dst, src, width)
+                }
+            case kCVPixelFormatType_OneComponent32Float:
+                // Float → byte. Anything > 0 counts as foreground; the
+                // `* 255` keeps the threshold-tested compose path
+                // happy for partial-coverage edge pixels.
+                for row in 0..<height {
+                    let src = baseAddress.advanced(by: row * bytesPerRow).assumingMemoryBound(to: Float.self)
+                    let dst = packedBase.advanced(by: row * width)
+                    for x in 0..<width {
+                        let value = max(0, min(1, src[x]))
+                        dst[x] = UInt8(value * 255)
+                    }
+                }
+            case kCVPixelFormatType_OneComponent16Half:
+                for row in 0..<height {
+                    let src = baseAddress.advanced(by: row * bytesPerRow).assumingMemoryBound(to: UInt16.self)
+                    let dst = packedBase.advanced(by: row * width)
+                    for x in 0..<width {
+                        let value = max(0, min(1, Float(Float16(bitPattern: src[x]))))
+                        dst[x] = UInt8(value * 255)
+                    }
+                }
+            default:
+                PluginLog.error("Vision hint: unsupported mask pixel format 0x\(String(pixelFormat, radix: 16)).")
+                throw VisionHintError.textureWrappingFailed(-1)
+            }
+        }
+
+        // Stage in `.shared` so `replace(region:)` accepts CPU bytes,
+        // then blit into `.private` so downstream compute kernels can
+        // sample without any storage-mode penalty.
+        let stagingDescriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: .r8Unorm,
             width: width,
             height: height,
             mipmapped: false
         )
-        descriptor.usage = [.shaderRead]
-        descriptor.storageMode = .private
-        guard let plainTexture = cacheEntry.device.makeTexture(descriptor: descriptor) else {
+        stagingDescriptor.usage = [.shaderRead]
+        stagingDescriptor.storageMode = .shared
+        guard let stagingTexture = cacheEntry.device.makeTexture(descriptor: stagingDescriptor) else {
+            throw VisionHintError.textureWrappingFailed(0)
+        }
+        stagingTexture.label = "Vision Hint Mask Staging"
+        packed.withUnsafeBufferPointer { ptr in
+            if let base = ptr.baseAddress {
+                stagingTexture.replace(
+                    region: MTLRegionMake2D(0, 0, width, height),
+                    mipmapLevel: 0,
+                    withBytes: base,
+                    bytesPerRow: width
+                )
+            }
+        }
+
+        let plainDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .r8Unorm,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        plainDescriptor.usage = [.shaderRead]
+        plainDescriptor.storageMode = .private
+        guard let plainTexture = cacheEntry.device.makeTexture(descriptor: plainDescriptor) else {
             throw VisionHintError.textureWrappingFailed(0)
         }
         plainTexture.label = "Vision Hint Mask"
@@ -259,7 +322,7 @@ final class VisionHintEngine: @unchecked Sendable {
         }
         commandBuffer.label = "Vision Hint Mask Blit"
         blit.copy(
-            from: wrappedTexture,
+            from: stagingTexture,
             sourceSlice: 0,
             sourceLevel: 0,
             sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
@@ -270,19 +333,46 @@ final class VisionHintEngine: @unchecked Sendable {
             destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0)
         )
         blit.endEncoding()
-        // Hold the CVMetalTexture and CVPixelBuffer alive until the
-        // blit completes; release them as soon as it does so we don't
-        // accumulate IOSurface references across analyse passes.
-        let pinnedCV = cvTexture
-        let pinnedBuffer = pixelBuffer
-        commandBuffer.addCompletedHandler { _ in
-            _ = pinnedCV
-            _ = pinnedBuffer
-        }
         commandBuffer.commit()
         commandBuffer.waitUntilCompleted()
 
+        // One-shot sanity check on what we actually wrote into the
+        // staging texture. If production ever logs `nonZero=0` while
+        // Vision claims it produced a mask, we know to look upstream
+        // (Vision returning an empty buffer) rather than at the GPU
+        // sampling path.
+        Self.logFirstStagingSampleOnce(stagingTexture: stagingTexture, width: width, height: height)
+
         return VisionMask(texture: plainTexture)
+    }
+
+    nonisolated(unsafe) private static var stagingSampleLogged = false
+
+    private static func logFirstStagingSampleOnce(
+        stagingTexture: any MTLTexture,
+        width: Int,
+        height: Int
+    ) {
+        guard !stagingSampleLogged else { return }
+        stagingSampleLogged = true
+        var bytes = [UInt8](repeating: 0, count: width * height)
+        bytes.withUnsafeMutableBytes { raw in
+            if let base = raw.baseAddress {
+                stagingTexture.getBytes(
+                    base,
+                    bytesPerRow: width,
+                    from: MTLRegionMake2D(0, 0, width, height),
+                    mipmapLevel: 0
+                )
+            }
+        }
+        var nonZero = 0
+        var maxValue: UInt8 = 0
+        for byte in bytes {
+            if byte > 0 { nonZero += 1 }
+            if byte > maxValue { maxValue = byte }
+        }
+        PluginLog.notice("Vision hint staging sample (one-time): nonZero=\(nonZero)/\(bytes.count) (\(Double(nonZero) / Double(bytes.count) * 100)%), max=\(maxValue).")
     }
 
     /// Drops any cached request state. Called when the cache entry is

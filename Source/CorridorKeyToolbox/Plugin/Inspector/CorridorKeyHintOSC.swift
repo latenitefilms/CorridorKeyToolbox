@@ -63,12 +63,21 @@ class CorridorKeyHintOSC: NSObject, FxOnScreenControl_v4 {
         at time: CMTime
     ) {
         guard subjectMarkerVisible(at: time) else { return }
-        let (objectX, objectY) = subjectPosition(at: time)
+        let object = subjectPosition(at: time)
+        // Convert object-normalised position back to canvas pixels via
+        // FCP's coordinate API. This is the round-trip partner of
+        // `objectPosition(forCanvasX:canvasY:)`, so no matter what
+        // direction or scale convertPoint uses internally, dragging
+        // and drawing stay in sync. Without this round-trip the
+        // marker drifts away from the cursor near the frame edges
+        // because object-normalised coords don't map 1:1 onto the
+        // OSC tile (the tile usually extends beyond the object bounds).
+        let canvas = canvasPosition(forObjectPosition: object)
         do {
             try renderMarker(
                 destinationImage: destinationImage,
-                objectX: objectX,
-                objectY: objectY,
+                canvasX: canvas.x,
+                canvasY: canvas.y,
                 isActive: activePart == HitPart.marker.rawValue || isDragging,
                 time: time
             )
@@ -118,6 +127,7 @@ class CorridorKeyHintOSC: NSObject, FxOnScreenControl_v4 {
         // marker by clicking anywhere they want it.
         let object = objectPosition(forCanvasX: x, canvasY: y)
         writeSubjectPosition(x: object.x, y: object.y, at: time)
+        logCoordinateRoundTripOnce(canvasX: x, canvasY: y, object: object)
         beginDrag()
         forceUpdate.pointee = ObjCBool(true)
     }
@@ -287,16 +297,47 @@ class CorridorKeyHintOSC: NSObject, FxOnScreenControl_v4 {
         return max(20, 32 * zoom)
     }
 
+    // MARK: - One-shot coordinate diagnostic
+    //
+    // Logs the canvas → object → canvas round trip the first time the
+    // user clicks the OSC. Helps diagnose drift bugs without depending
+    // on the user to attach an Xcode debugger; the log shows whether
+    // `convertPoint` is returning Y-up or Y-down values, what the
+    // object bounds are, and whether the parameter setter / getter
+    // round-trips cleanly.
+    nonisolated(unsafe) private static var coordinateLogEmitted = false
+
+    private func logCoordinateRoundTripOnce(
+        canvasX: Double,
+        canvasY: Double,
+        object: (x: Double, y: Double)
+    ) {
+        guard !Self.coordinateLogEmitted else { return }
+        Self.coordinateLogEmitted = true
+        let oscAPI = apiManager.api(for: (any FxOnScreenControlAPI_v4).self) as? any FxOnScreenControlAPI_v4
+        var width: UInt = 0
+        var height: UInt = 0
+        var par: Double = 1
+        oscAPI?.objectWidth(&width, height: &height, pixelAspectRatio: &par)
+        let bounds = oscAPI?.objectBounds() ?? .zero
+        let zoom = oscAPI?.canvasZoom() ?? 0
+        let roundTrip = canvasPosition(forObjectPosition: object)
+        PluginLog.notice(
+            "OSC coordinate diagnostic — mouse(canvas)=(\(canvasX), \(canvasY)) → object=(\(object.x), \(object.y)) → canvas(roundtrip)=(\(roundTrip.x), \(roundTrip.y)); objectBounds=\(bounds); objectSize=\(width)×\(height) PAR=\(par); canvasZoom=\(zoom)."
+        )
+    }
+
     // MARK: - Drawing
 
     /// Renders the marker via a render pass. Vertex/fragment shaders
     /// in `CorridorKeyShaders.metal` (`corridorKeyDrawOSCVertex` and
     /// `corridorKeyDrawOSCFragment`) draw a small ring + crosshair
-    /// at the supplied object-normalised position.
+    /// at a tile-relative UV position computed from the supplied
+    /// canvas pixel coordinates.
     private func renderMarker(
         destinationImage: FxImageTile,
-        objectX: Double,
-        objectY: Double,
+        canvasX: Double,
+        canvasY: Double,
         isActive: Bool,
         time: CMTime
     ) throws {
@@ -364,10 +405,19 @@ class CorridorKeyHintOSC: NSObject, FxOnScreenControl_v4 {
         // dragged so the user gets visual feedback that they've
         // grabbed the handle.
         //
-        // No Y flip: empirically, FCP's mouse-Y for `kFxDrawingCoordinates_OBJECT`
-        // and the parameter Y agree with our texture-coordinate UV,
-        // so dragging up correctly moves the marker up. Adding a
-        // `1 - y` flip here previously inverted the drag direction.
+        // Convert the canvas pixel position into the tile's local UV
+        // (0…1) so the fragment shader's `uv` and `p.x/p.y` live in
+        // the same space. Empirically the OSC destination texture
+        // ends up with `uv.y` aligned to the same direction as
+        // FxPlug canvas Y, so no Y flip is needed here — adding
+        // a `1 - …` flip inverts the drag direction (mouse up moves
+        // marker down).
+        let tileLeft = Double(destinationImage.tilePixelBounds.left)
+        let tileBottom = Double(destinationImage.tilePixelBounds.bottom)
+        let tilePixelWidth = Double(tileWidth)
+        let tilePixelHeight = Double(tileHeight)
+        let uvX = (canvasX - tileLeft) / max(tilePixelWidth, 1)
+        let uvY = (canvasY - tileBottom) / max(tilePixelHeight, 1)
         struct PackedPoint {
             var x: Float32
             var y: Float32
@@ -376,8 +426,8 @@ class CorridorKeyHintOSC: NSObject, FxOnScreenControl_v4 {
         }
         var packed = [
             PackedPoint(
-                x: Float(objectX),
-                y: Float(objectY),
+                x: Float(uvX),
+                y: Float(uvY),
                 radius: 0.05,
                 kind: isActive ? 1 : 0
             )
