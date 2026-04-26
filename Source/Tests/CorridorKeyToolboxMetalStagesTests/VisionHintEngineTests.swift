@@ -209,10 +209,11 @@ struct VisionHintEngineTests {
         #expect(redCoverage > 0.05, "Compose with .hint mode should produce red on the subject region (>5%); got \(redCoverage * 100)%.")
         #expect(maxRed > 0.5, "At least one pixel should be near-saturated red; got max red \(maxRed).")
         #expect(maxGreen < 0.05, ".hint mode must not write green; got max green \(maxGreen).")
-        // Blue channel now carries a dim purple background (~0.10)
-        // when the hint is dark, so the user can confirm the
-        // diagnostic IS rendering even on empty hints.
-        #expect(maxBlue >= 0.0 && maxBlue < 0.15, ".hint mode background should be dim purple; got max blue \(maxBlue).")
+        // .hint mode now writes a dim dark-blue background (~0.15)
+        // when alpha is 0, so users can confirm the shader ran even
+        // on empty hints. Keep the upper bound generous to allow for
+        // bilinear filtering across the alpha edge.
+        #expect(maxBlue >= 0.0 && maxBlue < 0.20, ".hint mode background should stay below 0.20 blue; got max blue \(maxBlue).")
     }
 
     /// Inline replica of `RenderPipeline.composeInto` using the

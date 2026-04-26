@@ -89,15 +89,13 @@ fragment float4 corridorKeyComposeFragment(
         case CKOutputModeForegroundPlusMatte:
             return float4(foreground, alpha);
         case CKOutputModeHint:
-            // Diagnostic: visualise the hint as red on a dim purple
-            // background. The dim purple proves the .hint render
-            // path is reaching the screen even when the hint texture
-            // is empty — useful when the user is debugging "I see
-            // entirely black, is the diagnostic even running?".
-            // Foreground hint pixels (alpha > 0) draw bright red on
-            // top of the purple, falling off smoothly to the
-            // background for a clean visualisation.
-            return float4(alpha, 0.0, 0.10 * (1.0 - alpha), 1.0);
+            // Diagnostic: visualise the hint as bright red on a dim
+            // dark-blue background. The dark-blue field proves the
+            // compose path reached the screen even when the hint
+            // happens to be all-zero — which is the symptom we'd
+            // otherwise misread as "the diagnostic isn't running".
+            // alpha = 1 → bright red; alpha = 0 → dark blue.
+            return float4(alpha, 0.0, 0.15 * (1.0 - alpha), 1.0);
         case CKOutputModeProcessed:
         default:
             return float4(foreground * alpha, alpha);

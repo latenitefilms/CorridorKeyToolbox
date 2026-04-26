@@ -359,11 +359,15 @@ class CorridorKeyHintOSC: NSObject, FxOnScreenControl_v4 {
 
         // Pack a single point with the subject position. The fragment
         // shader treats `kind = 0` as "foreground" (green dot); we
-        // override with white-ring style via a tighter radius so the
-        // marker reads as a control point rather than a hint dot.
-        // FxPlug's Point parameter convention has y=0 at the BOTTOM,
-        // but the OSC fragment shader's UV space has y=0 at the TOP.
-        // Flip y here so the marker draws where the user dragged it.
+        // toggle to `kind = 1` (yellow-ring style via the active-part
+        // path in the shader) when the marker is being hovered or
+        // dragged so the user gets visual feedback that they've
+        // grabbed the handle.
+        //
+        // No Y flip: empirically, FCP's mouse-Y for `kFxDrawingCoordinates_OBJECT`
+        // and the parameter Y agree with our texture-coordinate UV,
+        // so dragging up correctly moves the marker up. Adding a
+        // `1 - y` flip here previously inverted the drag direction.
         struct PackedPoint {
             var x: Float32
             var y: Float32
@@ -373,7 +377,7 @@ class CorridorKeyHintOSC: NSObject, FxOnScreenControl_v4 {
         var packed = [
             PackedPoint(
                 x: Float(objectX),
-                y: Float(1.0 - objectY),
+                y: Float(objectY),
                 radius: 0.05,
                 kind: isActive ? 1 : 0
             )

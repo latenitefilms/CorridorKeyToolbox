@@ -559,6 +559,27 @@ final class RenderPipeline: @unchecked Sendable {
         PluginLog.notice("Hint Diagnostic: composed (hintTextureFormat=\(hintPooled.texture.pixelFormat.rawValue), destTextureFormat=\(context.destinationTexture.pixelFormat.rawValue), tileWidth=\(request.destinationImage.tilePixelBounds.right - request.destinationImage.tilePixelBounds.left), tileHeight=\(request.destinationImage.tilePixelBounds.top - request.destinationImage.tilePixelBounds.bottom))")
 
         try commitAndWait(commandBuffer: commandBuffer)
+
+        // One-time readback of the hint texture (pre-compose) AND
+        // the destination (post-compose). Together they answer the
+        // "Hint Diagnostic shows black in FCP" question:
+        //
+        //   * hintMaxR > 0 → extractHint produced data; if the
+        //     destination is also non-zero, everything works
+        //   * hintMaxR == 0 → extractHint wrote nothing; trace back
+        //     to Vision / wrapAsMetalTexture / blit
+        //   * hintMaxR > 0 but destMaxR == 0 → compose misses the
+        //     hint texture (sampling, binding, viewport)
+        //
+        // ~50 ms one-time cost; subsequent renders skip both
+        // readbacks via the static flag.
+        Self.dumpHintAndDestinationDiagnosticOnce(
+            hint: hintPooled.texture,
+            destination: context.destinationTexture,
+            entry: context.entry,
+            commandQueue: context.commandQueue
+        )
+
         rotatedSourcePooled?.returnManually()
         hintPooled.returnManually()
 
@@ -1232,6 +1253,235 @@ final class RenderPipeline: @unchecked Sendable {
         )
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         encoder.endEncoding()
+    }
+
+    // MARK: - Destination diagnostic readback
+
+    /// Set once we've dumped the destination diagnostic for this
+    /// process — keeps the readback off the per-frame hot path while
+    /// still capturing a sample for debugging the "Hint Diagnostic
+    /// renders black in FCP" symptom.
+    private static let diagnosticDumpFlag = NSLock()
+    nonisolated(unsafe) private static var diagnosticDumpDone = false
+
+    /// Reads back the hint texture (pre-compose) AND the destination
+    /// (post-compose) and logs the per-channel stats of each. Runs at
+    /// most once per process to avoid pinning the GPU on every render.
+    static func dumpHintAndDestinationDiagnosticOnce(
+        hint: any MTLTexture,
+        destination: any MTLTexture,
+        entry: MetalDeviceCacheEntry,
+        commandQueue: any MTLCommandQueue
+    ) {
+        diagnosticDumpFlag.lock()
+        let alreadyDone = diagnosticDumpDone
+        diagnosticDumpDone = true
+        diagnosticDumpFlag.unlock()
+        guard !alreadyDone else { return }
+
+        do {
+            // Hint texture is r16Float; read back via blit→shared.
+            let (hintMax, hintMin, hintCoverage) = try readbackR16FloatHintStats(
+                hint: hint,
+                entry: entry,
+                commandQueue: commandQueue
+            )
+            PluginLog.notice(
+                "Hint Diagnostic HINT texture dump (one-time): "
+                + "size=\(hint.width)x\(hint.height), "
+                + "min=\(hintMin), max=\(hintMax), "
+                + "fraction>0.5 = \(hintCoverage)"
+            )
+        } catch {
+            PluginLog.error("Hint Diagnostic hint readback failed: \(error.localizedDescription)")
+        }
+
+        do {
+            let (maxR, maxG, maxB, redCoverage) = try readbackDestinationStats(
+                destination: destination,
+                entry: entry,
+                commandQueue: commandQueue
+            )
+            PluginLog.notice(
+                "Hint Diagnostic DESTINATION dump (one-time): "
+                + "format=\(destination.pixelFormat.rawValue), "
+                + "size=\(destination.width)x\(destination.height), "
+                + "maxR=\(maxR), maxG=\(maxG), maxB=\(maxB), "
+                + "redCoverage=\(redCoverage)"
+            )
+        } catch {
+            PluginLog.error("Hint Diagnostic destination dump failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Blits an r16Float texture into a `.shared` staging texture and
+    /// reads the floats back to compute (max, min, fraction > 0.5).
+    private static func readbackR16FloatHintStats(
+        hint: any MTLTexture,
+        entry: MetalDeviceCacheEntry,
+        commandQueue: any MTLCommandQueue
+    ) throws -> (Float, Float, Double) {
+        let width = hint.width
+        let height = hint.height
+        let pixelCount = width * height
+
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .r16Float,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        descriptor.usage = [.shaderRead]
+        descriptor.storageMode = .shared
+        guard let staging = entry.device.makeTexture(descriptor: descriptor) else {
+            throw MetalDeviceCacheError.textureAllocationFailed
+        }
+        guard let buffer = commandQueue.makeCommandBuffer(),
+              let blit = buffer.makeBlitCommandEncoder()
+        else {
+            throw MetalDeviceCacheError.commandBufferCreationFailed
+        }
+        blit.copy(from: hint, to: staging)
+        blit.endEncoding()
+        let semaphore = DispatchSemaphore(value: 0)
+        buffer.addCompletedHandler { _ in semaphore.signal() }
+        buffer.commit()
+        semaphore.wait()
+        if let error = buffer.error { throw error }
+
+        var halves = [UInt16](repeating: 0, count: pixelCount)
+        halves.withUnsafeMutableBytes { bytes in
+            if let base = bytes.baseAddress {
+                staging.getBytes(
+                    base,
+                    bytesPerRow: width * MemoryLayout<UInt16>.size,
+                    from: MTLRegionMake2D(0, 0, width, height),
+                    mipmapLevel: 0
+                )
+            }
+        }
+        var maxValue: Float = -Float.greatestFiniteMagnitude
+        var minValue: Float = Float.greatestFiniteMagnitude
+        var nonZero = 0
+        for half in halves {
+            let value = Float(Float16(bitPattern: half))
+            if value > maxValue { maxValue = value }
+            if value < minValue { minValue = value }
+            if value > 0.5 { nonZero += 1 }
+        }
+        return (maxValue, minValue, Double(nonZero) / Double(pixelCount))
+    }
+
+    /// Blits the destination into a `.shared` staging texture, reads
+    /// it back to CPU, and computes per-channel stats. Handles the
+    /// three pixel formats FCP gives us (`.rgba16Float`, `.rgba32Float`,
+    /// `.bgra8Unorm`).
+    private static func readbackDestinationStats(
+        destination: any MTLTexture,
+        entry: MetalDeviceCacheEntry,
+        commandQueue: any MTLCommandQueue
+    ) throws -> (Float, Float, Float, Double) {
+        let width = destination.width
+        let height = destination.height
+        let pixelCount = width * height
+
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: destination.pixelFormat,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        descriptor.usage = [.shaderRead]
+        descriptor.storageMode = .shared
+        guard let staging = entry.device.makeTexture(descriptor: descriptor) else {
+            throw MetalDeviceCacheError.textureAllocationFailed
+        }
+        guard let buffer = commandQueue.makeCommandBuffer(),
+              let blit = buffer.makeBlitCommandEncoder()
+        else {
+            throw MetalDeviceCacheError.commandBufferCreationFailed
+        }
+        blit.copy(from: destination, to: staging)
+        blit.endEncoding()
+        let semaphore = DispatchSemaphore(value: 0)
+        buffer.addCompletedHandler { _ in semaphore.signal() }
+        buffer.commit()
+        semaphore.wait()
+        if let error = buffer.error { throw error }
+
+        var maxR: Float = 0
+        var maxG: Float = 0
+        var maxB: Float = 0
+        var redNonZero = 0
+
+        switch staging.pixelFormat {
+        case .rgba16Float:
+            var halves = [UInt16](repeating: 0, count: pixelCount * 4)
+            halves.withUnsafeMutableBytes { bytes in
+                if let base = bytes.baseAddress {
+                    staging.getBytes(
+                        base,
+                        bytesPerRow: width * 4 * MemoryLayout<UInt16>.size,
+                        from: MTLRegionMake2D(0, 0, width, height),
+                        mipmapLevel: 0
+                    )
+                }
+            }
+            for i in 0..<pixelCount {
+                let r = Float(Float16(bitPattern: halves[i * 4 + 0]))
+                let g = Float(Float16(bitPattern: halves[i * 4 + 1]))
+                let b = Float(Float16(bitPattern: halves[i * 4 + 2]))
+                if r > maxR { maxR = r }
+                if g > maxG { maxG = g }
+                if b > maxB { maxB = b }
+                if r > 0.5 { redNonZero += 1 }
+            }
+        case .rgba32Float:
+            var floats = [Float](repeating: 0, count: pixelCount * 4)
+            floats.withUnsafeMutableBytes { bytes in
+                if let base = bytes.baseAddress {
+                    staging.getBytes(
+                        base,
+                        bytesPerRow: width * 4 * MemoryLayout<Float>.size,
+                        from: MTLRegionMake2D(0, 0, width, height),
+                        mipmapLevel: 0
+                    )
+                }
+            }
+            for i in 0..<pixelCount {
+                let r = floats[i * 4 + 0]
+                let g = floats[i * 4 + 1]
+                let b = floats[i * 4 + 2]
+                if r > maxR { maxR = r }
+                if g > maxG { maxG = g }
+                if b > maxB { maxB = b }
+                if r > 0.5 { redNonZero += 1 }
+            }
+        case .bgra8Unorm:
+            var bytes8 = [UInt8](repeating: 0, count: pixelCount * 4)
+            bytes8.withUnsafeMutableBytes { rawBytes in
+                if let base = rawBytes.baseAddress {
+                    staging.getBytes(
+                        base,
+                        bytesPerRow: width * 4,
+                        from: MTLRegionMake2D(0, 0, width, height),
+                        mipmapLevel: 0
+                    )
+                }
+            }
+            for i in 0..<pixelCount {
+                let b = Float(bytes8[i * 4 + 0]) / 255
+                let g = Float(bytes8[i * 4 + 1]) / 255
+                let r = Float(bytes8[i * 4 + 2]) / 255
+                if r > maxR { maxR = r }
+                if g > maxG { maxG = g }
+                if b > maxB { maxB = b }
+                if r > 0.5 { redNonZero += 1 }
+            }
+        default:
+            return (0, 0, 0, 0)
+        }
+        return (maxR, maxG, maxB, Double(redNonZero) / Double(pixelCount))
     }
 
     // MARK: - Synchronisation helpers
