@@ -126,6 +126,7 @@
 				OS0400000000000000000001 /* OnScreenControlOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = OS0300000000000000000001 /* OnScreenControlOverlay.swift */; };
 				FT0400000000000000000001 /* FourFrameUserFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT0300000000000000000001 /* FourFrameUserFlowTests.swift */; };
 				TP0400000000000000000001 /* TransportPolishTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TP0300000000000000000001 /* TransportPolishTests.swift */; };
+				PB0400000000000000000001 /* PreviewBackdropCompositingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PB0300000000000000000001 /* PreviewBackdropCompositingTests.swift */; };
 		/* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -267,6 +268,7 @@
 				OS0300000000000000000001 /* OnScreenControlOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OnScreenControlOverlay.swift; path = "CorridorKeyToolbox/WrapperApp/Standalone/Views/OnScreenControlOverlay.swift"; sourceTree = "<group>"; };
 				FT0300000000000000000001 /* FourFrameUserFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FourFrameUserFlowTests.swift; path = "Tests/WrapperAppTests/FourFrameUserFlowTests.swift"; sourceTree = "<group>"; };
 				TP0300000000000000000001 /* TransportPolishTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TransportPolishTests.swift; path = "Tests/WrapperAppTests/TransportPolishTests.swift"; sourceTree = "<group>"; };
+				PB0300000000000000000001 /* PreviewBackdropCompositingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PreviewBackdropCompositingTests.swift; path = "Tests/WrapperAppTests/PreviewBackdropCompositingTests.swift"; sourceTree = "<group>"; };
 		/* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -555,6 +557,7 @@
 				WT0A00000000000000000001 /* WrapperAppTests */ = {
 			isa = PBXGroup;
 			children = (
+				PB0300000000000000000001 /* PreviewBackdropCompositingTests.swift */,
 				TP0300000000000000000001 /* TransportPolishTests.swift */,
 				FT0300000000000000000001 /* FourFrameUserFlowTests.swift */,
 				ER0000000000000000000001 /* RealClipFixture.swift */,
@@ -821,6 +824,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				PB0400000000000000000001 /* PreviewBackdropCompositingTests.swift in Sources */,
 				TP0400000000000000000001 /* TransportPolishTests.swift in Sources */,
 				FT0400000000000000000001 /* FourFrameUserFlowTests.swift in Sources */,
 				EB0000000000000000000001 /* RealClipFixture.swift in Sources */,

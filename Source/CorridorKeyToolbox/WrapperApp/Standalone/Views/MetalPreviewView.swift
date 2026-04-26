@@ -97,10 +97,18 @@ struct MetalPreviewView: NSViewRepresentable {
             pipelineDescriptor.vertexFunction = library.makeFunction(name: "previewVertex")
             pipelineDescriptor.fragmentFunction = library.makeFunction(name: "previewFragment")
             pipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
+            // The compose shader writes the keyed image as
+            // **premultiplied alpha** (`float4(foreground * alpha,
+            // alpha)` for the Processed output mode). Pair that with
+            // standard premultiplied source-over blending so the
+            // chosen backdrop shows through where the matte is
+            // transparent — without this, a premultiplied-zero
+            // background gets drawn as solid black over the chequer
+            // pattern / colour fill.
             pipelineDescriptor.colorAttachments[0].isBlendingEnabled = true
             pipelineDescriptor.colorAttachments[0].rgbBlendOperation = .add
             pipelineDescriptor.colorAttachments[0].alphaBlendOperation = .add
-            pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
+            pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = .one
             pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = .one
             pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
             pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
@@ -147,25 +155,66 @@ struct MetalPreviewView: NSViewRepresentable {
             else { return }
             commandBuffer.label = "Corridor Key Standalone Preview"
 
-            // Use the solid-colour backdrops as the layer's clear
-            // colour so the area outside the aspect-fit quad picks
-            // up the same colour. The checkerboard option clears
-            // to a neutral dark grey and paints the actual chequer
-            // pattern inside the quad in a separate pass.
             descriptor.colorAttachments[0].clearColor = clearColorForBackdrop()
             descriptor.colorAttachments[0].loadAction = .clear
             descriptor.colorAttachments[0].storeAction = .store
 
+            encodeQuad(into: commandBuffer, descriptor: descriptor, drawableSize: CGSize(
+                width: CGFloat(drawable.texture.width),
+                height: CGFloat(drawable.texture.height)
+            ))
+            commandBuffer.present(drawable)
+            commandBuffer.commit()
+        }
+
+        /// Test-only entry point: draws one frame into the supplied
+        /// `target` texture using the same pipeline / blend state /
+        /// backdrop logic the real `draw(in:)` path uses, then
+        /// blocks until the GPU finishes so the caller can read the
+        /// pixels back. The unit tests use this to assert that the
+        /// premultiplied compose output composites correctly over
+        /// each backdrop without standing up a real `MTKView`.
+        func renderForTesting(into target: any MTLTexture) throws {
+            guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+                throw MetalPreviewBackingError.commandBufferUnavailable
+            }
+            commandBuffer.label = "Corridor Key Standalone Preview (test)"
+
+            let descriptor = MTLRenderPassDescriptor()
+            descriptor.colorAttachments[0].texture = target
+            descriptor.colorAttachments[0].clearColor = clearColorForBackdrop()
+            descriptor.colorAttachments[0].loadAction = .clear
+            descriptor.colorAttachments[0].storeAction = .store
+
+            encodeQuad(into: commandBuffer, descriptor: descriptor, drawableSize: CGSize(
+                width: CGFloat(target.width),
+                height: CGFloat(target.height)
+            ))
+            commandBuffer.commit()
+            commandBuffer.waitUntilCompleted()
+            if let error = commandBuffer.error {
+                throw error
+            }
+        }
+
+        /// Shared encode path. Lays out the quad inside the
+        /// drawable's bounds (or the test target's bounds), draws
+        /// the chequerboard pattern when that backdrop is selected,
+        /// then samples the keyed source onto the same quad with
+        /// premultiplied source-over blending. Both `draw(in:)` and
+        /// `renderForTesting(into:)` call this so the test suite
+        /// covers exactly the same shader path the live preview
+        /// uses.
+        private func encodeQuad(
+            into commandBuffer: any MTLCommandBuffer,
+            descriptor: MTLRenderPassDescriptor,
+            drawableSize: CGSize
+        ) {
             guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor) else {
-                commandBuffer.commit()
                 return
             }
             encoder.label = "Corridor Key Standalone Preview Quad"
 
-            let drawableSize = CGSize(
-                width: CGFloat(drawable.texture.width),
-                height: CGFloat(drawable.texture.height)
-            )
             let quadRect = aspectFittedRect(
                 for: aspectFitSize == .zero ? drawableSize : aspectFitSize,
                 in: drawableSize
@@ -187,8 +236,6 @@ struct MetalPreviewView: NSViewRepresentable {
             }
 
             encoder.endEncoding()
-            commandBuffer.present(drawable)
-            commandBuffer.commit()
         }
 
         /// Maps the user-selected backdrop to a clear colour that
@@ -274,11 +321,14 @@ struct MetalPreviewView: NSViewRepresentable {
                 texture2d<float> source [[texture(0)]]
             ) {
                 constexpr sampler textureSampler(filter::linear, address::clamp_to_edge);
-                float4 color = source.sample(textureSampler, in.uv);
-                // Force opaque on output so the underlying clear colour
-                // never bleeds through; the standalone preview always
-                // composites over a solid backdrop.
-                return float4(color.rgb, 1.0);
+                // Pass the premultiplied compose output straight
+                // through to the blend stage so the alpha channel
+                // actually composes against the chosen backdrop.
+                // The previous version forced alpha to 1.0, which
+                // baked the keyed image's premultiplied black
+                // background onto whichever backdrop the user
+                // picked.
+                return source.sample(textureSampler, in.uv);
             }
 
             fragment float4 previewCheckerFragment(
@@ -303,4 +353,11 @@ struct MetalPreviewView: NSViewRepresentable {
 private struct PreviewVertex {
     let position: SIMD2<Float>
     let uv: SIMD2<Float>
+}
+
+/// Errors the test-only `renderForTesting(into:)` entry point can
+/// surface. Production code paths funnel through `draw(in:)` and
+/// silently return on these conditions.
+enum MetalPreviewBackingError: Error {
+    case commandBufferUnavailable
 }
