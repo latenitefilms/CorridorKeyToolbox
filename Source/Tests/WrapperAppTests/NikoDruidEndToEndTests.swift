@@ -86,14 +86,14 @@ struct NikoDruidEndToEndTests {
         #expect(stats.nonZeroFraction > 0.5, "Less than half the destination pixels are non-zero (got \(stats.nonZeroFraction)).")
     }
 
-    @Test("standalone analyse on one frame matches FxPlug extractAlphaMatteForAnalysis byte-for-byte")
+    @Test("standalone analyse on one frame matches FxPlug extractAlphaMatteForAnalysis after the y-flip the standalone applies for AVFoundation orientation")
     func analyseSubsetMatchesFxPlugMatte() async throws {
         let url = try #require(RealClipFixture.realClipURL())
         let source = try await VideoSource(url: url)
         // Use a deterministic mid-clip frame so the test isn't flaky
         // around the leader frames AVAssetImageGenerator sometimes
         // returns at t=0.
-        let probeTime = CMTime(seconds: 1.0, preferredTimescale: 24_000)
+        let probeTime = CMTime(seconds: 0.0, preferredTimescale: 24_000)
         let pixelBuffer = try await source.makeFrame(atTime: probeTime)
 
         let engine = try StandaloneRenderEngine()
@@ -126,16 +126,59 @@ struct NikoDruidEndToEndTests {
         #expect(standaloneOutput.height == directOutput.height)
         #expect(standaloneOutput.alphaFloats.count == directOutput.alpha.count)
 
-        // Pixel-perfect equality across two independent runs of MLX +
-        // post-processing on the same input. Tolerance kept tight
-        // because both paths share the same `RenderPipeline` and MLX
-        // is deterministic for identical inputs.
-        let pairs = zip(standaloneOutput.alphaFloats, directOutput.alpha)
+        // Pixel-perfect equality after re-applying the y-flip: the
+        // standalone path stores its alpha in AVFoundation top-left
+        // convention, the direct call returns it in FxPlug's
+        // bottom-left convention; flipping the direct output should
+        // get us byte-for-byte parity. If this regresses we'd be
+        // shipping a matte that doesn't line up with Final Cut Pro's
+        // version of the same render.
+        let flippedDirect = StandaloneRenderEngine.verticalFlipAlpha(
+            directOutput.alpha,
+            width: directOutput.width,
+            height: directOutput.height
+        )
+        let pairs = zip(standaloneOutput.alphaFloats, flippedDirect)
         let maxDelta = pairs.reduce(into: Float(0)) { acc, pair in
             acc = max(acc, abs(pair.0 - pair.1))
         }
         #expect(maxDelta <= 1.0e-4,
-                "Standalone matte differs from direct-pipeline matte by up to \(maxDelta) — the standalone editor would not produce parity with Final Cut Pro.")
+                "Standalone matte differs from y-flipped direct-pipeline matte by up to \(maxDelta) — the standalone editor would not produce parity with Final Cut Pro.")
+
+        // And the un-flipped direct output must NOT match — that
+        // would mean the y-flip didn't actually run, and we'd
+        // regress to the original "matte upside-down" bug.
+        let unflippedPairs = zip(standaloneOutput.alphaFloats, directOutput.alpha)
+        let unflippedMaxDelta = unflippedPairs.reduce(into: Float(0)) { acc, pair in
+            acc = max(acc, abs(pair.0 - pair.1))
+        }
+        #expect(unflippedMaxDelta > 0.001,
+                "Un-flipped direct matte matches the standalone matte — the y-flip didn't take effect.")
+    }
+
+    @Test("verticalFlipAlpha is an involution: flipping twice round-trips to the original buffer")
+    func verticalFlipAlphaIsInvolution() {
+        let width = 4
+        let height = 3
+        let original: [Float] = [
+            1.0, 1.1, 1.2, 1.3,
+            2.0, 2.1, 2.2, 2.3,
+            3.0, 3.1, 3.2, 3.3
+        ]
+        let flippedOnce = StandaloneRenderEngine.verticalFlipAlpha(
+            original,
+            width: width,
+            height: height
+        )
+        // First row of `flippedOnce` should be the LAST row of
+        // `original` — that's how we know rows are being swapped.
+        #expect(Array(flippedOnce.prefix(width)) == [3.0, 3.1, 3.2, 3.3])
+        let flippedTwice = StandaloneRenderEngine.verticalFlipAlpha(
+            flippedOnce,
+            width: width,
+            height: height
+        )
+        #expect(flippedTwice == original)
     }
 
     @Test("full analyse → export round-trip produces a playable ProRes 4444 movie",

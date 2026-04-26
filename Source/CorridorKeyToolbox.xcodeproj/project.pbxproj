@@ -123,6 +123,8 @@
 		WB0000000000000000000007 /* EditorViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = WR0000000000000000000007 /* EditorViewModelTests.swift */; };
 				EB0000000000000000000001 /* RealClipFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = ER0000000000000000000001 /* RealClipFixture.swift */; };
 		EB0000000000000000000002 /* NikoDruidEndToEndTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ER0000000000000000000002 /* NikoDruidEndToEndTests.swift */; };
+				OS0400000000000000000001 /* OnScreenControlOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = OS0300000000000000000001 /* OnScreenControlOverlay.swift */; };
+				FT0400000000000000000001 /* FourFrameUserFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT0300000000000000000001 /* FourFrameUserFlowTests.swift */; };
 		/* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -261,6 +263,8 @@
 		WT0300000000000000000001 /* WrapperAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WrapperAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 				ER0000000000000000000001 /* RealClipFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RealClipFixture.swift; path = "Tests/WrapperAppTests/RealClipFixture.swift"; sourceTree = "<group>"; };
 		ER0000000000000000000002 /* NikoDruidEndToEndTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NikoDruidEndToEndTests.swift; path = "Tests/WrapperAppTests/NikoDruidEndToEndTests.swift"; sourceTree = "<group>"; };
+				OS0300000000000000000001 /* OnScreenControlOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OnScreenControlOverlay.swift; path = "CorridorKeyToolbox/WrapperApp/Standalone/Views/OnScreenControlOverlay.swift"; sourceTree = "<group>"; };
+				FT0300000000000000000001 /* FourFrameUserFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FourFrameUserFlowTests.swift; path = "Tests/WrapperAppTests/FourFrameUserFlowTests.swift"; sourceTree = "<group>"; };
 		/* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -549,6 +553,7 @@
 				WT0A00000000000000000001 /* WrapperAppTests */ = {
 			isa = PBXGroup;
 			children = (
+				FT0300000000000000000001 /* FourFrameUserFlowTests.swift */,
 				ER0000000000000000000001 /* RealClipFixture.swift */,
 				ER0000000000000000000002 /* NikoDruidEndToEndTests.swift */,
 				WR0000000000000000000002 /* SyntheticVideoFixture.swift */,
@@ -723,6 +728,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				OS0400000000000000000001 /* OnScreenControlOverlay.swift in Sources */,
 				SB0000000000000000000001 /* PixelBufferTextureBridge.swift in Sources */,
 				SB0000000000000000000002 /* VideoSource.swift in Sources */,
 				SB0000000000000000000003 /* StandaloneRenderEngine.swift in Sources */,
@@ -812,6 +818,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FT0400000000000000000001 /* FourFrameUserFlowTests.swift in Sources */,
 				EB0000000000000000000001 /* RealClipFixture.swift in Sources */,
 				EB0000000000000000000002 /* NikoDruidEndToEndTests.swift in Sources */,
 				WB0000000000000000000002 /* SyntheticVideoFixture.swift in Sources */,

@@ -120,7 +120,10 @@ final class StandaloneRenderEngine: @unchecked Sendable {
     /// Runs the FxAnalyzer-equivalent extraction step on a single
     /// frame. Returns the encoded matte blob ready to be stored in the
     /// project's matte cache. Mirrors `RenderPipeline.extractAlphaMatteForAnalysis`
-    /// but exposes only the bits the standalone editor needs.
+    /// but exposes only the bits the standalone editor needs and
+    /// reorients the alpha bytes so they line up with the
+    /// AVFoundation-native top-left source frames the standalone
+    /// editor renders against (see `Self.verticalFlipAlpha`).
     func extractMatteBlob(
         source pixelBuffer: CVPixelBuffer,
         state: PluginStateData,
@@ -143,8 +146,24 @@ final class StandaloneRenderEngine: @unchecked Sendable {
             commandQueue: commandQueue,
             readbackSource: state.temporalStabilityEnabled
         )
+        // The pipeline's alpha output is y-flipped because of the
+        // `corridorKeyAlphaBufferToTextureKernel` step that was
+        // added to match Final Cut Pro's bottom-left FxPlug
+        // coordinate system. AVFoundation gives the standalone
+        // editor source frames in top-left convention; if we
+        // store the cache as-is the matte appears upside-down
+        // relative to the source when composed. Flipping here
+        // (and only here) keeps the rest of the pipeline
+        // unchanged for the FxPlug renderer while making the
+        // standalone editor's keyed output match what the user
+        // sees in Final Cut Pro.
+        let flippedAlpha = Self.verticalFlipAlpha(
+            extracted.alpha,
+            width: extracted.width,
+            height: extracted.height
+        )
         let blob = try MatteCodec.encode(
-            alpha: extracted.alpha,
+            alpha: flippedAlpha,
             width: extracted.width,
             height: extracted.height
         )
@@ -155,8 +174,30 @@ final class StandaloneRenderEngine: @unchecked Sendable {
             inferenceResolution: extracted.inferenceResolution,
             engineDescription: extracted.engineDescription,
             sourceFloats: extracted.source,
-            alphaFloats: extracted.alpha
+            alphaFloats: flippedAlpha
         )
+    }
+
+    /// In-place row reversal used to convert the alpha buffer
+    /// returned by `RenderPipeline.extractAlphaMatteForAnalysis`
+    /// (which is y-flipped to match FxPlug's bottom-left coordinate
+    /// system) into the AVFoundation-native top-left layout the
+    /// standalone editor expects.
+    static func verticalFlipAlpha(_ alpha: [Float], width: Int, height: Int) -> [Float] {
+        precondition(alpha.count == width * height, "Alpha buffer length must equal width * height.")
+        var flipped = [Float](repeating: 0, count: width * height)
+        flipped.withUnsafeMutableBufferPointer { destPointer in
+            alpha.withUnsafeBufferPointer { srcPointer in
+                guard let src = srcPointer.baseAddress, let dst = destPointer.baseAddress else { return }
+                let rowBytes = width * MemoryLayout<Float>.size
+                for y in 0..<height {
+                    let srcRow = src.advanced(by: (height - 1 - y) * width)
+                    let dstRow = dst.advanced(by: y * width)
+                    memcpy(dstRow, srcRow, rowBytes)
+                }
+            }
+        }
+        return flipped
     }
 
     /// Eagerly warms up the MLX bridge for the chosen quality rung.

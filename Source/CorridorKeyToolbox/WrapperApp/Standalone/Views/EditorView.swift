@@ -56,6 +56,9 @@ struct EditorView: View {
             ToolbarItem(placement: .principal) {
                 Text(toolbarTitle)
                     .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .padding(.horizontal, 24)
             }
         }
         .navigationTitle(toolbarTitle)
@@ -113,7 +116,7 @@ struct EditorView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.black)
         case .ready, .loadFailed:
-            ZStack {
+            ZStack(alignment: .top) {
                 Color.black.ignoresSafeArea()
                 MetalPreviewView(
                     device: viewModel.renderEngine.device,
@@ -121,6 +124,13 @@ struct EditorView: View {
                     aspectFitSize: viewModel.renderSize,
                     drawCheckerboardBackdrop: showCheckerboard
                 )
+                OnScreenControlOverlay(
+                    viewModel: viewModel,
+                    renderSize: viewModel.renderSize
+                )
+                .allowsHitTesting(viewModel.oscTool != .disabled)
+                OSCToolbar(viewModel: viewModel)
+                    .padding(.top, 12)
                 if viewModel.latestPreview == nil {
                     Text("Rendering preview…")
                         .foregroundStyle(.secondary)
@@ -133,7 +143,9 @@ struct EditorView: View {
         switch viewModel.phase {
         case .noClipLoaded: return "Corridor Key Toolbox"
         case .loadingClip: return "Loading…"
-        case .ready: return viewModel.clipInfo?.url.lastPathComponent ?? "Corridor Key Toolbox"
+        case .ready:
+            guard let url = viewModel.clipInfo?.url else { return "Corridor Key Toolbox" }
+            return url.deletingPathExtension().lastPathComponent
         case .loadFailed: return "Couldn't load clip"
         }
     }

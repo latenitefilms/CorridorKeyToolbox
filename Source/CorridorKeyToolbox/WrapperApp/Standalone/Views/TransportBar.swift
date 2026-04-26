@@ -2,10 +2,14 @@
 //  TransportBar.swift
 //  Corridor Key Toolbox — Standalone Editor
 //
-//  Mac-native scrubber + step buttons that sit beneath the preview
-//  surface. The slider drives `EditorViewModel.scrub`, which snaps to
-//  the nearest source frame; the step buttons advance / rewind by
-//  whole frames.
+//  Mac-native transport bar that sits beneath the preview surface.
+//  Modelled after QuickTime Player's controls: a centred play / pause
+//  button with frame-step buttons either side, a loop toggle on the
+//  right, a current-time / duration label, and a scrubber spanning
+//  the bar. The leading column hosts the import / close / export
+//  workflow buttons; the trailing column hosts the loop and OSC
+//  affordances. The slider drives `EditorViewModel.scrub`, which
+//  snaps to the nearest source frame.
 //
 
 import SwiftUI
@@ -18,7 +22,7 @@ struct TransportBar: View {
     let onExport: () -> Void
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             HStack(spacing: 12) {
                 Button("Import…", systemImage: "square.and.arrow.down", action: onImport)
                     .buttonStyle(.bordered)
@@ -29,16 +33,16 @@ struct TransportBar: View {
 
                 Spacer()
 
-                Button("Step Back", systemImage: "backward.frame.fill", action: { viewModel.step(byFrames: -1) })
-                    .buttonStyle(.borderless)
-                    .labelStyle(.iconOnly)
-                    .disabled(!viewModel.phase.isReady)
-                Button("Step Forward", systemImage: "forward.frame.fill", action: { viewModel.step(byFrames: 1) })
-                    .buttonStyle(.borderless)
-                    .labelStyle(.iconOnly)
-                    .disabled(!viewModel.phase.isReady)
+                playbackCluster
 
                 Spacer()
+
+                Toggle(isOn: $viewModel.loopEnabled) {
+                    Label("Loop", systemImage: "repeat")
+                }
+                .toggleStyle(.button)
+                .controlSize(.regular)
+                .help("Restart playback when the clip ends.")
 
                 Button("Export…", systemImage: "square.and.arrow.up", action: onExport)
                     .buttonStyle(.borderedProminent)
@@ -52,12 +56,45 @@ struct TransportBar: View {
         .background(.regularMaterial)
     }
 
+    private var playbackCluster: some View {
+        HStack(spacing: 14) {
+            Button("Step Back", systemImage: "backward.frame.fill") {
+                viewModel.step(byFrames: -1)
+            }
+            .buttonStyle(.borderless)
+            .labelStyle(.iconOnly)
+            .disabled(!viewModel.phase.isReady)
+            .controlSize(.large)
+
+            Button(
+                viewModel.isPlaying ? "Pause" : "Play",
+                systemImage: viewModel.isPlaying ? "pause.fill" : "play.fill"
+            ) {
+                viewModel.togglePlayback()
+            }
+            .buttonStyle(.borderless)
+            .labelStyle(.iconOnly)
+            .disabled(!viewModel.phase.isReady)
+            .controlSize(.extraLarge)
+            .keyboardShortcut(.space, modifiers: [])
+            .font(.title2)
+
+            Button("Step Forward", systemImage: "forward.frame.fill") {
+                viewModel.step(byFrames: 1)
+            }
+            .buttonStyle(.borderless)
+            .labelStyle(.iconOnly)
+            .disabled(!viewModel.phase.isReady)
+            .controlSize(.large)
+        }
+    }
+
     private var scrubberRow: some View {
         HStack(spacing: 10) {
             Text(timeLabel(for: viewModel.playheadTime))
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
-                .frame(width: 80, alignment: .leading)
+                .frame(width: 90, alignment: .leading)
 
             Slider(
                 value: Binding(
@@ -68,16 +105,27 @@ struct TransportBar: View {
             )
             .disabled(!viewModel.phase.isReady)
 
-            Text(timeLabel(for: viewModel.clipInfo?.duration ?? .zero))
+            Text("\(currentFrameLabel) / \(totalFrameLabel)")
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
-                .frame(width: 80, alignment: .trailing)
+                .frame(width: 110, alignment: .trailing)
         }
     }
 
     private var normalizedPlayhead: Double {
         guard let info = viewModel.clipInfo, info.duration.seconds > 0 else { return 0 }
         return min(max(viewModel.playheadTime.seconds / info.duration.seconds, 0), 1)
+    }
+
+    private var currentFrameLabel: String {
+        guard let info = viewModel.clipInfo else { return "0" }
+        let frameRate = max(Double(info.nominalFrameRate), 0.001)
+        let frame = Int((viewModel.playheadTime.seconds * frameRate).rounded())
+        return String(frame + 1)
+    }
+
+    private var totalFrameLabel: String {
+        viewModel.totalFrames > 0 ? "\(viewModel.totalFrames) f" : "—"
     }
 
     private func timeLabel(for time: CMTime) -> String {

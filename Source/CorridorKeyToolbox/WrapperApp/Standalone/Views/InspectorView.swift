@@ -19,19 +19,39 @@ struct InspectorView: View {
 
     var body: some View {
         ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 0) {
+                InspectorGroupSeparator(isFirst: true)
                 AnalysisStatusGroup(viewModel: viewModel)
+                InspectorGroupSeparator()
                 SettingsGroup(viewModel: viewModel)
+                InspectorGroupSeparator()
                 InteriorDetailGroup(viewModel: viewModel)
+                InspectorGroupSeparator()
                 MatteGroup(viewModel: viewModel)
+                InspectorGroupSeparator()
                 EdgeAndSpillGroup(viewModel: viewModel)
+                InspectorGroupSeparator()
                 EdgeRefinementGroup(viewModel: viewModel)
+                InspectorGroupSeparator()
                 TemporalStabilityGroup(viewModel: viewModel)
             }
-            .padding(20)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
         }
         .background(.regularMaterial)
         .scrollIndicators(.hidden)
+    }
+}
+
+/// Visual separator between inspector groups. Inset slightly so it
+/// reads as a section divider rather than a full-width edge.
+private struct InspectorGroupSeparator: View {
+    var isFirst: Bool = false
+
+    var body: some View {
+        Divider()
+            .padding(.top, isFirst ? 8 : 18)
+            .padding(.bottom, isFirst ? 14 : 18)
     }
 }
 

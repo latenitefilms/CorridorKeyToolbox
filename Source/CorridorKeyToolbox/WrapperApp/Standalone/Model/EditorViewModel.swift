@@ -66,6 +66,36 @@ enum EditorExportStatus: @unchecked Sendable, Equatable {
     }
 }
 
+/// Modes the on-screen control overlay can be in. The user picks one
+/// from the inspector; clicking the preview surface in any mode other
+/// than `.disabled` adds or removes a hint point.
+enum OnScreenControlTool: Hashable, Sendable, CaseIterable, Identifiable {
+    case disabled
+    case foregroundHint
+    case backgroundHint
+    case eraseHint
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .disabled: return "Off"
+        case .foregroundHint: return "Foreground"
+        case .backgroundHint: return "Background"
+        case .eraseHint: return "Erase"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .disabled: return "circle.slash"
+        case .foregroundHint: return "plus.circle.fill"
+        case .backgroundHint: return "minus.circle.fill"
+        case .eraseHint: return "eraser"
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class EditorViewModel {
@@ -111,6 +141,16 @@ final class EditorViewModel {
     /// Last-known engine description (mirrors the FxPlug
     /// "Inference Backend" badge — surfaces "MLX" vs "Rough matte").
     var lastEngineDescription: String = "—"
+    /// Whether the transport is currently playing back. Drives the
+    /// play / pause button glyph and the periodic playhead-advance
+    /// timer.
+    var isPlaying: Bool = false
+    /// Whether playback should restart from frame 0 when it reaches
+    /// the end of the clip. QuickTime's loop control mirrored.
+    var loopEnabled: Bool = false
+    /// Currently-active OSC tool — drives the click handler on the
+    /// preview surface.
+    var oscTool: OnScreenControlTool = .disabled
 
     // MARK: - Internal state
 
@@ -127,6 +167,11 @@ final class EditorViewModel {
     /// edit; whoever fires last wins.
     @ObservationIgnored
     private var pendingPreviewTask: Task<Void, Never>?
+    /// Background timer that drives playback. Owned by `togglePlayback`
+    /// and torn down by `stopPlayback` so the playhead doesn't keep
+    /// advancing after the user pauses.
+    @ObservationIgnored
+    private var playbackTimer: Timer?
 
     init(renderEngine: StandaloneRenderEngine) {
         self.renderEngine = renderEngine
@@ -163,6 +208,7 @@ final class EditorViewModel {
     /// state. Cancels any in-flight analyse / export work.
     func closeClip() {
         cancelInflightWork()
+        stopPlayback()
         videoSource = nil
         clipInfo = nil
         latestPreview = nil
@@ -173,6 +219,74 @@ final class EditorViewModel {
         renderBackendDescription = "—"
         lastEngineDescription = "—"
         phase = .noClipLoaded
+    }
+
+    // MARK: - Playback transport
+
+    /// Starts or stops playback. Each tick of the playback timer
+    /// advances the playhead by one source frame; when it reaches
+    /// the end of the clip we either loop back to frame 0 or stop
+    /// based on `loopEnabled`.
+    func togglePlayback() {
+        if isPlaying {
+            stopPlayback()
+        } else {
+            startPlayback()
+        }
+    }
+
+    private func startPlayback() {
+        guard let clipInfo, !isPlaying else { return }
+        let interval = 1.0 / max(Double(clipInfo.nominalFrameRate), 1.0)
+        isPlaying = true
+        playbackTimer?.invalidate()
+        playbackTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.advancePlaybackTick()
+            }
+        }
+    }
+
+    private func stopPlayback() {
+        playbackTimer?.invalidate()
+        playbackTimer = nil
+        isPlaying = false
+    }
+
+    /// One tick of the playback timer. Steps the playhead by one
+    /// frame, wraps to zero when looping, or stops when reaching
+    /// the end without looping.
+    private func advancePlaybackTick() {
+        guard isPlaying else { return }
+        let currentFrame = currentFrameIndex(at: playheadTime)
+        let lastFrame = max(totalFrames - 1, 0)
+        if currentFrame >= lastFrame {
+            if loopEnabled {
+                seek(toFrameIndex: 0)
+            } else {
+                stopPlayback()
+            }
+            return
+        }
+        seek(toFrameIndex: currentFrame + 1)
+    }
+
+    /// Toggles the loop affordance. Keeps playback running if it
+    /// was; lets the user enable it mid-playback so the transport
+    /// keeps the playhead from running off the end.
+    func toggleLoop() {
+        loopEnabled.toggle()
+    }
+
+    private func seek(toFrameIndex frameIndex: Int) {
+        guard let clipInfo else { return }
+        let frameRate = max(Double(clipInfo.nominalFrameRate), 0.001)
+        let target = CMTime(
+            seconds: Double(frameIndex) / frameRate,
+            preferredTimescale: clipInfo.timescale
+        )
+        playheadTime = target
+        renderPreview(at: target)
     }
 
     // MARK: - Transport
@@ -268,6 +382,40 @@ final class EditorViewModel {
     /// edits a parameter so the change is reflected immediately.
     func parameterDidChange() {
         renderPreview(at: playheadTime)
+    }
+
+    // MARK: - On-screen control (OSC)
+
+    /// Handles a click anywhere on the preview surface. Coordinates
+    /// are normalised (0…1) — `(0, 0)` is top-left, `(1, 1)` is
+    /// bottom-right of the rendered frame, matching the convention
+    /// the FxPlug OSC writes into the `HintPointSet` parameter.
+    /// No-op when the tool is `.disabled`.
+    func handleOSCClick(atNormalizedPoint point: CGPoint) {
+        let tool = oscTool
+        let clampedX = min(max(Double(point.x), 0), 1)
+        let clampedY = min(max(Double(point.y), 0), 1)
+        switch tool {
+        case .disabled:
+            return
+        case .foregroundHint:
+            state.hintPointSet.add(HintPoint(x: clampedX, y: clampedY, kind: .foreground))
+        case .backgroundHint:
+            state.hintPointSet.add(HintPoint(x: clampedX, y: clampedY, kind: .background))
+        case .eraseHint:
+            state.hintPointSet.removeNearest(toX: clampedX, y: clampedY, tolerance: 0.05)
+        }
+        // Hints feed the MLX bridge at analysis time. Re-render the
+        // preview now so the dot appears immediately, and prompt the
+        // user to re-analyse to see the matte respond to the new
+        // hints.
+        parameterDidChange()
+    }
+
+    /// Wipes every placed hint point.
+    func clearAllHints() {
+        state.hintPointSet.clear()
+        parameterDidChange()
     }
 
     // MARK: - Analysis
