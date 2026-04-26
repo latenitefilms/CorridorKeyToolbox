@@ -16,12 +16,12 @@
 		22D097FF2F9887BD0096E749 /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = 22D097FE2F9887BD0096E749 /* Credits.rtf */; };
 		22D0980E2F988FB70096E749 /* Motion Template in Resources */ = {isa = PBXBuildFile; fileRef = 22D0980D2F988FB70096E749 /* Motion Template */; };
 		CK0100000000000000000001 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000001 /* main.swift */; };
-		CK0100000000000000000002 /* CorridorKeyToolboxPlugIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000002 /* CorridorKeyToolboxPlugIn.swift */; };
-		CK0100000000000000000003 /* CorridorKeyToolboxPlugIn+Parameters.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000003 /* CorridorKeyToolboxPlugIn+Parameters.swift */; };
-		CK0100000000000000000004 /* CorridorKeyToolboxPlugIn+PluginState.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000004 /* CorridorKeyToolboxPlugIn+PluginState.swift */; };
-		CK0100000000000000000005 /* CorridorKeyToolboxPlugIn+Properties.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000005 /* CorridorKeyToolboxPlugIn+Properties.swift */; };
-		CK0100000000000000000006 /* CorridorKeyToolboxPlugIn+RenderRects.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000006 /* CorridorKeyToolboxPlugIn+RenderRects.swift */; };
-		CK0100000000000000000007 /* CorridorKeyToolboxPlugIn+Render.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000007 /* CorridorKeyToolboxPlugIn+Render.swift */; };
+		CK0100000000000000000002 /* CorridorKeyByLateNitePlugIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000002 /* CorridorKeyByLateNitePlugIn.swift */; };
+		CK0100000000000000000003 /* CorridorKeyByLateNitePlugIn+Parameters.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000003 /* CorridorKeyByLateNitePlugIn+Parameters.swift */; };
+		CK0100000000000000000004 /* CorridorKeyByLateNitePlugIn+PluginState.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000004 /* CorridorKeyByLateNitePlugIn+PluginState.swift */; };
+		CK0100000000000000000005 /* CorridorKeyByLateNitePlugIn+Properties.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000005 /* CorridorKeyByLateNitePlugIn+Properties.swift */; };
+		CK0100000000000000000006 /* CorridorKeyByLateNitePlugIn+RenderRects.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000006 /* CorridorKeyByLateNitePlugIn+RenderRects.swift */; };
+		CK0100000000000000000007 /* CorridorKeyByLateNitePlugIn+Render.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000007 /* CorridorKeyByLateNitePlugIn+Render.swift */; };
 		CK0100000000000000000009 /* ParameterIdentifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000009 /* ParameterIdentifiers.swift */; };
 		CK010000000000000000000A /* ParameterEnumerations.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK020000000000000000000A /* ParameterEnumerations.swift */; };
 		CK010000000000000000000B /* PluginStateData.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK020000000000000000000B /* PluginStateData.swift */; };
@@ -32,7 +32,7 @@
 		CK0100000000000000000012 /* InferenceCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000012 /* InferenceCoordinator.swift */; };
 		CK0100000000000000000013 /* RenderPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000013 /* RenderPipeline.swift */; };
 		CK0100000000000000000014 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000014 /* InfoPlist.strings */; };
-		CK0100000000000000000015 /* CorridorKeyToolboxApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000015 /* CorridorKeyToolboxApp.swift */; };
+		CK0100000000000000000015 /* CorridorKeyByLateNiteApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000015 /* CorridorKeyByLateNiteApp.swift */; };
 		CK0100000000000000000016 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000016 /* WelcomeView.swift */; };
 		CK0100000000000000000017 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000017 /* InfoPlist.strings */; };
 		CK0100000000000000000018 /* CorridorKey by LateNite Renderer.pluginkit in Embed PlugIns */ = {isa = PBXBuildFile; fileRef = CK0300000000000000000002 /* CorridorKey by LateNite Renderer.pluginkit */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -46,10 +46,10 @@
 		CK0100000000000000000021 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CK0400000000000000000008 /* Accelerate.framework */; };
 		CK010000000000000000002A /* MotionTemplateInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK020000000000000000002A /* MotionTemplateInstaller.swift */; };
 		CK0100000000000000000040 /* PluginLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000040 /* PluginLog.swift */; };
-		CK0100000000000000000050 /* CorridorKeyToolboxPlugIn+FxAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000050 /* CorridorKeyToolboxPlugIn+FxAnalyzer.swift */; };
+		CK0100000000000000000050 /* CorridorKeyByLateNitePlugIn+FxAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000050 /* CorridorKeyByLateNitePlugIn+FxAnalyzer.swift */; };
 		CK0100000000000000000051 /* AnalysisData.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000051 /* AnalysisData.swift */; };
 		CK0100000000000000000052 /* MatteCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000052 /* MatteCodec.swift */; };
-		CK0100000000000000000060 /* CorridorKeyToolboxPlugIn+CustomViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000060 /* CorridorKeyToolboxPlugIn+CustomViews.swift */; };
+		CK0100000000000000000060 /* CorridorKeyByLateNitePlugIn+CustomViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000060 /* CorridorKeyByLateNitePlugIn+CustomViews.swift */; };
 		CK0100000000000000000061 /* CorridorKeyInspectorBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000061 /* CorridorKeyInspectorBridge.swift */; };
 		CK0100000000000000000062 /* CorridorKeyHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000062 /* CorridorKeyHeaderView.swift */; };
 		CK0100000000000000000063 /* CorridorKeyAnalysisSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000063 /* CorridorKeyAnalysisSnapshot.swift */; };
@@ -177,53 +177,53 @@
 		221345DE2F98BC6800CF734C /* corridorkey_mlx_bridge_1024.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_1024.mlxfn; sourceTree = "<group>"; };
 		221345DF2F98BC6800CF734C /* corridorkey_mlx_bridge_1536.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_1536.mlxfn; sourceTree = "<group>"; };
 		221345E02F98BC6800CF734C /* corridorkey_mlx_bridge_2048.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_2048.mlxfn; sourceTree = "<group>"; };
-		221345E72F99948900CF734C /* VFX Toolbox.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; name = "VFX Toolbox.icon"; path = "CorridorKeyToolbox/WrapperApp/VFX Toolbox.icon"; sourceTree = "<group>"; };
-		22D097FE2F9887BD0096E749 /* Credits.rtf */ = {isa = PBXFileReference; lastKnownFileType = text.rtf; name = Credits.rtf; path = CorridorKeyToolbox/WrapperApp/Credits.rtf; sourceTree = "<group>"; };
-		22D0980D2F988FB70096E749 /* Motion Template */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "Motion Template"; path = "CorridorKeyToolbox/WrapperApp/Resources/Motion Template"; sourceTree = "<group>"; };
-		CK0200000000000000000001 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = main.swift; path = CorridorKeyToolbox/Plugin/main.swift; sourceTree = "<group>"; };
-		CK0200000000000000000002 /* CorridorKeyToolboxPlugIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyToolboxPlugIn.swift; path = CorridorKeyToolbox/Plugin/CorridorKeyToolboxPlugIn.swift; sourceTree = "<group>"; };
-		CK0200000000000000000003 /* CorridorKeyToolboxPlugIn+Parameters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyToolboxPlugIn+Parameters.swift"; path = "CorridorKeyToolbox/Plugin/Parameters/CorridorKeyToolboxPlugIn+Parameters.swift"; sourceTree = "<group>"; };
-		CK0200000000000000000004 /* CorridorKeyToolboxPlugIn+PluginState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyToolboxPlugIn+PluginState.swift"; path = "CorridorKeyToolbox/Plugin/CorridorKeyToolboxPlugIn+PluginState.swift"; sourceTree = "<group>"; };
-		CK0200000000000000000005 /* CorridorKeyToolboxPlugIn+Properties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyToolboxPlugIn+Properties.swift"; path = "CorridorKeyToolbox/Plugin/CorridorKeyToolboxPlugIn+Properties.swift"; sourceTree = "<group>"; };
-		CK0200000000000000000006 /* CorridorKeyToolboxPlugIn+RenderRects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyToolboxPlugIn+RenderRects.swift"; path = "CorridorKeyToolbox/Plugin/CorridorKeyToolboxPlugIn+RenderRects.swift"; sourceTree = "<group>"; };
-		CK0200000000000000000007 /* CorridorKeyToolboxPlugIn+Render.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyToolboxPlugIn+Render.swift"; path = "CorridorKeyToolbox/Plugin/CorridorKeyToolboxPlugIn+Render.swift"; sourceTree = "<group>"; };
-		CK0200000000000000000009 /* ParameterIdentifiers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ParameterIdentifiers.swift; path = CorridorKeyToolbox/Plugin/Parameters/ParameterIdentifiers.swift; sourceTree = "<group>"; };
-		CK020000000000000000000A /* ParameterEnumerations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ParameterEnumerations.swift; path = CorridorKeyToolbox/Plugin/Parameters/ParameterEnumerations.swift; sourceTree = "<group>"; };
-		CK020000000000000000000B /* PluginStateData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PluginStateData.swift; path = CorridorKeyToolbox/Plugin/Parameters/PluginStateData.swift; sourceTree = "<group>"; };
-		CK020000000000000000000C /* MetalDeviceCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MetalDeviceCache.swift; path = CorridorKeyToolbox/Plugin/Metal/MetalDeviceCache.swift; sourceTree = "<group>"; };
-		CK020000000000000000000D /* CorridorKeyShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; name = CorridorKeyShaders.metal; path = CorridorKeyToolbox/Plugin/Metal/CorridorKeyShaders.metal; sourceTree = "<group>"; };
-		CK020000000000000000000E /* ScreenColorEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ScreenColorEstimator.swift; path = CorridorKeyToolbox/Plugin/PostProcess/ScreenColorEstimator.swift; sourceTree = "<group>"; };
-		CK020000000000000000000F /* KeyingInferenceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = KeyingInferenceEngine.swift; path = CorridorKeyToolbox/Plugin/Inference/KeyingInferenceEngine.swift; sourceTree = "<group>"; };
-		CK0200000000000000000012 /* InferenceCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InferenceCoordinator.swift; path = CorridorKeyToolbox/Plugin/Inference/InferenceCoordinator.swift; sourceTree = "<group>"; };
-		CK0200000000000000000013 /* RenderPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RenderPipeline.swift; path = CorridorKeyToolbox/Plugin/Render/RenderPipeline.swift; sourceTree = "<group>"; };
-		CK0200000000000000000015 /* CorridorKeyToolboxApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyToolboxApp.swift; path = CorridorKeyToolbox/WrapperApp/CorridorKeyToolboxApp.swift; sourceTree = "<group>"; };
-		CK0200000000000000000016 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WelcomeView.swift; path = CorridorKeyToolbox/WrapperApp/WelcomeView.swift; sourceTree = "<group>"; };
-		CK0200000000000000000020 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = CorridorKeyToolbox/Plugin/Info.plist; sourceTree = "<group>"; };
-		CK0200000000000000000021 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = CorridorKeyToolbox/WrapperApp/Info.plist; sourceTree = "<group>"; };
-		CK0200000000000000000022 /* CorridorKeyToolbox.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = CorridorKeyToolbox.entitlements; path = CorridorKeyToolbox/Plugin/CorridorKeyToolbox.entitlements; sourceTree = "<group>"; };
-		CK0200000000000000000023 /* WrapperApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = WrapperApp.entitlements; path = CorridorKeyToolbox/WrapperApp/WrapperApp.entitlements; sourceTree = "<group>"; };
-		CK0200000000000000000024 /* CorridorKeyShaderTypes.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CorridorKeyShaderTypes.h; path = CorridorKeyToolbox/Plugin/Shared/CorridorKeyShaderTypes.h; sourceTree = "<group>"; };
-		CK0200000000000000000025 /* CorridorKeyToolbox-Bridging-Header.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "CorridorKeyToolbox-Bridging-Header.h"; path = "CorridorKeyToolbox/Plugin/Shared/CorridorKeyToolbox-Bridging-Header.h"; sourceTree = "<group>"; };
+		221345E72F99948900CF734C /* VFX Toolbox.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; name = "VFX Toolbox.icon"; path = "CorridorKeyByLateNite/WrapperApp/VFX Toolbox.icon"; sourceTree = "<group>"; };
+		22D097FE2F9887BD0096E749 /* Credits.rtf */ = {isa = PBXFileReference; lastKnownFileType = text.rtf; name = Credits.rtf; path = CorridorKeyByLateNite/WrapperApp/Credits.rtf; sourceTree = "<group>"; };
+		22D0980D2F988FB70096E749 /* Motion Template */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "Motion Template"; path = "CorridorKeyByLateNite/WrapperApp/Resources/Motion Template"; sourceTree = "<group>"; };
+		CK0200000000000000000001 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = main.swift; path = CorridorKeyByLateNite/Plugin/main.swift; sourceTree = "<group>"; };
+		CK0200000000000000000002 /* CorridorKeyByLateNitePlugIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyByLateNitePlugIn.swift; path = CorridorKeyByLateNite/Plugin/CorridorKeyByLateNitePlugIn.swift; sourceTree = "<group>"; };
+		CK0200000000000000000003 /* CorridorKeyByLateNitePlugIn+Parameters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyByLateNitePlugIn+Parameters.swift"; path = "CorridorKeyByLateNite/Plugin/Parameters/CorridorKeyByLateNitePlugIn+Parameters.swift"; sourceTree = "<group>"; };
+		CK0200000000000000000004 /* CorridorKeyByLateNitePlugIn+PluginState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyByLateNitePlugIn+PluginState.swift"; path = "CorridorKeyByLateNite/Plugin/CorridorKeyByLateNitePlugIn+PluginState.swift"; sourceTree = "<group>"; };
+		CK0200000000000000000005 /* CorridorKeyByLateNitePlugIn+Properties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyByLateNitePlugIn+Properties.swift"; path = "CorridorKeyByLateNite/Plugin/CorridorKeyByLateNitePlugIn+Properties.swift"; sourceTree = "<group>"; };
+		CK0200000000000000000006 /* CorridorKeyByLateNitePlugIn+RenderRects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyByLateNitePlugIn+RenderRects.swift"; path = "CorridorKeyByLateNite/Plugin/CorridorKeyByLateNitePlugIn+RenderRects.swift"; sourceTree = "<group>"; };
+		CK0200000000000000000007 /* CorridorKeyByLateNitePlugIn+Render.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyByLateNitePlugIn+Render.swift"; path = "CorridorKeyByLateNite/Plugin/CorridorKeyByLateNitePlugIn+Render.swift"; sourceTree = "<group>"; };
+		CK0200000000000000000009 /* ParameterIdentifiers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ParameterIdentifiers.swift; path = CorridorKeyByLateNite/Plugin/Parameters/ParameterIdentifiers.swift; sourceTree = "<group>"; };
+		CK020000000000000000000A /* ParameterEnumerations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ParameterEnumerations.swift; path = CorridorKeyByLateNite/Plugin/Parameters/ParameterEnumerations.swift; sourceTree = "<group>"; };
+		CK020000000000000000000B /* PluginStateData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PluginStateData.swift; path = CorridorKeyByLateNite/Plugin/Parameters/PluginStateData.swift; sourceTree = "<group>"; };
+		CK020000000000000000000C /* MetalDeviceCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MetalDeviceCache.swift; path = CorridorKeyByLateNite/Plugin/Metal/MetalDeviceCache.swift; sourceTree = "<group>"; };
+		CK020000000000000000000D /* CorridorKeyShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; name = CorridorKeyShaders.metal; path = CorridorKeyByLateNite/Plugin/Metal/CorridorKeyShaders.metal; sourceTree = "<group>"; };
+		CK020000000000000000000E /* ScreenColorEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ScreenColorEstimator.swift; path = CorridorKeyByLateNite/Plugin/PostProcess/ScreenColorEstimator.swift; sourceTree = "<group>"; };
+		CK020000000000000000000F /* KeyingInferenceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = KeyingInferenceEngine.swift; path = CorridorKeyByLateNite/Plugin/Inference/KeyingInferenceEngine.swift; sourceTree = "<group>"; };
+		CK0200000000000000000012 /* InferenceCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InferenceCoordinator.swift; path = CorridorKeyByLateNite/Plugin/Inference/InferenceCoordinator.swift; sourceTree = "<group>"; };
+		CK0200000000000000000013 /* RenderPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RenderPipeline.swift; path = CorridorKeyByLateNite/Plugin/Render/RenderPipeline.swift; sourceTree = "<group>"; };
+		CK0200000000000000000015 /* CorridorKeyByLateNiteApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyByLateNiteApp.swift; path = CorridorKeyByLateNite/WrapperApp/CorridorKeyByLateNiteApp.swift; sourceTree = "<group>"; };
+		CK0200000000000000000016 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WelcomeView.swift; path = CorridorKeyByLateNite/WrapperApp/WelcomeView.swift; sourceTree = "<group>"; };
+		CK0200000000000000000020 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = CorridorKeyByLateNite/Plugin/Info.plist; sourceTree = "<group>"; };
+		CK0200000000000000000021 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = CorridorKeyByLateNite/WrapperApp/Info.plist; sourceTree = "<group>"; };
+		CK0200000000000000000022 /* CorridorKeyByLateNite.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = CorridorKeyByLateNite.entitlements; path = CorridorKeyByLateNite/Plugin/CorridorKeyByLateNite.entitlements; sourceTree = "<group>"; };
+		CK0200000000000000000023 /* WrapperApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = WrapperApp.entitlements; path = CorridorKeyByLateNite/WrapperApp/WrapperApp.entitlements; sourceTree = "<group>"; };
+		CK0200000000000000000024 /* CorridorKeyShaderTypes.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CorridorKeyShaderTypes.h; path = CorridorKeyByLateNite/Plugin/Shared/CorridorKeyShaderTypes.h; sourceTree = "<group>"; };
+		CK0200000000000000000025 /* CorridorKeyByLateNite-Bridging-Header.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "CorridorKeyByLateNite-Bridging-Header.h"; path = "CorridorKeyByLateNite/Plugin/Shared/CorridorKeyByLateNite-Bridging-Header.h"; sourceTree = "<group>"; };
 		CK0200000000000000000026 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Shared.xcconfig; path = Configuration/Shared.xcconfig; sourceTree = "<group>"; };
-		CK020000000000000000002A /* MotionTemplateInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MotionTemplateInstaller.swift; path = CorridorKeyToolbox/WrapperApp/MotionTemplateInstaller.swift; sourceTree = "<group>"; };
-		CK0200000000000000000030 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = CorridorKeyToolbox/Plugin/Resources/en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
-		CK0200000000000000000031 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = CorridorKeyToolbox/WrapperApp/en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
-		CK0200000000000000000040 /* PluginLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PluginLog.swift; path = CorridorKeyToolbox/Plugin/PluginLog.swift; sourceTree = "<group>"; };
-		CK0200000000000000000050 /* CorridorKeyToolboxPlugIn+FxAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyToolboxPlugIn+FxAnalyzer.swift"; path = "CorridorKeyToolbox/Plugin/CorridorKeyToolboxPlugIn+FxAnalyzer.swift"; sourceTree = "<group>"; };
-		CK0200000000000000000051 /* AnalysisData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AnalysisData.swift; path = CorridorKeyToolbox/Plugin/Inference/AnalysisData.swift; sourceTree = "<group>"; };
-		CK0200000000000000000052 /* MatteCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MatteCodec.swift; path = CorridorKeyToolbox/Plugin/Inference/MatteCodec.swift; sourceTree = "<group>"; };
-		CK0200000000000000000060 /* CorridorKeyToolboxPlugIn+CustomViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyToolboxPlugIn+CustomViews.swift"; path = "CorridorKeyToolbox/Plugin/Inspector/CorridorKeyToolboxPlugIn+CustomViews.swift"; sourceTree = "<group>"; };
-		CK0200000000000000000061 /* CorridorKeyInspectorBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyInspectorBridge.swift; path = CorridorKeyToolbox/Plugin/Inspector/CorridorKeyInspectorBridge.swift; sourceTree = "<group>"; };
-		CK0200000000000000000062 /* CorridorKeyHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyHeaderView.swift; path = CorridorKeyToolbox/Plugin/Inspector/CorridorKeyHeaderView.swift; sourceTree = "<group>"; };
-		CK0200000000000000000063 /* CorridorKeyAnalysisSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyAnalysisSnapshot.swift; path = CorridorKeyToolbox/Plugin/Inspector/CorridorKeyAnalysisSnapshot.swift; sourceTree = "<group>"; };
-		CK0200000000000000000070 /* IntermediateTexturePool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = IntermediateTexturePool.swift; path = CorridorKeyToolbox/Plugin/Metal/IntermediateTexturePool.swift; sourceTree = "<group>"; };
-		CK0200000000000000000071 /* MatteRefiner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MatteRefiner.swift; path = CorridorKeyToolbox/Plugin/Metal/MatteRefiner.swift; sourceTree = "<group>"; };
-		CK0200000000000000000072 /* ColorGamutMatrix.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ColorGamutMatrix.swift; path = CorridorKeyToolbox/Plugin/PostProcess/ColorGamutMatrix.swift; sourceTree = "<group>"; };
-		CK0200000000000000000073 /* RenderStages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RenderStages.swift; path = CorridorKeyToolbox/Plugin/Render/RenderStages.swift; sourceTree = "<group>"; };
-		CK0200000000000000000074 /* WarmupStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WarmupStatus.swift; path = CorridorKeyToolbox/Plugin/Inspector/WarmupStatus.swift; sourceTree = "<group>"; };
-		CK0200000000000000000075 /* FxImageTilePixelFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FxImageTilePixelFormat.swift; path = CorridorKeyToolbox/Plugin/Metal/FxImageTilePixelFormat.swift; sourceTree = "<group>"; };
-		CK0200000000000000000076 /* SharedMLXBridgeRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharedMLXBridgeRegistry.swift; path = CorridorKeyToolbox/Plugin/Inference/SharedMLXBridgeRegistry.swift; sourceTree = "<group>"; };
-		CK0200000000000000000077 /* TemporalBlender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TemporalBlender.swift; path = CorridorKeyToolbox/Plugin/PostProcess/TemporalBlender.swift; sourceTree = "<group>"; };
+		CK020000000000000000002A /* MotionTemplateInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MotionTemplateInstaller.swift; path = CorridorKeyByLateNite/WrapperApp/MotionTemplateInstaller.swift; sourceTree = "<group>"; };
+		CK0200000000000000000030 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = CorridorKeyByLateNite/Plugin/Resources/en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		CK0200000000000000000031 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = CorridorKeyByLateNite/WrapperApp/en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		CK0200000000000000000040 /* PluginLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PluginLog.swift; path = CorridorKeyByLateNite/Plugin/PluginLog.swift; sourceTree = "<group>"; };
+		CK0200000000000000000050 /* CorridorKeyByLateNitePlugIn+FxAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyByLateNitePlugIn+FxAnalyzer.swift"; path = "CorridorKeyByLateNite/Plugin/CorridorKeyByLateNitePlugIn+FxAnalyzer.swift"; sourceTree = "<group>"; };
+		CK0200000000000000000051 /* AnalysisData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AnalysisData.swift; path = CorridorKeyByLateNite/Plugin/Inference/AnalysisData.swift; sourceTree = "<group>"; };
+		CK0200000000000000000052 /* MatteCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MatteCodec.swift; path = CorridorKeyByLateNite/Plugin/Inference/MatteCodec.swift; sourceTree = "<group>"; };
+		CK0200000000000000000060 /* CorridorKeyByLateNitePlugIn+CustomViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyByLateNitePlugIn+CustomViews.swift"; path = "CorridorKeyByLateNite/Plugin/Inspector/CorridorKeyByLateNitePlugIn+CustomViews.swift"; sourceTree = "<group>"; };
+		CK0200000000000000000061 /* CorridorKeyInspectorBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyInspectorBridge.swift; path = CorridorKeyByLateNite/Plugin/Inspector/CorridorKeyInspectorBridge.swift; sourceTree = "<group>"; };
+		CK0200000000000000000062 /* CorridorKeyHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyHeaderView.swift; path = CorridorKeyByLateNite/Plugin/Inspector/CorridorKeyHeaderView.swift; sourceTree = "<group>"; };
+		CK0200000000000000000063 /* CorridorKeyAnalysisSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyAnalysisSnapshot.swift; path = CorridorKeyByLateNite/Plugin/Inspector/CorridorKeyAnalysisSnapshot.swift; sourceTree = "<group>"; };
+		CK0200000000000000000070 /* IntermediateTexturePool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = IntermediateTexturePool.swift; path = CorridorKeyByLateNite/Plugin/Metal/IntermediateTexturePool.swift; sourceTree = "<group>"; };
+		CK0200000000000000000071 /* MatteRefiner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MatteRefiner.swift; path = CorridorKeyByLateNite/Plugin/Metal/MatteRefiner.swift; sourceTree = "<group>"; };
+		CK0200000000000000000072 /* ColorGamutMatrix.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ColorGamutMatrix.swift; path = CorridorKeyByLateNite/Plugin/PostProcess/ColorGamutMatrix.swift; sourceTree = "<group>"; };
+		CK0200000000000000000073 /* RenderStages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RenderStages.swift; path = CorridorKeyByLateNite/Plugin/Render/RenderStages.swift; sourceTree = "<group>"; };
+		CK0200000000000000000074 /* WarmupStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WarmupStatus.swift; path = CorridorKeyByLateNite/Plugin/Inspector/WarmupStatus.swift; sourceTree = "<group>"; };
+		CK0200000000000000000075 /* FxImageTilePixelFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FxImageTilePixelFormat.swift; path = CorridorKeyByLateNite/Plugin/Metal/FxImageTilePixelFormat.swift; sourceTree = "<group>"; };
+		CK0200000000000000000076 /* SharedMLXBridgeRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharedMLXBridgeRegistry.swift; path = CorridorKeyByLateNite/Plugin/Inference/SharedMLXBridgeRegistry.swift; sourceTree = "<group>"; };
+		CK0200000000000000000077 /* TemporalBlender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TemporalBlender.swift; path = CorridorKeyByLateNite/Plugin/PostProcess/TemporalBlender.swift; sourceTree = "<group>"; };
 		CK0300000000000000000001 /* CorridorKey by LateNite.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "CorridorKey by LateNite.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		CK0300000000000000000002 /* CorridorKey by LateNite Renderer.pluginkit */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "CorridorKey by LateNite Renderer.pluginkit"; sourceTree = BUILT_PRODUCTS_DIR; };
 		CK0400000000000000000001 /* FxPlug.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FxPlug.framework; path = /Library/Developer/Frameworks/FxPlug.framework; sourceTree = "<absolute>"; };
@@ -234,23 +234,23 @@
 		CK0400000000000000000006 /* CoreImage.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreImage.framework; path = System/Library/Frameworks/CoreImage.framework; sourceTree = SDKROOT; };
 		CK0400000000000000000008 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
 		CK0400000000000000000009 /* PluginManager.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PluginManager.framework; path = /Library/Developer/Frameworks/PluginManager.framework; sourceTree = "<absolute>"; };
-		DC0200000000000000000001 /* DeviceCapabilityCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DeviceCapabilityCache.swift; path = CorridorKeyToolbox/Plugin/Inference/DeviceCapabilityCache.swift; sourceTree = "<group>"; };
-		HP0200000000000000000001 /* HintPointSet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = HintPointSet.swift; path = CorridorKeyToolbox/Plugin/Inspector/HintPointSet.swift; sourceTree = "<group>"; };
-		MX0100000000000000000003 /* MLXKeyingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MLXKeyingEngine.swift; path = CorridorKeyToolbox/Plugin/Inference/MLXKeyingEngine.swift; sourceTree = "<group>"; };
-		OS0200000000000000000001 /* CorridorKeyHintOSC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyHintOSC.swift; path = CorridorKeyToolbox/Plugin/Inspector/CorridorKeyHintOSC.swift; sourceTree = "<group>"; };
-		VH0200000000000000000001 /* VisionHintEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VisionHintEngine.swift; path = CorridorKeyToolbox/Plugin/Inference/VisionHintEngine.swift; sourceTree = "<group>"; };
-		SR0000000000000000000001 /* PixelBufferTextureBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PixelBufferTextureBridge.swift; path = "CorridorKeyToolbox/WrapperApp/Standalone/Engine/PixelBufferTextureBridge.swift"; sourceTree = "<group>"; };
-		SR0000000000000000000002 /* VideoSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VideoSource.swift; path = "CorridorKeyToolbox/WrapperApp/Standalone/Engine/VideoSource.swift"; sourceTree = "<group>"; };
-		SR0000000000000000000003 /* StandaloneRenderEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StandaloneRenderEngine.swift; path = "CorridorKeyToolbox/WrapperApp/Standalone/Engine/StandaloneRenderEngine.swift"; sourceTree = "<group>"; };
-		SR0000000000000000000004 /* AnalysisRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AnalysisRunner.swift; path = "CorridorKeyToolbox/WrapperApp/Standalone/Engine/AnalysisRunner.swift"; sourceTree = "<group>"; };
-		SR0000000000000000000005 /* ProResExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ProResExporter.swift; path = "CorridorKeyToolbox/WrapperApp/Standalone/Engine/ProResExporter.swift"; sourceTree = "<group>"; };
-		SR0000000000000000000006 /* ParameterRanges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ParameterRanges.swift; path = "CorridorKeyToolbox/WrapperApp/Standalone/Model/ParameterRanges.swift"; sourceTree = "<group>"; };
-		SR0000000000000000000007 /* EditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EditorViewModel.swift; path = "CorridorKeyToolbox/WrapperApp/Standalone/Model/EditorViewModel.swift"; sourceTree = "<group>"; };
-		SR0000000000000000000008 /* MetalPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MetalPreviewView.swift; path = "CorridorKeyToolbox/WrapperApp/Standalone/Views/MetalPreviewView.swift"; sourceTree = "<group>"; };
-		SR0000000000000000000009 /* InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InspectorView.swift; path = "CorridorKeyToolbox/WrapperApp/Standalone/Views/InspectorView.swift"; sourceTree = "<group>"; };
-		SR000000000000000000000A /* TransportBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TransportBar.swift; path = "CorridorKeyToolbox/WrapperApp/Standalone/Views/TransportBar.swift"; sourceTree = "<group>"; };
-		SR000000000000000000000B /* ExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ExportSheet.swift; path = "CorridorKeyToolbox/WrapperApp/Standalone/Views/ExportSheet.swift"; sourceTree = "<group>"; };
-		SR000000000000000000000C /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EditorView.swift; path = "CorridorKeyToolbox/WrapperApp/Standalone/Views/EditorView.swift"; sourceTree = "<group>"; };
+		DC0200000000000000000001 /* DeviceCapabilityCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DeviceCapabilityCache.swift; path = CorridorKeyByLateNite/Plugin/Inference/DeviceCapabilityCache.swift; sourceTree = "<group>"; };
+		HP0200000000000000000001 /* HintPointSet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = HintPointSet.swift; path = CorridorKeyByLateNite/Plugin/Inspector/HintPointSet.swift; sourceTree = "<group>"; };
+		MX0100000000000000000003 /* MLXKeyingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MLXKeyingEngine.swift; path = CorridorKeyByLateNite/Plugin/Inference/MLXKeyingEngine.swift; sourceTree = "<group>"; };
+		OS0200000000000000000001 /* CorridorKeyHintOSC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyHintOSC.swift; path = CorridorKeyByLateNite/Plugin/Inspector/CorridorKeyHintOSC.swift; sourceTree = "<group>"; };
+		VH0200000000000000000001 /* VisionHintEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VisionHintEngine.swift; path = CorridorKeyByLateNite/Plugin/Inference/VisionHintEngine.swift; sourceTree = "<group>"; };
+		SR0000000000000000000001 /* PixelBufferTextureBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PixelBufferTextureBridge.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Engine/PixelBufferTextureBridge.swift"; sourceTree = "<group>"; };
+		SR0000000000000000000002 /* VideoSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VideoSource.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Engine/VideoSource.swift"; sourceTree = "<group>"; };
+		SR0000000000000000000003 /* StandaloneRenderEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StandaloneRenderEngine.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Engine/StandaloneRenderEngine.swift"; sourceTree = "<group>"; };
+		SR0000000000000000000004 /* AnalysisRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AnalysisRunner.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Engine/AnalysisRunner.swift"; sourceTree = "<group>"; };
+		SR0000000000000000000005 /* ProResExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ProResExporter.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Engine/ProResExporter.swift"; sourceTree = "<group>"; };
+		SR0000000000000000000006 /* ParameterRanges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ParameterRanges.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Model/ParameterRanges.swift"; sourceTree = "<group>"; };
+		SR0000000000000000000007 /* EditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EditorViewModel.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Model/EditorViewModel.swift"; sourceTree = "<group>"; };
+		SR0000000000000000000008 /* MetalPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MetalPreviewView.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Views/MetalPreviewView.swift"; sourceTree = "<group>"; };
+		SR0000000000000000000009 /* InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InspectorView.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Views/InspectorView.swift"; sourceTree = "<group>"; };
+		SR000000000000000000000A /* TransportBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TransportBar.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Views/TransportBar.swift"; sourceTree = "<group>"; };
+		SR000000000000000000000B /* ExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ExportSheet.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Views/ExportSheet.swift"; sourceTree = "<group>"; };
+		SR000000000000000000000C /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EditorView.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Views/EditorView.swift"; sourceTree = "<group>"; };
 		SF0000000000000000000001 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		SF0000000000000000000002 /* VideoToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = VideoToolbox.framework; path = System/Library/Frameworks/VideoToolbox.framework; sourceTree = SDKROOT; };
 		SF0000000000000000000003 /* Vision.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework; path = System/Library/Frameworks/Vision.framework; sourceTree = SDKROOT; };
@@ -265,7 +265,7 @@
 		WT0300000000000000000001 /* WrapperAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WrapperAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 				ER0000000000000000000001 /* RealClipFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RealClipFixture.swift; path = "Tests/WrapperAppTests/RealClipFixture.swift"; sourceTree = "<group>"; };
 		ER0000000000000000000002 /* NikoDruidEndToEndTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NikoDruidEndToEndTests.swift; path = "Tests/WrapperAppTests/NikoDruidEndToEndTests.swift"; sourceTree = "<group>"; };
-				OS0300000000000000000001 /* OnScreenControlOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OnScreenControlOverlay.swift; path = "CorridorKeyToolbox/WrapperApp/Standalone/Views/OnScreenControlOverlay.swift"; sourceTree = "<group>"; };
+				OS0300000000000000000001 /* OnScreenControlOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OnScreenControlOverlay.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Views/OnScreenControlOverlay.swift"; sourceTree = "<group>"; };
 				FT0300000000000000000001 /* FourFrameUserFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FourFrameUserFlowTests.swift; path = "Tests/WrapperAppTests/FourFrameUserFlowTests.swift"; sourceTree = "<group>"; };
 				TP0300000000000000000001 /* TransportPolishTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TransportPolishTests.swift; path = "Tests/WrapperAppTests/TransportPolishTests.swift"; sourceTree = "<group>"; };
 				PB0300000000000000000001 /* PreviewBackdropCompositingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PreviewBackdropCompositingTests.swift; path = "Tests/WrapperAppTests/PreviewBackdropCompositingTests.swift"; sourceTree = "<group>"; };
@@ -327,7 +327,7 @@
 				221345E02F98BC6800CF734C /* corridorkey_mlx_bridge_2048.mlxfn */,
 			);
 			name = "MLX Models";
-			path = "CorridorKeyToolbox/Plugin/Resources/MLX Models";
+			path = "CorridorKeyByLateNite/Plugin/Resources/MLX Models";
 			sourceTree = "<group>";
 		};
 		CK0A00000000000000000001 = {
@@ -335,32 +335,32 @@
 			children = (
 				22D0980D2F988FB70096E749 /* Motion Template */,
 				CK0A00000000000000000010 /* Configuration */,
-				CK0A00000000000000000002 /* CorridorKeyToolbox */,
+				CK0A00000000000000000002 /* CorridorKeyByLateNite */,
 				CK0A00000000000000000008 /* Frameworks */,
 				WT0A00000000000000000001 /* WrapperAppTests */,
 			CK0A00000000000000000009 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		CK0A00000000000000000002 /* CorridorKeyToolbox */ = {
+		CK0A00000000000000000002 /* CorridorKeyByLateNite */ = {
 			isa = PBXGroup;
 			children = (
 				CK0A00000000000000000003 /* Plugin */,
 				CK0A00000000000000000007 /* WrapperApp */,
 			);
-			name = CorridorKeyToolbox;
+			name = CorridorKeyByLateNite;
 			sourceTree = "<group>";
 		};
 		CK0A00000000000000000003 /* Plugin */ = {
 			isa = PBXGroup;
 			children = (
 				CK0200000000000000000001 /* main.swift */,
-				CK0200000000000000000002 /* CorridorKeyToolboxPlugIn.swift */,
-				CK0200000000000000000004 /* CorridorKeyToolboxPlugIn+PluginState.swift */,
-				CK0200000000000000000005 /* CorridorKeyToolboxPlugIn+Properties.swift */,
-				CK0200000000000000000006 /* CorridorKeyToolboxPlugIn+RenderRects.swift */,
-				CK0200000000000000000007 /* CorridorKeyToolboxPlugIn+Render.swift */,
-				CK0200000000000000000050 /* CorridorKeyToolboxPlugIn+FxAnalyzer.swift */,
+				CK0200000000000000000002 /* CorridorKeyByLateNitePlugIn.swift */,
+				CK0200000000000000000004 /* CorridorKeyByLateNitePlugIn+PluginState.swift */,
+				CK0200000000000000000005 /* CorridorKeyByLateNitePlugIn+Properties.swift */,
+				CK0200000000000000000006 /* CorridorKeyByLateNitePlugIn+RenderRects.swift */,
+				CK0200000000000000000007 /* CorridorKeyByLateNitePlugIn+Render.swift */,
+				CK0200000000000000000050 /* CorridorKeyByLateNitePlugIn+FxAnalyzer.swift */,
 				CK0200000000000000000040 /* PluginLog.swift */,
 				CK0A00000000000000000004 /* Parameters */,
 				CK0A00000000000000000005 /* Render */,
@@ -370,7 +370,7 @@
 				CK0A0000000000000000000C /* PostProcess */,
 				CK0A0000000000000000000D /* Shared */,
 				CK0200000000000000000020 /* Info.plist */,
-				CK0200000000000000000022 /* CorridorKeyToolbox.entitlements */,
+				CK0200000000000000000022 /* CorridorKeyByLateNite.entitlements */,
 				CK0200000000000000000014 /* InfoPlist.strings */,
 			);
 			name = Plugin;
@@ -379,7 +379,7 @@
 		CK0A00000000000000000004 /* Parameters */ = {
 			isa = PBXGroup;
 			children = (
-				CK0200000000000000000003 /* CorridorKeyToolboxPlugIn+Parameters.swift */,
+				CK0200000000000000000003 /* CorridorKeyByLateNitePlugIn+Parameters.swift */,
 				CK0200000000000000000009 /* ParameterIdentifiers.swift */,
 				CK020000000000000000000A /* ParameterEnumerations.swift */,
 				CK020000000000000000000B /* PluginStateData.swift */,
@@ -403,7 +403,7 @@
 				221345E12F98BC6800CF734C /* MLX Models */,
 				22D097FE2F9887BD0096E749 /* Credits.rtf */,
 				221345E72F99948900CF734C /* VFX Toolbox.icon */,
-				CK0200000000000000000015 /* CorridorKeyToolboxApp.swift */,
+				CK0200000000000000000015 /* CorridorKeyByLateNiteApp.swift */,
 				CK0200000000000000000016 /* WelcomeView.swift */,
 				CK020000000000000000002A /* MotionTemplateInstaller.swift */,
 				CK0200000000000000000021 /* Info.plist */,
@@ -438,7 +438,7 @@
 			children = (
 				CK0300000000000000000001 /* CorridorKey by LateNite.app */,
 				CK0300000000000000000002 /* CorridorKey by LateNite Renderer.pluginkit */,
-			
+
 				WT0300000000000000000001 /* WrapperAppTests.xctest */,);
 			name = Products;
 			sourceTree = "<group>";
@@ -484,7 +484,7 @@
 			isa = PBXGroup;
 			children = (
 				CK0200000000000000000024 /* CorridorKeyShaderTypes.h */,
-				CK0200000000000000000025 /* CorridorKeyToolbox-Bridging-Header.h */,
+				CK0200000000000000000025 /* CorridorKeyByLateNite-Bridging-Header.h */,
 			);
 			name = Shared;
 			sourceTree = "<group>";
@@ -500,7 +500,7 @@
 		CK0A00000000000000000020 /* Inspector */ = {
 			isa = PBXGroup;
 			children = (
-				CK0200000000000000000060 /* CorridorKeyToolboxPlugIn+CustomViews.swift */,
+				CK0200000000000000000060 /* CorridorKeyByLateNitePlugIn+CustomViews.swift */,
 				CK0200000000000000000061 /* CorridorKeyInspectorBridge.swift */,
 				CK0200000000000000000062 /* CorridorKeyHeaderView.swift */,
 				CK0200000000000000000063 /* CorridorKeyAnalysisSnapshot.swift */,
@@ -657,7 +657,7 @@
 					};
 				};
 			};
-			buildConfigurationList = CK0B00000000000000000003 /* Build configuration list for PBXProject "CorridorKeyToolbox" */;
+			buildConfigurationList = CK0B00000000000000000003 /* Build configuration list for PBXProject "CorridorKeyByLateNite" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -770,7 +770,7 @@
 				SB0000000000000000000021 /* ParameterEnumerations.swift in Sources */,
 				SB0000000000000000000022 /* PluginStateData.swift in Sources */,
 				SB0000000000000000000023 /* PluginLog.swift in Sources */,
-				CK0100000000000000000015 /* CorridorKeyToolboxApp.swift in Sources */,
+				CK0100000000000000000015 /* CorridorKeyByLateNiteApp.swift in Sources */,
 				CK0100000000000000000016 /* WelcomeView.swift in Sources */,
 				CK010000000000000000002A /* MotionTemplateInstaller.swift in Sources */,
 			);
@@ -781,12 +781,12 @@
 			buildActionMask = 2147483647;
 			files = (
 				CK0100000000000000000001 /* main.swift in Sources */,
-				CK0100000000000000000002 /* CorridorKeyToolboxPlugIn.swift in Sources */,
-				CK0100000000000000000003 /* CorridorKeyToolboxPlugIn+Parameters.swift in Sources */,
-				CK0100000000000000000004 /* CorridorKeyToolboxPlugIn+PluginState.swift in Sources */,
-				CK0100000000000000000005 /* CorridorKeyToolboxPlugIn+Properties.swift in Sources */,
-				CK0100000000000000000006 /* CorridorKeyToolboxPlugIn+RenderRects.swift in Sources */,
-				CK0100000000000000000007 /* CorridorKeyToolboxPlugIn+Render.swift in Sources */,
+				CK0100000000000000000002 /* CorridorKeyByLateNitePlugIn.swift in Sources */,
+				CK0100000000000000000003 /* CorridorKeyByLateNitePlugIn+Parameters.swift in Sources */,
+				CK0100000000000000000004 /* CorridorKeyByLateNitePlugIn+PluginState.swift in Sources */,
+				CK0100000000000000000005 /* CorridorKeyByLateNitePlugIn+Properties.swift in Sources */,
+				CK0100000000000000000006 /* CorridorKeyByLateNitePlugIn+RenderRects.swift in Sources */,
+				CK0100000000000000000007 /* CorridorKeyByLateNitePlugIn+Render.swift in Sources */,
 				CK0100000000000000000009 /* ParameterIdentifiers.swift in Sources */,
 				CK010000000000000000000A /* ParameterEnumerations.swift in Sources */,
 				CK010000000000000000000B /* PluginStateData.swift in Sources */,
@@ -800,10 +800,10 @@
 				CK0100000000000000000012 /* InferenceCoordinator.swift in Sources */,
 				CK0100000000000000000013 /* RenderPipeline.swift in Sources */,
 				CK0100000000000000000040 /* PluginLog.swift in Sources */,
-				CK0100000000000000000050 /* CorridorKeyToolboxPlugIn+FxAnalyzer.swift in Sources */,
+				CK0100000000000000000050 /* CorridorKeyByLateNitePlugIn+FxAnalyzer.swift in Sources */,
 				CK0100000000000000000051 /* AnalysisData.swift in Sources */,
 				CK0100000000000000000052 /* MatteCodec.swift in Sources */,
-				CK0100000000000000000060 /* CorridorKeyToolboxPlugIn+CustomViews.swift in Sources */,
+				CK0100000000000000000060 /* CorridorKeyByLateNitePlugIn+CustomViews.swift in Sources */,
 				CK0100000000000000000061 /* CorridorKeyInspectorBridge.swift in Sources */,
 				CK0100000000000000000062 /* CorridorKeyHeaderView.swift in Sources */,
 				CK0100000000000000000063 /* CorridorKeyAnalysisSnapshot.swift in Sources */,
@@ -986,13 +986,13 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = CK0200000000000000000026 /* Shared.xcconfig */;
 			buildSettings = {
-				MTL_HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyToolbox/Plugin/Shared";
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyToolbox/Plugin/Shared";
-				SWIFT_OBJC_BRIDGING_HEADER = "CorridorKeyToolbox/WrapperApp/WrapperApp-Bridging-Header.h";
+				MTL_HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyByLateNite/Plugin/Shared";
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyByLateNite/Plugin/Shared";
+				SWIFT_OBJC_BRIDGING_HEADER = "CorridorKeyByLateNite/WrapperApp/WrapperApp-Bridging-Header.h";
 				CLANG_ENABLE_MODULES = YES;
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = "VFX Toolbox";
-				CODE_SIGN_ENTITLEMENTS = CorridorKeyToolbox/WrapperApp/WrapperApp.entitlements;
+				CODE_SIGN_ENTITLEMENTS = CorridorKeyByLateNite/WrapperApp/WrapperApp.entitlements;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_FILE_ACCESS_MOVIES_FOLDER = readwrite;
@@ -1008,12 +1008,12 @@
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = CorridorKeyToolbox/WrapperApp/Info.plist;
+				INFOPLIST_FILE = CorridorKeyByLateNite/WrapperApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "CorridorKey by LateNite";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.latenitefilms.CorridorKeyToolbox;
-				PRODUCT_MODULE_NAME = CorridorKeyToolboxApp;
+				PRODUCT_MODULE_NAME = CorridorKeyByLateNiteApp;
 				PRODUCT_NAME = "CorridorKey by LateNite";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 			};
@@ -1023,13 +1023,13 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = CK0200000000000000000026 /* Shared.xcconfig */;
 			buildSettings = {
-				MTL_HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyToolbox/Plugin/Shared";
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyToolbox/Plugin/Shared";
-				SWIFT_OBJC_BRIDGING_HEADER = "CorridorKeyToolbox/WrapperApp/WrapperApp-Bridging-Header.h";
+				MTL_HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyByLateNite/Plugin/Shared";
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyByLateNite/Plugin/Shared";
+				SWIFT_OBJC_BRIDGING_HEADER = "CorridorKeyByLateNite/WrapperApp/WrapperApp-Bridging-Header.h";
 				CLANG_ENABLE_MODULES = YES;
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = "VFX Toolbox";
-				CODE_SIGN_ENTITLEMENTS = CorridorKeyToolbox/WrapperApp/WrapperApp.entitlements;
+				CODE_SIGN_ENTITLEMENTS = CorridorKeyByLateNite/WrapperApp/WrapperApp.entitlements;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_FILE_ACCESS_MOVIES_FOLDER = readwrite;
@@ -1045,12 +1045,12 @@
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = CorridorKeyToolbox/WrapperApp/Info.plist;
+				INFOPLIST_FILE = CorridorKeyByLateNite/WrapperApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "CorridorKey by LateNite";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.latenitefilms.CorridorKeyToolbox;
-				PRODUCT_MODULE_NAME = CorridorKeyToolboxApp;
+				PRODUCT_MODULE_NAME = CorridorKeyByLateNiteApp;
 				PRODUCT_NAME = "CorridorKey by LateNite";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 			};
@@ -1062,22 +1062,22 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = CorridorKeyToolbox/Plugin/CorridorKeyToolbox.entitlements;
+				CODE_SIGN_ENTITLEMENTS = CorridorKeyByLateNite/Plugin/CorridorKeyByLateNite.entitlements;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyToolbox/Plugin/Shared";
-				INFOPLIST_FILE = CorridorKeyToolbox/Plugin/Info.plist;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyByLateNite/Plugin/Shared";
+				INFOPLIST_FILE = CorridorKeyByLateNite/Plugin/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "CorridorKey by LateNite Renderer";
 				LD_RUNPATH_SEARCH_PATHS = "@loader_path/../Frameworks";
 				MACH_O_TYPE = mh_execute;
-				MTL_HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyToolbox/Plugin/Shared";
+				MTL_HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyByLateNite/Plugin/Shared";
 				PRODUCT_BUNDLE_IDENTIFIER = com.latenitefilms.CorridorKeyToolbox.Renderer;
-				PRODUCT_MODULE_NAME = CorridorKeyToolboxRenderer;
+				PRODUCT_MODULE_NAME = CorridorKeyByLateNiteRenderer;
 				PRODUCT_NAME = "CorridorKey by LateNite Renderer";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = FXPLUG_HOST;
-				SWIFT_OBJC_BRIDGING_HEADER = "CorridorKeyToolbox/Plugin/Shared/CorridorKeyToolbox-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "CorridorKeyByLateNite/Plugin/Shared/CorridorKeyByLateNite-Bridging-Header.h";
 				WRAPPER_EXTENSION = pluginkit;
 			};
 			name = Debug;
@@ -1088,22 +1088,22 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = CorridorKeyToolbox/Plugin/CorridorKeyToolbox.entitlements;
+				CODE_SIGN_ENTITLEMENTS = CorridorKeyByLateNite/Plugin/CorridorKeyByLateNite.entitlements;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyToolbox/Plugin/Shared";
-				INFOPLIST_FILE = CorridorKeyToolbox/Plugin/Info.plist;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyByLateNite/Plugin/Shared";
+				INFOPLIST_FILE = CorridorKeyByLateNite/Plugin/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "CorridorKey by LateNite Renderer";
 				LD_RUNPATH_SEARCH_PATHS = "@loader_path/../Frameworks";
 				MACH_O_TYPE = mh_execute;
-				MTL_HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyToolbox/Plugin/Shared";
+				MTL_HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyByLateNite/Plugin/Shared";
 				PRODUCT_BUNDLE_IDENTIFIER = com.latenitefilms.CorridorKeyToolbox.Renderer;
-				PRODUCT_MODULE_NAME = CorridorKeyToolboxRenderer;
+				PRODUCT_MODULE_NAME = CorridorKeyByLateNiteRenderer;
 				PRODUCT_NAME = "CorridorKey by LateNite Renderer";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = FXPLUG_HOST;
-				SWIFT_OBJC_BRIDGING_HEADER = "CorridorKeyToolbox/Plugin/Shared/CorridorKeyToolbox-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "CorridorKeyByLateNite/Plugin/Shared/CorridorKeyByLateNite-Bridging-Header.h";
 				WRAPPER_EXTENSION = pluginkit;
 			};
 			name = Release;
@@ -1163,7 +1163,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		CK0B00000000000000000003 /* Build configuration list for PBXProject "CorridorKeyToolbox" */ = {
+		CK0B00000000000000000003 /* Build configuration list for PBXProject "CorridorKeyByLateNite" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				CK1000000000000000000001 /* Debug */,
