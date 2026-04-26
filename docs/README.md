@@ -4,19 +4,19 @@
 **CorridorKey by LateNite** is currently in a **public beta testing phase**.
 
 We're just using a placeholder icon for now (taken from [VFX Toolbox](https://vfxtoolbox.fcp.cafe)) - new icon coming soon!
-
-Feedback welcome!
 !!!
 
 **CorridorKey by LateNite** brings [Corridor Digital's](https://www.corridordigital.com) [Corridor Key](https://github.com/nikopueringer/CorridorKey) to Final Cut Pro. 🥳
+
+!!!success
+Free to [download](/download) on TestFlight and [Open Source](https://corridorkeybylatenite.fcp.cafe)!
+!!!
 
 [Corridor Key](https://github.com/nikopueringer/CorridorKey) is an open source project created by the talented [Corridor Digital](https://www.corridordigital.com) team.
 
 **CorridorKey by LateNite** takes the machine learning [MLX Models](https://huggingface.co/alexandrealvaro/corridorkey-models/tree/main) created by [Alexandre Alvaro](https://huggingface.co/alexandrealvaro), and uses them in a highly performant Swift application, designed and optimised for Apple Silicon.
 
-!!!success
-Free to [download](/download) and Open Source!
-!!!
+It offers both a **Final Cut Pro Effect**, and a **Standalone Editor**.
 
 ![](/static/corridor-key-build-4.png)
 
