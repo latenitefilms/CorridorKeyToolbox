@@ -14,4 +14,4 @@ You can read Apple's App Store Privacy Policy [here](https://www.apple.com/legal
 
 We use this GitHub Repository for documentation hosting and technical support. You can read GitHub's Privacy Policy [here](https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement).
 
-If you have any questions or concerns, you can [submit an issue](https://github.com/latenitefilms/CorridorKeyToolbox/issues), or email us: support@latenitefilms.com
+If you have any questions or concerns, you can [submit an issue](https://github.com/latenitefilms/CorridorKeyByLateNite/issues), or email us: support@latenitefilms.com

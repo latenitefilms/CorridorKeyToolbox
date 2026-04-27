@@ -30,7 +30,7 @@ Then press **Analyse Clip**:
 
 ![](/static/standalone-editor-result.png)
 
-Once you're happy to you can export your result as ProRes 4444 (with alpha).
+Once you're happy to you can export your result as ProRes or HEVC (with alpha):
 
 ![](/static/standalone-export.png)
 
