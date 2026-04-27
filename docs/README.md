@@ -16,7 +16,7 @@ This is **NOT** a fork. We've taken the machine learning [MLX Models](https://hu
 
 Whilst there are already some great fork's of CorridorKey, such as [EZ-CorridorKey](https://github.com/edenaion/EZ-CorridorKey), none of them are purposely build for Mac & Apple Silicon.
 
-**CorridorKey by LateNite** brings an Effect directly into **Final Cut Pro**, as well as a **Standalone Editor** - optimised for ProRes 4444 in and out. 🏎️
+**CorridorKey by LateNite** brings an Effect directly into **Final Cut Pro**, as well as a **Standalone Editor** - optimised for **ProRes** in and out. 🏎️
 
 ---
 
@@ -35,6 +35,8 @@ It gives you all the power of CorridorKey, directly in your Final Cut Pro timeli
 **CorridorKey by LateNite** has been built for Apple Silicon Mac's.
 
 It makes full use of the GPU, Neural Engine, Metal and MPX - pushing the hardware to the max.
+
+If you're working with ProRes or HEVC, it makes use of Apple Silicon's hardware encoders and decoders.
 
 If you enable **Auto Subject Hint** it uses Apple's [Vision Framework](https://developer.apple.com/documentation/vision) to use machine learning to "cut out" any foreground people, to use as a "hint" for CorridorKey.
 
