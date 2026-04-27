@@ -2,7 +2,7 @@
 //  ExportSheet.swift
 //  CorridorKey by LateNite — Standalone Editor
 //
-//  Modal sheet that gathers ProRes 4444 export options, runs the
+//  Modal sheet that gathers ProRes / HEVC export options, runs the
 //  export through `EditorViewModel.runExport`, and surfaces progress
 //  + result so the user knows when their file is ready.
 //
@@ -56,6 +56,12 @@ struct ExportSheet: View {
             ExportProgressLabel(status: viewModel.exportStatus, totalFrames: viewModel.totalFrames)
 
             HStack {
+                if case .completed(let url) = viewModel.exportStatus {
+                    Button("Reveal in Finder", systemImage: "folder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                    }
+                    .buttonStyle(.bordered)
+                }
                 Spacer()
                 Button("Cancel", role: .cancel) {
                     if viewModel.exportStatus.inProgress {
@@ -121,13 +127,20 @@ private struct ExportProgressLabel: View {
                     .foregroundStyle(.secondary)
             }
         case .completed(let url):
-            VStack(alignment: .leading, spacing: 6) {
-                Label("Export complete: \(url.lastPathComponent)", systemImage: "checkmark.circle.fill")
+            // Filename gets its own line so long names don't push
+            // the success badge out of view. The "Reveal in
+            // Finder" affordance now lives in the bottom button
+            // row so it lines up with Cancel/Export — leaving
+            // this panel as a pure status read-out.
+            VStack(alignment: .leading, spacing: 4) {
+                Label("Export complete", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
-                Button("Reveal in Finder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([url])
-                }
-                .buttonStyle(.borderless)
+                Text(url.lastPathComponent)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         case .failed(let message):
             Label("Export failed: \(message)", systemImage: "exclamationmark.triangle.fill")

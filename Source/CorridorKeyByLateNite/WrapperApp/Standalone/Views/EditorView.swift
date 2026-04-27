@@ -52,15 +52,6 @@ struct EditorView: View {
                 onExport: { isExporting = true }
             )
         }
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text(toolbarTitle)
-                    .font(.headline)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .padding(.horizontal, 24)
-            }
-        }
         .navigationTitle(toolbarTitle)
         .inspector(isPresented: .constant(true)) {
             InspectorView(viewModel: viewModel)

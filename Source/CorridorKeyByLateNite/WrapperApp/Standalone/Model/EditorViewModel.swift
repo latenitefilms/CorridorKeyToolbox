@@ -177,11 +177,23 @@ final class EditorViewModel {
     var lastEngineDescription: String = "—"
     /// Whether the transport is currently playing back. Drives the
     /// play / pause button glyph and the periodic playhead-advance
-    /// timer.
+    /// loop.
     var isPlaying: Bool = false
     /// Whether playback should restart from frame 0 when it reaches
     /// the end of the clip. QuickTime's loop control mirrored.
     var loopEnabled: Bool = false
+    /// Rolling average of the per-tick playback frame rate, in
+    /// frames per second. Computed by `runPlaybackLoop` from the
+    /// wall-clock interval between successive renders. Zero outside
+    /// playback. Drives the green/orange fps badge in the transport
+    /// bar so the user can see at a glance whether their machine is
+    /// keeping up with realtime.
+    var measuredPlaybackFPS: Double = 0
+    /// The frame rate the loaded clip would play at if every render
+    /// landed instantly — i.e. the source's nominal frame rate. The
+    /// transport bar's fps badge compares `measuredPlaybackFPS`
+    /// against this threshold to colour itself green vs orange.
+    var targetPlaybackFPS: Double = 0
     /// Currently-active OSC tool — drives the click handler on the
     /// preview surface.
     var oscTool: OnScreenControlTool = .disabled
@@ -205,11 +217,14 @@ final class EditorViewModel {
     /// edit; whoever fires last wins.
     @ObservationIgnored
     private var pendingPreviewTask: Task<Void, Never>?
-    /// Background timer that drives playback. Owned by `togglePlayback`
-    /// and torn down by `stopPlayback` so the playhead doesn't keep
-    /// advancing after the user pauses.
+    /// Background Task that drives playback. Replaces the legacy
+    /// `Timer.scheduledTimer` loop so each tick can await the GPU
+    /// render before advancing — earlier builds fired ticks at the
+    /// source frame rate regardless of render latency, which on a
+    /// short looping clip meant the displayed frame never actually
+    /// caught up to the playhead.
     @ObservationIgnored
-    private var playbackTimer: Timer?
+    private var playbackTask: Task<Void, Never>?
 
     init(renderEngine: StandaloneRenderEngine) {
         self.renderEngine = renderEngine
@@ -275,38 +290,138 @@ final class EditorViewModel {
 
     private func startPlayback() {
         guard let clipInfo, !isPlaying else { return }
-        let interval = 1.0 / max(Double(clipInfo.nominalFrameRate), 1.0)
+        targetPlaybackFPS = max(Double(clipInfo.nominalFrameRate), 0)
+        measuredPlaybackFPS = 0
         isPlaying = true
-        playbackTimer?.invalidate()
-        playbackTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.advancePlaybackTick()
-            }
+        playbackTask?.cancel()
+        playbackTask = Task { @MainActor [weak self] in
+            await self?.runPlaybackLoop()
         }
     }
 
     private func stopPlayback() {
-        playbackTimer?.invalidate()
-        playbackTimer = nil
+        playbackTask?.cancel()
+        playbackTask = nil
         isPlaying = false
+        measuredPlaybackFPS = 0
     }
 
-    /// One tick of the playback timer. Steps the playhead by one
-    /// frame, wraps to zero when looping, or stops when reaching
-    /// the end without looping.
-    private func advancePlaybackTick() {
-        guard isPlaying else { return }
-        let currentFrame = currentFrameIndex(at: playheadTime)
-        let lastFrame = max(totalFrames - 1, 0)
-        if currentFrame >= lastFrame {
-            if loopEnabled {
-                seek(toFrameIndex: 0)
+    /// Awaits-each-frame playback loop. Each iteration:
+    ///
+    /// 1. Picks the next frame index (wrapping when `loopEnabled`).
+    /// 2. Moves the playhead so the slider/time label track in real
+    ///    time as the user expects.
+    /// 3. **Awaits** `performRender(at:)` for that frame so the
+    ///    user actually sees every frame land — the legacy timer-
+    ///    based path fired ticks at the nominal frame rate even
+    ///    when the GPU couldn't keep up, which on a short looping
+    ///    clip silently dropped most renders mid-flight.
+    /// 4. If the render finished faster than the source's per-frame
+    ///    interval, sleeps the remainder so playback runs at the
+    ///    real frame rate instead of turbo-mode.
+    /// 5. Updates `measuredPlaybackFPS` from the wall-clock interval
+    ///    so the transport bar's badge can colour itself green
+    ///    (≥ 95% of target) or orange (below).
+    private func runPlaybackLoop() async {
+        guard let clipInfo else { return }
+        let frameRate = max(Double(clipInfo.nominalFrameRate), 0.001)
+        let frameIntervalSeconds = 1.0 / frameRate
+        // Window of recent samples used to smooth the displayed fps
+        // — without smoothing, a single slow frame would slam the
+        // badge into the orange band even when the average is fine.
+        // Sized to ~1 s of history so the indicator settles within
+        // a wall-clock second of any change.
+        let fpsSampleCap = max(Int(frameRate.rounded()), 1)
+        var fpsSamples: [Double] = []
+
+        while isPlaying && !Task.isCancelled {
+            let tickStart = Date()
+
+            let currentFrame = currentFrameIndex(at: playheadTime)
+            let lastFrame = max(totalFrames - 1, 0)
+            let nextFrame: Int
+            if currentFrame >= lastFrame {
+                if loopEnabled {
+                    nextFrame = 0
+                } else {
+                    isPlaying = false
+                    break
+                }
             } else {
-                stopPlayback()
+                nextFrame = currentFrame + 1
             }
-            return
+
+            let target = CMTime(
+                seconds: Double(nextFrame) / frameRate,
+                preferredTimescale: clipInfo.timescale
+            )
+            playheadTime = target
+
+            do {
+                try await performRender(at: target)
+            } catch {
+                if !Task.isCancelled {
+                    self.phase = .loadFailed(error.localizedDescription)
+                }
+                isPlaying = false
+                break
+            }
+            if Task.isCancelled { break }
+
+            let renderSeconds = Date().timeIntervalSince(tickStart)
+            if renderSeconds < frameIntervalSeconds {
+                let throttle = frameIntervalSeconds - renderSeconds
+                try? await Task.sleep(for: .seconds(throttle))
+            }
+            if Task.isCancelled { break }
+
+            let tickSeconds = Date().timeIntervalSince(tickStart)
+            let achievedFPS = 1.0 / max(tickSeconds, 0.001)
+            fpsSamples.append(achievedFPS)
+            while fpsSamples.count > fpsSampleCap {
+                fpsSamples.removeFirst()
+            }
+            measuredPlaybackFPS = fpsSamples.reduce(0, +) / Double(fpsSamples.count)
         }
-        seek(toFrameIndex: currentFrame + 1)
+        isPlaying = false
+        measuredPlaybackFPS = 0
+    }
+
+    /// Awaitable variant of `renderPreview(at:)` used by the
+    /// playback loop so each tick can wait for the rendered frame
+    /// to actually land before advancing. Throws on render or
+    /// decode failure so the caller can stop playback cleanly. Does
+    /// not interact with `pendingPreviewTask` — that field exists
+    /// to coalesce parameter-edit re-renders, which playback never
+    /// fights with because the playback task owns the rendering
+    /// schedule end-to-end.
+    @MainActor
+    private func performRender(at time: CMTime) async throws {
+        guard let source = videoSource else { return }
+        let frameTime = time
+        let frameIndex = currentFrameIndex(at: frameTime)
+        var stateForFrame = state
+        if let cached = matteCache[frameIndex] {
+            stateForFrame.cachedMatteBlob = cached.blob
+            stateForFrame.cachedMatteInferenceResolution = cached.inferenceResolution
+        }
+        stateForFrame.destinationLongEdgePixels = max(
+            Int(renderSize.width.rounded()),
+            Int(renderSize.height.rounded())
+        )
+        let pixelBuffer = try await source.makeFrame(atTime: frameTime)
+        let result = try renderEngine.render(
+            source: pixelBuffer,
+            state: stateForFrame,
+            renderTime: frameTime
+        )
+        self.latestPreview = PreviewFrame(
+            texture: result.destinationTexture,
+            pixelBuffer: result.destinationPixelBuffer,
+            presentationTime: frameTime
+        )
+        self.renderBackendDescription = result.report.backendDescription
+        self.lastEngineDescription = result.report.guideSourceDescription
     }
 
     /// Toggles the loop affordance. Keeps playback running if it
@@ -329,23 +444,27 @@ final class EditorViewModel {
 
     // MARK: - Transport
 
-    /// Moves the playhead to a normalised position (0…1). Snaps to the
-    /// nearest source frame and renders a preview.
+    /// Moves the playhead to a normalised position (0…1) interpreted
+    /// as a position within the clip's **frame range**. Earlier
+    /// builds mapped to position-within-duration, which on a short
+    /// clip (the asset's duration is one frame past the last sample)
+    /// meant the user couldn't drag the slider all the way to the
+    /// last frame — a 4-frame clip's slider stopped at 0.75, hiding
+    /// the final sample behind the right edge.
+    ///
+    /// Frame-index space: 0 → frame 0, 1 → frame N-1.
     func scrub(toNormalized fraction: Double) {
-        guard let source = videoSource, let clipInfo else { return }
+        guard let clipInfo else { return }
         let clamped = min(max(fraction, 0), 1)
-        let durationSeconds = clipInfo.duration.seconds
+        let lastFrameIndex = max(totalFrames - 1, 0)
+        let frameRate = max(Double(clipInfo.nominalFrameRate), 0.001)
+        let targetFrame = Int((clamped * Double(lastFrameIndex)).rounded())
         let target = CMTime(
-            seconds: clamped * durationSeconds,
+            seconds: Double(targetFrame) / frameRate,
             preferredTimescale: clipInfo.timescale
         )
-        Task { [source] in
-            let snapped = source.nearestFrameTime(to: target)
-            await MainActor.run {
-                self.playheadTime = snapped
-                self.renderPreview(at: snapped)
-            }
-        }
+        playheadTime = target
+        renderPreview(at: target)
     }
 
     /// Moves the playhead by an integer number of source frames.
@@ -621,6 +740,7 @@ final class EditorViewModel {
 
     private func cancelInflightWork() {
         pendingPreviewTask?.cancel(); pendingPreviewTask = nil
+        stopPlayback()
         cancelAnalysis()
         cancelExport()
     }

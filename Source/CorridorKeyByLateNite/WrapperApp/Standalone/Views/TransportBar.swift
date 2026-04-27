@@ -105,32 +105,68 @@ struct TransportBar: View {
             )
             .disabled(!viewModel.phase.isReady)
 
-            Text("\(currentFrameLabel) / \(totalFrameLabel)")
-                .font(.callout.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 110, alignment: .trailing)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(frameCounterLabel)
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                if viewModel.isPlaying {
+                    fpsIndicator
+                }
+            }
+            .frame(width: 110, alignment: .trailing)
         }
     }
 
+    /// Slider position interpreted as a fraction of the clip's
+    /// **frame range** (frame 0 → 0, last frame → 1). Earlier
+    /// builds mapped onto position-within-duration, which left the
+    /// slider one tick short of the final sample on short clips —
+    /// a 4-frame clip topped out at 0.75 so the last frame was
+    /// visually unreachable.
     private var normalizedPlayhead: Double {
-        guard let info = viewModel.clipInfo, info.duration.seconds > 0 else { return 0 }
-        return min(max(viewModel.playheadTime.seconds / info.duration.seconds, 0), 1)
+        guard let info = viewModel.clipInfo else { return 0 }
+        let lastFrameIndex = max(viewModel.totalFrames - 1, 0)
+        guard lastFrameIndex > 0 else { return 0 }
+        let frameRate = max(Double(info.nominalFrameRate), 0.001)
+        let frameIndex = Int((viewModel.playheadTime.seconds * frameRate).rounded())
+        let clamped = max(0, min(frameIndex, lastFrameIndex))
+        return Double(clamped) / Double(lastFrameIndex)
     }
 
-    private var currentFrameLabel: String {
-        guard let info = viewModel.clipInfo else { return "0" }
+    /// Compact "current/total frames" label. Earlier builds rendered
+    /// "1 / 4 f" with cramped spacing and a single-letter unit; the
+    /// new format reads as a fraction with a spelt-out unit so a
+    /// reader who hasn't seen the app before can parse it
+    /// immediately ("1/4 frames" vs the previous "1 / 4 f").
+    private var frameCounterLabel: String {
+        guard viewModel.totalFrames > 0, let info = viewModel.clipInfo else { return "—" }
         let frameRate = max(Double(info.nominalFrameRate), 0.001)
         let frame = Int((viewModel.playheadTime.seconds * frameRate).rounded())
         // Clamp the displayed frame to the clip's total frame count.
         // The asset's duration sits one frame-duration past the
         // last sample, so without the cap the label can briefly
-        // read "N+1 / N f" when scrubbing all the way to the right.
+        // read "N+1/N frames" when scrubbing all the way to the right.
         let displayed = max(1, min(frame + 1, viewModel.totalFrames))
-        return String(displayed)
+        return "\(displayed)/\(viewModel.totalFrames) frames"
     }
 
-    private var totalFrameLabel: String {
-        viewModel.totalFrames > 0 ? "\(viewModel.totalFrames) f" : "—"
+    /// Live "fps" badge underneath the frame counter. Only rendered
+    /// while playback is active (no measurement to display
+    /// otherwise). Green when the GPU keeps within 5% of the source
+    /// clip's frame rate, orange when it's falling behind — the
+    /// 5% slack absorbs scheduler jitter so a steady realtime
+    /// playback doesn't flash orange between frames.
+    @ViewBuilder
+    private var fpsIndicator: some View {
+        let achieved = viewModel.measuredPlaybackFPS
+        let target = viewModel.targetPlaybackFPS
+        let isRealtime = target > 0 && achieved >= target * 0.95
+        Text("\(Int(achieved.rounded())) fps")
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(isRealtime ? Color.green : Color.orange)
+            .help(isRealtime
+                  ? "Playing back at the source clip's frame rate."
+                  : "GPU is slower than the source frame rate — every frame still displays, but slower than realtime.")
     }
 
     /// Wraps the SMPTE timecode helper so the transport bar uses

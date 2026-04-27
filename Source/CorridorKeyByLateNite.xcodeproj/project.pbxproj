@@ -62,12 +62,16 @@
 		CK0100000000000000000076 /* SharedMLXBridgeRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000076 /* SharedMLXBridgeRegistry.swift */; };
 		CK0100000000000000000077 /* TemporalBlender.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000077 /* TemporalBlender.swift */; };
 		DC0100000000000000000001 /* DeviceCapabilityCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0200000000000000000001 /* DeviceCapabilityCache.swift */; };
+		EB0000000000000000000001 /* RealClipFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = ER0000000000000000000001 /* RealClipFixture.swift */; };
+		EB0000000000000000000002 /* NikoDruidEndToEndTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ER0000000000000000000002 /* NikoDruidEndToEndTests.swift */; };
+		FT0400000000000000000001 /* FourFrameUserFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT0300000000000000000001 /* FourFrameUserFlowTests.swift */; };
 		HP0100000000000000000001 /* HintPointSet.swift in Sources */ = {isa = PBXBuildFile; fileRef = HP0200000000000000000001 /* HintPointSet.swift */; };
 		MX0200000000000000000002 /* MLXKeyingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = MX0100000000000000000003 /* MLXKeyingEngine.swift */; };
 		MX0500000000000000000001 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = MX0400000000000000000001 /* MLX */; };
 		MX0500000000000000000002 /* MLXNN in Frameworks */ = {isa = PBXBuildFile; productRef = MX0400000000000000000002 /* MLXNN */; };
 		OS0100000000000000000001 /* CorridorKeyHintOSC.swift in Sources */ = {isa = PBXBuildFile; fileRef = OS0200000000000000000001 /* CorridorKeyHintOSC.swift */; };
-		VH0100000000000000000001 /* VisionHintEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = VH0200000000000000000001 /* VisionHintEngine.swift */; };
+		OS0400000000000000000001 /* OnScreenControlOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = OS0300000000000000000001 /* OnScreenControlOverlay.swift */; };
+		PB0400000000000000000001 /* PreviewBackdropCompositingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PB0300000000000000000001 /* PreviewBackdropCompositingTests.swift */; };
 		SB0000000000000000000001 /* PixelBufferTextureBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR0000000000000000000001 /* PixelBufferTextureBridge.swift */; };
 		SB0000000000000000000002 /* VideoSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR0000000000000000000002 /* VideoSource.swift */; };
 		SB0000000000000000000003 /* StandaloneRenderEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR0000000000000000000003 /* StandaloneRenderEngine.swift */; };
@@ -115,19 +119,15 @@
 		SB000000000000000000002D /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = SF0000000000000000000005 /* CoreVideo.framework */; };
 		SB000000000000000000002E /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = SP0000000000000000000001 /* MLX */; };
 		SB000000000000000000002F /* MLXNN in Frameworks */ = {isa = PBXBuildFile; productRef = SP0000000000000000000002 /* MLXNN */; };
-				WB0000000000000000000002 /* SyntheticVideoFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = WR0000000000000000000002 /* SyntheticVideoFixture.swift */; };
+		TP0400000000000000000001 /* TransportPolishTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TP0300000000000000000001 /* TransportPolishTests.swift */; };
+		VH0100000000000000000001 /* VisionHintEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = VH0200000000000000000001 /* VisionHintEngine.swift */; };
+		WB0000000000000000000002 /* SyntheticVideoFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = WR0000000000000000000002 /* SyntheticVideoFixture.swift */; };
 		WB0000000000000000000003 /* PixelBufferTextureBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = WR0000000000000000000003 /* PixelBufferTextureBridgeTests.swift */; };
 		WB0000000000000000000004 /* VideoSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = WR0000000000000000000004 /* VideoSourceTests.swift */; };
 		WB0000000000000000000005 /* StandaloneRenderEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = WR0000000000000000000005 /* StandaloneRenderEngineTests.swift */; };
 		WB0000000000000000000006 /* AnalysisAndExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = WR0000000000000000000006 /* AnalysisAndExportTests.swift */; };
 		WB0000000000000000000007 /* EditorViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = WR0000000000000000000007 /* EditorViewModelTests.swift */; };
-				EB0000000000000000000001 /* RealClipFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = ER0000000000000000000001 /* RealClipFixture.swift */; };
-		EB0000000000000000000002 /* NikoDruidEndToEndTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ER0000000000000000000002 /* NikoDruidEndToEndTests.swift */; };
-				OS0400000000000000000001 /* OnScreenControlOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = OS0300000000000000000001 /* OnScreenControlOverlay.swift */; };
-				FT0400000000000000000001 /* FourFrameUserFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT0300000000000000000001 /* FourFrameUserFlowTests.swift */; };
-				TP0400000000000000000001 /* TransportPolishTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TP0300000000000000000001 /* TransportPolishTests.swift */; };
-				PB0400000000000000000001 /* PreviewBackdropCompositingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PB0300000000000000000001 /* PreviewBackdropCompositingTests.swift */; };
-		/* End PBXBuildFile section */
+/* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		CK0500000000000000000001 /* PBXContainerItemProxy */ = {
@@ -235,41 +235,41 @@
 		CK0400000000000000000008 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
 		CK0400000000000000000009 /* PluginManager.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PluginManager.framework; path = /Library/Developer/Frameworks/PluginManager.framework; sourceTree = "<absolute>"; };
 		DC0200000000000000000001 /* DeviceCapabilityCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DeviceCapabilityCache.swift; path = CorridorKeyByLateNite/Plugin/Inference/DeviceCapabilityCache.swift; sourceTree = "<group>"; };
+		ER0000000000000000000001 /* RealClipFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RealClipFixture.swift; path = Tests/WrapperAppTests/RealClipFixture.swift; sourceTree = "<group>"; };
+		ER0000000000000000000002 /* NikoDruidEndToEndTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NikoDruidEndToEndTests.swift; path = Tests/WrapperAppTests/NikoDruidEndToEndTests.swift; sourceTree = "<group>"; };
+		FT0300000000000000000001 /* FourFrameUserFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FourFrameUserFlowTests.swift; path = Tests/WrapperAppTests/FourFrameUserFlowTests.swift; sourceTree = "<group>"; };
 		HP0200000000000000000001 /* HintPointSet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = HintPointSet.swift; path = CorridorKeyByLateNite/Plugin/Inspector/HintPointSet.swift; sourceTree = "<group>"; };
 		MX0100000000000000000003 /* MLXKeyingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MLXKeyingEngine.swift; path = CorridorKeyByLateNite/Plugin/Inference/MLXKeyingEngine.swift; sourceTree = "<group>"; };
 		OS0200000000000000000001 /* CorridorKeyHintOSC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyHintOSC.swift; path = CorridorKeyByLateNite/Plugin/Inspector/CorridorKeyHintOSC.swift; sourceTree = "<group>"; };
-		VH0200000000000000000001 /* VisionHintEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VisionHintEngine.swift; path = CorridorKeyByLateNite/Plugin/Inference/VisionHintEngine.swift; sourceTree = "<group>"; };
-		SR0000000000000000000001 /* PixelBufferTextureBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PixelBufferTextureBridge.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Engine/PixelBufferTextureBridge.swift"; sourceTree = "<group>"; };
-		SR0000000000000000000002 /* VideoSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VideoSource.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Engine/VideoSource.swift"; sourceTree = "<group>"; };
-		SR0000000000000000000003 /* StandaloneRenderEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StandaloneRenderEngine.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Engine/StandaloneRenderEngine.swift"; sourceTree = "<group>"; };
-		SR0000000000000000000004 /* AnalysisRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AnalysisRunner.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Engine/AnalysisRunner.swift"; sourceTree = "<group>"; };
-		SR0000000000000000000005 /* ProResExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ProResExporter.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Engine/ProResExporter.swift"; sourceTree = "<group>"; };
-		SR0000000000000000000006 /* ParameterRanges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ParameterRanges.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Model/ParameterRanges.swift"; sourceTree = "<group>"; };
-		SR0000000000000000000007 /* EditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EditorViewModel.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Model/EditorViewModel.swift"; sourceTree = "<group>"; };
-		SR0000000000000000000008 /* MetalPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MetalPreviewView.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Views/MetalPreviewView.swift"; sourceTree = "<group>"; };
-		SR0000000000000000000009 /* InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InspectorView.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Views/InspectorView.swift"; sourceTree = "<group>"; };
-		SR000000000000000000000A /* TransportBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TransportBar.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Views/TransportBar.swift"; sourceTree = "<group>"; };
-		SR000000000000000000000B /* ExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ExportSheet.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Views/ExportSheet.swift"; sourceTree = "<group>"; };
-		SR000000000000000000000C /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EditorView.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Views/EditorView.swift"; sourceTree = "<group>"; };
+		OS0300000000000000000001 /* OnScreenControlOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OnScreenControlOverlay.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Views/OnScreenControlOverlay.swift; sourceTree = "<group>"; };
+		PB0300000000000000000001 /* PreviewBackdropCompositingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PreviewBackdropCompositingTests.swift; path = Tests/WrapperAppTests/PreviewBackdropCompositingTests.swift; sourceTree = "<group>"; };
 		SF0000000000000000000001 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		SF0000000000000000000002 /* VideoToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = VideoToolbox.framework; path = System/Library/Frameworks/VideoToolbox.framework; sourceTree = SDKROOT; };
 		SF0000000000000000000003 /* Vision.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework; path = System/Library/Frameworks/Vision.framework; sourceTree = SDKROOT; };
 		SF0000000000000000000004 /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
 		SF0000000000000000000005 /* CoreVideo.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreVideo.framework; path = System/Library/Frameworks/CoreVideo.framework; sourceTree = SDKROOT; };
-				WR0000000000000000000002 /* SyntheticVideoFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SyntheticVideoFixture.swift; path = "Tests/WrapperAppTests/SyntheticVideoFixture.swift"; sourceTree = "<group>"; };
-		WR0000000000000000000003 /* PixelBufferTextureBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PixelBufferTextureBridgeTests.swift; path = "Tests/WrapperAppTests/PixelBufferTextureBridgeTests.swift"; sourceTree = "<group>"; };
-		WR0000000000000000000004 /* VideoSourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VideoSourceTests.swift; path = "Tests/WrapperAppTests/VideoSourceTests.swift"; sourceTree = "<group>"; };
-		WR0000000000000000000005 /* StandaloneRenderEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StandaloneRenderEngineTests.swift; path = "Tests/WrapperAppTests/StandaloneRenderEngineTests.swift"; sourceTree = "<group>"; };
-		WR0000000000000000000006 /* AnalysisAndExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AnalysisAndExportTests.swift; path = "Tests/WrapperAppTests/AnalysisAndExportTests.swift"; sourceTree = "<group>"; };
-		WR0000000000000000000007 /* EditorViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EditorViewModelTests.swift; path = "Tests/WrapperAppTests/EditorViewModelTests.swift"; sourceTree = "<group>"; };
+		SR0000000000000000000001 /* PixelBufferTextureBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PixelBufferTextureBridge.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Engine/PixelBufferTextureBridge.swift; sourceTree = "<group>"; };
+		SR0000000000000000000002 /* VideoSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VideoSource.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Engine/VideoSource.swift; sourceTree = "<group>"; };
+		SR0000000000000000000003 /* StandaloneRenderEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StandaloneRenderEngine.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Engine/StandaloneRenderEngine.swift; sourceTree = "<group>"; };
+		SR0000000000000000000004 /* AnalysisRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AnalysisRunner.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Engine/AnalysisRunner.swift; sourceTree = "<group>"; };
+		SR0000000000000000000005 /* ProResExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ProResExporter.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Engine/ProResExporter.swift; sourceTree = "<group>"; };
+		SR0000000000000000000006 /* ParameterRanges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ParameterRanges.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Model/ParameterRanges.swift; sourceTree = "<group>"; };
+		SR0000000000000000000007 /* EditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EditorViewModel.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Model/EditorViewModel.swift; sourceTree = "<group>"; };
+		SR0000000000000000000008 /* MetalPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MetalPreviewView.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Views/MetalPreviewView.swift; sourceTree = "<group>"; };
+		SR0000000000000000000009 /* InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InspectorView.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Views/InspectorView.swift; sourceTree = "<group>"; };
+		SR000000000000000000000A /* TransportBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TransportBar.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Views/TransportBar.swift; sourceTree = "<group>"; };
+		SR000000000000000000000B /* ExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ExportSheet.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Views/ExportSheet.swift; sourceTree = "<group>"; };
+		SR000000000000000000000C /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EditorView.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Views/EditorView.swift; sourceTree = "<group>"; };
+		TP0300000000000000000001 /* TransportPolishTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TransportPolishTests.swift; path = Tests/WrapperAppTests/TransportPolishTests.swift; sourceTree = "<group>"; };
+		VH0200000000000000000001 /* VisionHintEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VisionHintEngine.swift; path = CorridorKeyByLateNite/Plugin/Inference/VisionHintEngine.swift; sourceTree = "<group>"; };
+		WR0000000000000000000002 /* SyntheticVideoFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SyntheticVideoFixture.swift; path = Tests/WrapperAppTests/SyntheticVideoFixture.swift; sourceTree = "<group>"; };
+		WR0000000000000000000003 /* PixelBufferTextureBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PixelBufferTextureBridgeTests.swift; path = Tests/WrapperAppTests/PixelBufferTextureBridgeTests.swift; sourceTree = "<group>"; };
+		WR0000000000000000000004 /* VideoSourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VideoSourceTests.swift; path = Tests/WrapperAppTests/VideoSourceTests.swift; sourceTree = "<group>"; };
+		WR0000000000000000000005 /* StandaloneRenderEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StandaloneRenderEngineTests.swift; path = Tests/WrapperAppTests/StandaloneRenderEngineTests.swift; sourceTree = "<group>"; };
+		WR0000000000000000000006 /* AnalysisAndExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AnalysisAndExportTests.swift; path = Tests/WrapperAppTests/AnalysisAndExportTests.swift; sourceTree = "<group>"; };
+		WR0000000000000000000007 /* EditorViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EditorViewModelTests.swift; path = Tests/WrapperAppTests/EditorViewModelTests.swift; sourceTree = "<group>"; };
 		WT0300000000000000000001 /* WrapperAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WrapperAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-				ER0000000000000000000001 /* RealClipFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RealClipFixture.swift; path = "Tests/WrapperAppTests/RealClipFixture.swift"; sourceTree = "<group>"; };
-		ER0000000000000000000002 /* NikoDruidEndToEndTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NikoDruidEndToEndTests.swift; path = "Tests/WrapperAppTests/NikoDruidEndToEndTests.swift"; sourceTree = "<group>"; };
-				OS0300000000000000000001 /* OnScreenControlOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OnScreenControlOverlay.swift; path = "CorridorKeyByLateNite/WrapperApp/Standalone/Views/OnScreenControlOverlay.swift"; sourceTree = "<group>"; };
-				FT0300000000000000000001 /* FourFrameUserFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FourFrameUserFlowTests.swift; path = "Tests/WrapperAppTests/FourFrameUserFlowTests.swift"; sourceTree = "<group>"; };
-				TP0300000000000000000001 /* TransportPolishTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TransportPolishTests.swift; path = "Tests/WrapperAppTests/TransportPolishTests.swift"; sourceTree = "<group>"; };
-				PB0300000000000000000001 /* PreviewBackdropCompositingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PreviewBackdropCompositingTests.swift; path = "Tests/WrapperAppTests/PreviewBackdropCompositingTests.swift"; sourceTree = "<group>"; };
-		/* End PBXFileReference section */
+/* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		CK0900000000000000000001 /* Frameworks */ = {
@@ -338,7 +338,7 @@
 				CK0A00000000000000000002 /* CorridorKeyByLateNite */,
 				CK0A00000000000000000008 /* Frameworks */,
 				WT0A00000000000000000001 /* WrapperAppTests */,
-			CK0A00000000000000000009 /* Products */,
+				CK0A00000000000000000009 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
@@ -380,8 +380,8 @@
 			isa = PBXGroup;
 			children = (
 				CK0200000000000000000003 /* CorridorKeyByLateNitePlugIn+Parameters.swift */,
-				CK0200000000000000000009 /* ParameterIdentifiers.swift */,
 				CK020000000000000000000A /* ParameterEnumerations.swift */,
+				CK0200000000000000000009 /* ParameterIdentifiers.swift */,
 				CK020000000000000000000B /* PluginStateData.swift */,
 			);
 			name = Parameters;
@@ -438,22 +438,22 @@
 			children = (
 				CK0300000000000000000001 /* CorridorKey by LateNite.app */,
 				CK0300000000000000000002 /* CorridorKey by LateNite Renderer.pluginkit */,
-
-				WT0300000000000000000001 /* WrapperAppTests.xctest */,);
+				WT0300000000000000000001 /* WrapperAppTests.xctest */,
+			);
 			name = Products;
 			sourceTree = "<group>";
 		};
 		CK0A0000000000000000000A /* Inference */ = {
 			isa = PBXGroup;
 			children = (
-				CK020000000000000000000F /* KeyingInferenceEngine.swift */,
-				MX0100000000000000000003 /* MLXKeyingEngine.swift */,
-				VH0200000000000000000001 /* VisionHintEngine.swift */,
-				CK0200000000000000000076 /* SharedMLXBridgeRegistry.swift */,
-				CK0200000000000000000012 /* InferenceCoordinator.swift */,
 				CK0200000000000000000051 /* AnalysisData.swift */,
-				CK0200000000000000000052 /* MatteCodec.swift */,
 				DC0200000000000000000001 /* DeviceCapabilityCache.swift */,
+				CK0200000000000000000012 /* InferenceCoordinator.swift */,
+				CK020000000000000000000F /* KeyingInferenceEngine.swift */,
+				CK0200000000000000000052 /* MatteCodec.swift */,
+				MX0100000000000000000003 /* MLXKeyingEngine.swift */,
+				CK0200000000000000000076 /* SharedMLXBridgeRegistry.swift */,
+				VH0200000000000000000001 /* VisionHintEngine.swift */,
 			);
 			name = Inference;
 			sourceTree = "<group>";
@@ -461,11 +461,11 @@
 		CK0A0000000000000000000B /* Metal */ = {
 			isa = PBXGroup;
 			children = (
-				CK020000000000000000000C /* MetalDeviceCache.swift */,
+				CK020000000000000000000D /* CorridorKeyShaders.metal */,
 				CK0200000000000000000075 /* FxImageTilePixelFormat.swift */,
 				CK0200000000000000000070 /* IntermediateTexturePool.swift */,
 				CK0200000000000000000071 /* MatteRefiner.swift */,
-				CK020000000000000000000D /* CorridorKeyShaders.metal */,
+				CK020000000000000000000C /* MetalDeviceCache.swift */,
 			);
 			name = Metal;
 			sourceTree = "<group>";
@@ -473,8 +473,8 @@
 		CK0A0000000000000000000C /* PostProcess */ = {
 			isa = PBXGroup;
 			children = (
-				CK020000000000000000000E /* ScreenColorEstimator.swift */,
 				CK0200000000000000000072 /* ColorGamutMatrix.swift */,
+				CK020000000000000000000E /* ScreenColorEstimator.swift */,
 				CK0200000000000000000077 /* TemporalBlender.swift */,
 			);
 			name = PostProcess;
@@ -500,13 +500,13 @@
 		CK0A00000000000000000020 /* Inspector */ = {
 			isa = PBXGroup;
 			children = (
-				CK0200000000000000000060 /* CorridorKeyByLateNitePlugIn+CustomViews.swift */,
-				CK0200000000000000000061 /* CorridorKeyInspectorBridge.swift */,
-				CK0200000000000000000062 /* CorridorKeyHeaderView.swift */,
 				CK0200000000000000000063 /* CorridorKeyAnalysisSnapshot.swift */,
-				CK0200000000000000000074 /* WarmupStatus.swift */,
-				HP0200000000000000000001 /* HintPointSet.swift */,
+				CK0200000000000000000060 /* CorridorKeyByLateNitePlugIn+CustomViews.swift */,
+				CK0200000000000000000062 /* CorridorKeyHeaderView.swift */,
 				OS0200000000000000000001 /* CorridorKeyHintOSC.swift */,
+				CK0200000000000000000061 /* CorridorKeyInspectorBridge.swift */,
+				HP0200000000000000000001 /* HintPointSet.swift */,
+				CK0200000000000000000074 /* WarmupStatus.swift */,
 			);
 			name = Inspector;
 			sourceTree = "<group>";
@@ -514,11 +514,11 @@
 		SG0000000000000000000001 /* Engine */ = {
 			isa = PBXGroup;
 			children = (
-				SR0000000000000000000001 /* PixelBufferTextureBridge.swift */,
-				SR0000000000000000000002 /* VideoSource.swift */,
-				SR0000000000000000000003 /* StandaloneRenderEngine.swift */,
 				SR0000000000000000000004 /* AnalysisRunner.swift */,
+				SR0000000000000000000001 /* PixelBufferTextureBridge.swift */,
 				SR0000000000000000000005 /* ProResExporter.swift */,
+				SR0000000000000000000003 /* StandaloneRenderEngine.swift */,
+				SR0000000000000000000002 /* VideoSource.swift */,
 			);
 			name = Engine;
 			sourceTree = "<group>";
@@ -526,8 +526,8 @@
 		SG0000000000000000000002 /* Model */ = {
 			isa = PBXGroup;
 			children = (
-				SR0000000000000000000006 /* ParameterRanges.swift */,
 				SR0000000000000000000007 /* EditorViewModel.swift */,
+				SR0000000000000000000006 /* ParameterRanges.swift */,
 			);
 			name = Model;
 			sourceTree = "<group>";
@@ -535,11 +535,12 @@
 		SG0000000000000000000003 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				SR0000000000000000000008 /* MetalPreviewView.swift */,
-				SR0000000000000000000009 /* InspectorView.swift */,
-				SR000000000000000000000A /* TransportBar.swift */,
-				SR000000000000000000000B /* ExportSheet.swift */,
 				SR000000000000000000000C /* EditorView.swift */,
+				SR000000000000000000000B /* ExportSheet.swift */,
+				SR0000000000000000000009 /* InspectorView.swift */,
+				SR0000000000000000000008 /* MetalPreviewView.swift */,
+				OS0300000000000000000001 /* OnScreenControlOverlay.swift */,
+				SR000000000000000000000A /* TransportBar.swift */,
 			);
 			name = Views;
 			sourceTree = "<group>";
@@ -554,7 +555,7 @@
 			name = Standalone;
 			sourceTree = "<group>";
 		};
-				WT0A00000000000000000001 /* WrapperAppTests */ = {
+		WT0A00000000000000000001 /* WrapperAppTests */ = {
 			isa = PBXGroup;
 			children = (
 				PB0300000000000000000001 /* PreviewBackdropCompositingTests.swift */,
@@ -572,7 +573,7 @@
 			name = WrapperAppTests;
 			sourceTree = "<group>";
 		};
-		/* End PBXGroup section */
+/* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
 		CK0700000000000000000001 /* CorridorKey by LateNite */ = {
@@ -590,11 +591,11 @@
 				CK0E00000000000000000001 /* PBXTargetDependency */,
 			);
 			name = "CorridorKey by LateNite";
-			productName = "CorridorKey by LateNite";
 			packageProductDependencies = (
 				SP0000000000000000000001 /* MLX */,
 				SP0000000000000000000002 /* MLXNN */,
 			);
+			productName = "CorridorKey by LateNite";
 			productReference = CK0300000000000000000001 /* CorridorKey by LateNite.app */;
 			productType = "com.apple.product-type.application";
 		};
@@ -986,12 +987,9 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = CK0200000000000000000026 /* Shared.xcconfig */;
 			buildSettings = {
-				MTL_HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyByLateNite/Plugin/Shared";
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyByLateNite/Plugin/Shared";
-				SWIFT_OBJC_BRIDGING_HEADER = "CorridorKeyByLateNite/WrapperApp/WrapperApp-Bridging-Header.h";
-				CLANG_ENABLE_MODULES = YES;
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = "VFX Toolbox";
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = CorridorKeyByLateNite/WrapperApp/WrapperApp.entitlements;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
@@ -1008,14 +1006,17 @@
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyByLateNite/Plugin/Shared";
 				INFOPLIST_FILE = CorridorKeyByLateNite/WrapperApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "CorridorKey by LateNite";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				MTL_HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyByLateNite/Plugin/Shared";
 				PRODUCT_BUNDLE_IDENTIFIER = com.latenitefilms.CorridorKeyToolbox;
 				PRODUCT_MODULE_NAME = CorridorKeyByLateNiteApp;
 				PRODUCT_NAME = "CorridorKey by LateNite";
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_OBJC_BRIDGING_HEADER = "CorridorKeyByLateNite/WrapperApp/WrapperApp-Bridging-Header.h";
 			};
 			name = Debug;
 		};
@@ -1023,12 +1024,9 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = CK0200000000000000000026 /* Shared.xcconfig */;
 			buildSettings = {
-				MTL_HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyByLateNite/Plugin/Shared";
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyByLateNite/Plugin/Shared";
-				SWIFT_OBJC_BRIDGING_HEADER = "CorridorKeyByLateNite/WrapperApp/WrapperApp-Bridging-Header.h";
-				CLANG_ENABLE_MODULES = YES;
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = "VFX Toolbox";
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = CorridorKeyByLateNite/WrapperApp/WrapperApp.entitlements;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
@@ -1045,14 +1043,17 @@
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyByLateNite/Plugin/Shared";
 				INFOPLIST_FILE = CorridorKeyByLateNite/WrapperApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "CorridorKey by LateNite";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				MTL_HEADER_SEARCH_PATHS = "$(SRCROOT)/CorridorKeyByLateNite/Plugin/Shared";
 				PRODUCT_BUNDLE_IDENTIFIER = com.latenitefilms.CorridorKeyToolbox;
 				PRODUCT_MODULE_NAME = CorridorKeyByLateNiteApp;
 				PRODUCT_NAME = "CorridorKey by LateNite";
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_OBJC_BRIDGING_HEADER = "CorridorKeyByLateNite/WrapperApp/WrapperApp-Bridging-Header.h";
 			};
 			name = Release;
 		};
@@ -1215,7 +1216,7 @@
 			package = MX0300000000000000000001 /* XCRemoteSwiftPackageReference "mlx-swift" */;
 			productName = MLXNN;
 		};
-		/* End XCSwiftPackageProductDependency section */
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = CK0600000000000000000001 /* Project object */;
 }
