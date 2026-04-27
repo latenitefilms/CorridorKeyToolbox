@@ -22,7 +22,7 @@ links:
   target: blank
 
 - text: Bugs & Feature Requests
-  link: https://github.com/latenitefilms/CorridorKeyToolbox/issues
+  link: https://github.com/latenitefilms/CorridorKeyByLateNite/issues
   icon: issue-opened
   target: blank
 
@@ -42,7 +42,7 @@ footer:
 poweredByRetype: false
 
 edit:
-  repo: "https://github.com/latenitefilms/CorridorKeyToolbox"
+  repo: "https://github.com/latenitefilms/CorridorKeyByLateNite"
   base: /docs
   label: Edit this page on GitHub
 
