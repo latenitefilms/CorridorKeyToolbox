@@ -1,9 +1,9 @@
 ﻿# CorridorKey by LateNite
 
-> CorridorKey by LateNite is currently in a public beta testing phase. 👷
+> **We're currently in a public beta testing phase. 👷
 
 - [CorridorKey by LateNite](https://corridorkeybylatenite.fcp.cafe/readme.md): CorridorKey by LateNite
-- [Download](https://corridorkeybylatenite.fcp.cafe/download.md): CorridorKey by LateNite is currently in a public beta testing phase.
+- [Download](https://corridorkeybylatenite.fcp.cafe/download.md): We're currently in a public beta testing phase.
 - [System Requirements](https://corridorkeybylatenite.fcp.cafe/system-requirements.md): CorridorKey by LateNite requires Final Cut Pro 11 or later on macOS 26 Tahoe.
 - [How To Use](https://corridorkeybylatenite.fcp.cafe/how-to-use.md): CorridorKey by LateNite is currently in a public beta testing phase. 👷
 - [Support](https://corridorkeybylatenite.fcp.cafe/support.md): The best place to get support is the FCP Cafe Discord.
