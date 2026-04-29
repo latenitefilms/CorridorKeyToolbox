@@ -339,13 +339,14 @@ extension CorridorKeyToolboxPlugIn {
             parameterFlags: CorridorKeyParameterFlags.default.fxFlags
         )
 
-        // Reverted to the Build 2 defaults (strength 0.5, method
-        // Average). Bumping to 1.0 + Screen Subtract as a default in
-        // v1.0 was over-aggressive — it pushed the foreground colours
-        // away from their original screen-tinted look in ways that
-        // some clips depended on for the desired comp. The Screen
-        // Subtract method is still available in the popup, just not
-        // the default.
+        // Strength stays at 0.5 (the Build 2 default). The method
+        // defaults to Ultra (Chroma Project) — its YCbCr-projection
+        // path removes the soft chroma fringe the older Average /
+        // Double Limit kernels leave on hair and feathered edges,
+        // without the over-bright mids Screen Subtract introduces
+        // on translucent fabric. Average / Double Limit / Neutral /
+        // Screen Subtract remain in the popup for users whose
+        // footage responds better to the legacy approaches.
         create.addFloatSlider(
             withName: "Despill Strength",
             parameterID: ParameterIdentifier.despillStrength,
@@ -361,7 +362,7 @@ extension CorridorKeyToolboxPlugIn {
         create.addPopupMenu(
             withName: "Spill Method",
             parameterID: ParameterIdentifier.spillMethod,
-            defaultValue: UInt32(SpillMethod.average.rawValue),
+            defaultValue: UInt32(SpillMethod.ultra.rawValue),
             menuEntries: SpillMethod.allCases.map(\.displayName),
             parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )

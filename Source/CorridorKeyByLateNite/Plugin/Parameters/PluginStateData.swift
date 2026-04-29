@@ -138,7 +138,14 @@ struct PluginStateData: Codable, Sendable {
         despeckleSize: Int = 100,
         refinerStrength: Double = 1.0,
         despillStrength: Double = 0.5,
-        spillMethod: SpillMethod = .average,
+        // Ultra is the comp-ready default — its YCbCr-projection path
+        // removes the soft chroma fringe the older Average / Double
+        // Limit kernels leave on hair and feathered edges, without
+        // the over-bright mids the Screen Subtract path can introduce
+        // on translucent fabric. Users with footage that responds
+        // better to one of the legacy methods can flip it down via
+        // the inspector.
+        spillMethod: SpillMethod = .ultra,
         lightWrapEnabled: Bool = true,
         lightWrapStrength: Double = 0.25,
         lightWrapRadius: Double = 10.0,
@@ -253,7 +260,7 @@ struct PluginStateData: Codable, Sendable {
         self.despeckleSize = try container.decodeIfPresent(Int.self, forKey: .despeckleSize) ?? 100
         self.refinerStrength = try container.decodeIfPresent(Double.self, forKey: .refinerStrength) ?? 1.0
         self.despillStrength = try container.decodeIfPresent(Double.self, forKey: .despillStrength) ?? 0.5
-        self.spillMethod = try container.decodeIfPresent(SpillMethod.self, forKey: .spillMethod) ?? .average
+        self.spillMethod = try container.decodeIfPresent(SpillMethod.self, forKey: .spillMethod) ?? .ultra
         self.lightWrapEnabled = try container.decodeIfPresent(Bool.self, forKey: .lightWrapEnabled) ?? false
         self.lightWrapStrength = try container.decodeIfPresent(Double.self, forKey: .lightWrapStrength) ?? 0.25
         self.lightWrapRadius = try container.decodeIfPresent(Double.self, forKey: .lightWrapRadius) ?? 10.0
