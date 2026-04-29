@@ -69,3 +69,13 @@ https://www.youtube.com/watch?v=Bx5OMAav0IY
 It's basically a front-end for the original CorridorKey CLI.
 
 https://www.youtube.com/watch?v=ezg_1oQzz7w
+
+---
+
+## What is CorridorKey by blace.ai?
+
+[CorridorKey by blace.ai](https://aescripts.com/corridorkey-by-blace-ai/) is a paid/commercial version of CorridorKey.
+
+It boasts "High rendering performance (2x-4x faster rendering times) and completely C++ based for maximum stability".
+
+https://www.youtube.com/watch?v=m-mZcTjnSnI
