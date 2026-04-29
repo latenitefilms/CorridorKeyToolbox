@@ -312,7 +312,7 @@ final class VideoSource: @unchecked Sendable {
     func makeFrameReader(
         startTime: CMTime = .zero,
         preferredPixelFormat: OSType = kCVPixelFormatType_64RGBAHalf
-    ) throws -> VideoFrameReader {
+    ) async throws -> VideoFrameReader {
         let reader: AVAssetReader
         do {
             reader = try AVAssetReader(asset: asset)
@@ -320,7 +320,13 @@ final class VideoSource: @unchecked Sendable {
             throw VideoSourceError.readerSetupFailed(error)
         }
         reader.timeRange = CMTimeRange(start: startTime, end: info.duration)
-        guard let videoTrack = asset.tracks(withMediaType: .video).first else {
+        let videoTracks: [AVAssetTrack]
+        do {
+            videoTracks = try await asset.loadTracks(withMediaType: .video)
+        } catch {
+            throw VideoSourceError.readerSetupFailed(error)
+        }
+        guard let videoTrack = videoTracks.first else {
             throw VideoSourceError.noVideoTrack(info.url)
         }
         let outputSettings: [String: Any] = [

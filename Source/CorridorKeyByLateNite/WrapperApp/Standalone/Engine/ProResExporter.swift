@@ -225,7 +225,7 @@ actor ProResExporter {
 
         let frameReader: VideoFrameReader
         do {
-            frameReader = try videoSource.makeFrameReader(startTime: .zero)
+            frameReader = try await videoSource.makeFrameReader(startTime: .zero)
         } catch {
             writer.cancelWriting()
             eventHandler(.failed("Couldn't open clip for export: \(error.localizedDescription)"))

@@ -77,7 +77,7 @@ actor AnalysisRunner {
         // than reseeking per frame via AVAssetImageGenerator.
         let frameReader: VideoFrameReader
         do {
-            frameReader = try videoSource.makeFrameReader(startTime: .zero)
+            frameReader = try await videoSource.makeFrameReader(startTime: .zero)
         } catch {
             eventHandler(.failed(String(describing: error)))
             return

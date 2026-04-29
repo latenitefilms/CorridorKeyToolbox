@@ -65,7 +65,7 @@ struct VideoSourceTests {
         let url = try await SyntheticVideoFixture.writeMP4(frameCount: 12, fps: 24)
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let source = try await VideoSource(url: url)
-        let reader = try source.makeFrameReader()
+        let reader = try await source.makeFrameReader()
         defer { reader.cancel() }
 
         var seen = 0
