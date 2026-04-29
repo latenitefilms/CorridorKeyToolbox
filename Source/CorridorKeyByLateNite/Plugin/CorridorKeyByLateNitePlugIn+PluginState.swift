@@ -43,11 +43,15 @@ extension CorridorKeyToolboxPlugIn {
             time: renderTime,
             default: .automatic
         )
-        state.autoSubjectHintEnabled = boolValue(
+        // Read the new Hint Mode popup. The popup's default is
+        // `.appleVision`, matching what the legacy "Auto Subject
+        // Hint = on" toggle did, so projects opening for the first
+        // time after this change keep their hint behaviour.
+        state.hintMode = popupValue(
             retrieval: retrieval,
-            parameterID: ParameterIdentifier.autoSubjectHintEnabled,
+            parameterID: ParameterIdentifier.hintMode,
             time: renderTime,
-            default: false
+            default: HintMode.appleVision
         )
         state.showSubjectMarker = boolValue(
             retrieval: retrieval,

@@ -18,10 +18,19 @@ struct PluginStateData: Codable, Sendable {
     var screenColor: ScreenColor
     var qualityMode: QualityMode
 
-    /// When on, the analyser feeds the MLX bridge a Vision-derived
-    /// foreground-subject mask as the 4th input channel. Falls back to
-    /// the green-bias hint when Vision finds no salient subject.
-    var autoSubjectHintEnabled: Bool
+    /// How the upstream alpha hint is generated. See `HintMode` for
+    /// the three options (Automatic / Apple Vision / Manual).
+    var hintMode: HintMode
+
+    /// Legacy mirror of the `appleVision` hint-mode option. Kept as a
+    /// computed boolean because so much of the rendering pipeline
+    /// already asks "should I run the Vision prior?" and rewriting
+    /// every call site at once would balloon this change. New
+    /// branches on the rendering path read `hintMode` directly.
+    var autoSubjectHintEnabled: Bool {
+        get { hintMode == .appleVision }
+        set { hintMode = newValue ? .appleVision : .automatic }
+    }
 
     /// Whether the on-screen subject marker should be drawn on the
     /// canvas. Drawn as a small ring + crosshair the user can drag.
@@ -100,7 +109,23 @@ struct PluginStateData: Codable, Sendable {
     init(
         screenColor: ScreenColor = .green,
         qualityMode: QualityMode = .automatic,
-        autoSubjectHintEnabled: Bool = false,
+        // Default-on quality stack — every parameter below that flips
+        // between "preserve every model pixel" and "polish the
+        // matte" defaults to polish. Users coming in cold get a comp-
+        // ready key on first frame; users tuning a tricky shot can
+        // still flip any individual stage off. The five flips:
+        //
+        //   * hintMode — Apple Vision foreground prior beats the
+        //     green-bias hint on most subjects.
+        //   * autoDespeckleEnabled — drops the salt-and-pepper noise
+        //     the model occasionally produces over moving green.
+        //   * lightWrapEnabled — inherits a touch of background
+        //     colour into the edge so composites don't look pasted.
+        //   * edgeDecontaminateEnabled — kills residual chroma fringe
+        //     on hair and feathered edges.
+        //   * temporalStabilityEnabled — dampens edge-band flicker
+        //     between frames.
+        hintMode: HintMode = .appleVision,
         showSubjectMarker: Bool = true,
         subjectPositionX: Double = 0.5,
         subjectPositionY: Double = 0.5,
@@ -112,17 +137,17 @@ struct PluginStateData: Codable, Sendable {
         alphaErodeNormalized: Double = 0.0,
         alphaSoftnessNormalized: Double = 0.0,
         alphaGamma: Double = 1.0,
-        autoDespeckleEnabled: Bool = false,
+        autoDespeckleEnabled: Bool = true,
         despeckleSize: Int = 100,
         refinerStrength: Double = 1.0,
         despillStrength: Double = 0.5,
         spillMethod: SpillMethod = .average,
-        lightWrapEnabled: Bool = false,
+        lightWrapEnabled: Bool = true,
         lightWrapStrength: Double = 0.25,
         lightWrapRadius: Double = 10.0,
-        edgeDecontaminateEnabled: Bool = false,
+        edgeDecontaminateEnabled: Bool = true,
         edgeDecontaminateStrength: Double = 0.5,
-        temporalStabilityEnabled: Bool = false,
+        temporalStabilityEnabled: Bool = true,
         temporalStabilityStrength: Double = 0.5,
         outputMode: OutputMode = .processed,
         upscaleMethod: UpscaleMethod = .lanczos,
@@ -135,7 +160,7 @@ struct PluginStateData: Codable, Sendable {
     ) {
         self.screenColor = screenColor
         self.qualityMode = qualityMode
-        self.autoSubjectHintEnabled = autoSubjectHintEnabled
+        self.hintMode = hintMode
         self.showSubjectMarker = showSubjectMarker
         self.subjectPositionX = subjectPositionX
         self.subjectPositionY = subjectPositionY
@@ -177,6 +202,11 @@ struct PluginStateData: Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case screenColor
         case qualityMode
+        case hintMode
+        /// Legacy Bool — kept on the coding-keys list so projects
+        /// saved before the `HintMode` enum existed can still be
+        /// decoded. The decoder maps `true → .appleVision`,
+        /// `false → .automatic`.
         case autoSubjectHintEnabled
         case showSubjectMarker
         case subjectPositionX
@@ -215,7 +245,16 @@ struct PluginStateData: Codable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.screenColor = try container.decodeIfPresent(ScreenColor.self, forKey: .screenColor) ?? .green
         self.qualityMode = try container.decodeIfPresent(QualityMode.self, forKey: .qualityMode) ?? .automatic
-        self.autoSubjectHintEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoSubjectHintEnabled) ?? false
+        if let mode = try container.decodeIfPresent(HintMode.self, forKey: .hintMode) {
+            self.hintMode = mode
+        } else if let legacyVisionFlag = try container.decodeIfPresent(Bool.self, forKey: .autoSubjectHintEnabled) {
+            // Pre-HintMode projects: map the old boolean toggle to
+            // the equivalent new mode so opening an existing file
+            // doesn't lose the user's prior pick.
+            self.hintMode = legacyVisionFlag ? .appleVision : .automatic
+        } else {
+            self.hintMode = .appleVision
+        }
         self.showSubjectMarker = try container.decodeIfPresent(Bool.self, forKey: .showSubjectMarker) ?? true
         self.subjectPositionX = try container.decodeIfPresent(Double.self, forKey: .subjectPositionX) ?? 0.5
         self.subjectPositionY = try container.decodeIfPresent(Double.self, forKey: .subjectPositionY) ?? 0.5
@@ -247,6 +286,50 @@ struct PluginStateData: Codable, Sendable {
         self.cachedMatteBlob = try container.decodeIfPresent(Data.self, forKey: .cachedMatteBlob)
         self.cachedMatteInferenceResolution = try container.decodeIfPresent(Int.self, forKey: .cachedMatteInferenceResolution) ?? 0
         self.hintPointSet = try container.decodeIfPresent(HintPointSet.self, forKey: .hintPointSet) ?? HintPointSet()
+    }
+
+    /// Custom encoder. Required because `autoSubjectHintEnabled` is now
+    /// a computed mirror of `hintMode`; the synthesizer would otherwise
+    /// fail to map the (legacy) coding key to a stored property. The
+    /// encoder still emits both keys so older readers that only know
+    /// the boolean field continue to load a sensible value.
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(screenColor, forKey: .screenColor)
+        try container.encode(qualityMode, forKey: .qualityMode)
+        try container.encode(hintMode, forKey: .hintMode)
+        try container.encode(autoSubjectHintEnabled, forKey: .autoSubjectHintEnabled)
+        try container.encode(showSubjectMarker, forKey: .showSubjectMarker)
+        try container.encode(subjectPositionX, forKey: .subjectPositionX)
+        try container.encode(subjectPositionY, forKey: .subjectPositionY)
+        try container.encode(sourcePassthroughEnabled, forKey: .sourcePassthroughEnabled)
+        try container.encode(passthroughErodeNormalized, forKey: .passthroughErodeNormalized)
+        try container.encode(passthroughBlurNormalized, forKey: .passthroughBlurNormalized)
+        try container.encode(alphaBlackPoint, forKey: .alphaBlackPoint)
+        try container.encode(alphaWhitePoint, forKey: .alphaWhitePoint)
+        try container.encode(alphaErodeNormalized, forKey: .alphaErodeNormalized)
+        try container.encode(alphaSoftnessNormalized, forKey: .alphaSoftnessNormalized)
+        try container.encode(alphaGamma, forKey: .alphaGamma)
+        try container.encode(autoDespeckleEnabled, forKey: .autoDespeckleEnabled)
+        try container.encode(despeckleSize, forKey: .despeckleSize)
+        try container.encode(refinerStrength, forKey: .refinerStrength)
+        try container.encode(despillStrength, forKey: .despillStrength)
+        try container.encode(spillMethod, forKey: .spillMethod)
+        try container.encode(lightWrapEnabled, forKey: .lightWrapEnabled)
+        try container.encode(lightWrapStrength, forKey: .lightWrapStrength)
+        try container.encode(lightWrapRadius, forKey: .lightWrapRadius)
+        try container.encode(edgeDecontaminateEnabled, forKey: .edgeDecontaminateEnabled)
+        try container.encode(edgeDecontaminateStrength, forKey: .edgeDecontaminateStrength)
+        try container.encode(temporalStabilityEnabled, forKey: .temporalStabilityEnabled)
+        try container.encode(temporalStabilityStrength, forKey: .temporalStabilityStrength)
+        try container.encode(outputMode, forKey: .outputMode)
+        try container.encode(upscaleMethod, forKey: .upscaleMethod)
+        try container.encode(renderQualityLevel, forKey: .renderQualityLevel)
+        try container.encode(longEdgeBaseline, forKey: .longEdgeBaseline)
+        try container.encode(destinationLongEdgePixels, forKey: .destinationLongEdgePixels)
+        try container.encodeIfPresent(cachedMatteBlob, forKey: .cachedMatteBlob)
+        try container.encode(cachedMatteInferenceResolution, forKey: .cachedMatteInferenceResolution)
+        try container.encode(hintPointSet, forKey: .hintPointSet)
     }
 
     /// Encodes the snapshot for hand-off to the FxPlug host. Binary plist is

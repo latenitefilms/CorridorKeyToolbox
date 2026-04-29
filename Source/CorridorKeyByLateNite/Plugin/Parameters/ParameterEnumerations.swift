@@ -24,6 +24,56 @@ public enum ScreenColor: Int, Sendable, CaseIterable, Codable {
     }
 }
 
+/// How the alpha hint is generated for the MLX bridge's 4th input
+/// channel. Replaces the earlier "Auto Subject Hint" toggle so users
+/// can explicitly opt into Apple Vision (best-quality but binary) or
+/// the green-bias prior (fastest, soft gradient) without reading the
+/// release notes to know what the toggle does. The new `manual`
+/// option short-circuits both upstream priors and feeds only the
+/// user-placed hint dots — useful for shots Vision struggles with
+/// (e.g. heavy motion blur, partially occluded subjects).
+public enum HintMode: Int, Sendable, CaseIterable, Codable {
+    /// Fast green / blue chroma prior. The MLX network is trained on
+    /// this style of soft, gradient hint and tends to produce its
+    /// best results here when the screen colour itself is clean.
+    case automatic = 0
+    /// Apple Vision foreground-instance mask, run on the Neural
+    /// Engine. Beats the chroma prior on most footage because it
+    /// segments by subject saliency rather than by green-channel
+    /// dominance.
+    case appleVision = 1
+    /// User-placed hint points only. The pipeline rasterises the
+    /// hint set into the 4th channel without an upstream prior, and
+    /// fails the render if the user hasn't placed any points — the
+    /// network can't infer a matte from a black hint channel alone.
+    case manual = 2
+
+    public var displayName: String {
+        switch self {
+        case .automatic: return "Automatic"
+        case .appleVision: return "Apple Vision Framework"
+        case .manual: return "Manual Hint"
+        }
+    }
+
+    /// Whether this mode runs the Vision foreground request when
+    /// computing the upstream hint. Mirrors the legacy
+    /// `autoSubjectHintEnabled` boolean so existing pre-inference
+    /// code can ask one question.
+    public var usesVisionPrior: Bool {
+        self == .appleVision
+    }
+
+    /// Whether this mode requires at least one user-placed hint
+    /// point in the render request. The render path checks this at
+    /// the start of the pre-inference stage and returns a
+    /// pass-through frame plus a status message rather than feeding
+    /// MLX an empty hint.
+    public var requiresUserHints: Bool {
+        self == .manual
+    }
+}
+
 /// Quality rung used for neural inference. `automatic` chooses a safe tier
 /// based on the input resolution and the available physical memory.
 public enum QualityMode: Int, Sendable, CaseIterable, Codable {

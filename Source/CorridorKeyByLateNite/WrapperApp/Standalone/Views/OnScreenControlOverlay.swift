@@ -13,15 +13,27 @@
 //  and matches the renderer's aspect-fit rectangle so click positions
 //  resolve correctly regardless of inspector / window resizing.
 //
+//  The overlay's click target accepts a `contextMenu` view builder
+//  so right-click works even while a hint tool is active. Without
+//  that the overlay's hit testing swallowed right-clicks before the
+//  underlying `MetalPreviewView`'s context menu could see them, and
+//  the user couldn't change their preview backdrop without first
+//  switching the tool back to Off.
+//
 
 import SwiftUI
 
-struct OnScreenControlOverlay: View {
+struct OnScreenControlOverlay<MenuContent: View>: View {
     @Bindable var viewModel: EditorViewModel
     /// Logical render size of the loaded clip — used so the click
     /// target sits over the same letterboxed quad the preview shader
     /// draws.
     let renderSize: CGSize
+    /// Right-click context menu attached to the click target. Sharing
+    /// the editor's preview-backdrop menu here keeps the right-click
+    /// behaviour consistent whether the user is dropping hints or
+    /// just scrubbing.
+    @ViewBuilder let contextMenu: () -> MenuContent
 
     var body: some View {
         GeometryReader { proxy in
@@ -43,15 +55,19 @@ struct OnScreenControlOverlay: View {
                                 atNormalizedPoint: CGPoint(x: normalisedX, y: normalisedY)
                             )
                         }
+                        .contextMenu { contextMenu() }
                         .help(toolHint)
                 }
 
                 ForEach(Array(viewModel.state.hintPointSet.points.enumerated()), id: \.offset) { item in
-                    HintPointMarker(point: item.element)
-                        .position(
-                            x: fittedRect.minX + CGFloat(item.element.x) * fittedRect.width,
-                            y: fittedRect.minY + CGFloat(item.element.y) * fittedRect.height
-                        )
+                    HintPointMarker(
+                        point: item.element,
+                        screenColor: viewModel.state.screenColor
+                    )
+                    .position(
+                        x: fittedRect.minX + CGFloat(item.element.x) * fittedRect.width,
+                        y: fittedRect.minY + CGFloat(item.element.y) * fittedRect.height
+                    )
                 }
             }
             .allowsHitTesting(viewModel.oscTool != .disabled)
@@ -79,81 +95,153 @@ struct OnScreenControlOverlay: View {
     }
 }
 
-/// Visual marker for a single hint point. Foreground points are green
-/// (matches the FCP OSC); background points are red. A subtle dark
-/// outline keeps both readable on bright matte areas.
-private struct HintPointMarker: View {
+/// Visual marker for a single hint point. Foreground points show a
+/// person silhouette so the marker reads as "this is the subject" no
+/// matter what the screen colour is — earlier builds used a green
+/// dot for foreground, which was confusing on a green-screen comp.
+/// Background points show a coloured rectangle that picks up the
+/// screen colour (green / blue / magenta) so the user can see at a
+/// glance which area of the frame they're telling the keyer to drop.
+struct HintPointMarker: View {
     let point: HintPoint
+    let screenColor: ScreenColor
 
     var body: some View {
-        ZStack {
-            Circle()
-                .strokeBorder(Color.black.opacity(0.5), lineWidth: 2)
-                .frame(width: 16, height: 16)
-            Circle()
-                .fill(fillColor)
-                .frame(width: 12, height: 12)
+        Group {
+            switch point.kind {
+            case .foreground:
+                foregroundMarker
+            case .background:
+                backgroundMarker
+            }
         }
-        .shadow(color: .black.opacity(0.4), radius: 1.5, y: 1)
+        .shadow(color: .black.opacity(0.45), radius: 1.8, y: 1)
     }
 
-    private var fillColor: Color {
-        switch point.kind {
-        case .foreground: return Color(red: 0.30, green: 0.85, blue: 0.30)
-        case .background: return Color(red: 0.95, green: 0.35, blue: 0.30)
+    /// Foreground marker: a circular badge with a `person.fill`
+    /// silhouette inside. The badge fill is a near-black tone so the
+    /// white silhouette stays readable against bright matte regions.
+    private var foregroundMarker: some View {
+        ZStack {
+            Circle()
+                .fill(Color(red: 0.10, green: 0.12, blue: 0.18))
+                .frame(width: 18, height: 18)
+            Circle()
+                .strokeBorder(Color.white, lineWidth: 1.5)
+                .frame(width: 18, height: 18)
+            Image(systemName: "person.fill")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .foregroundStyle(.white)
+                .frame(width: 10, height: 10)
+        }
+    }
+
+    /// Background marker: a small rounded square coloured to match
+    /// the active screen colour. Wrapped in a black border so the
+    /// shape stays legible on a frame whose dominant tone matches
+    /// the screen colour itself.
+    private var backgroundMarker: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(screenColorSwatch)
+                .frame(width: 16, height: 14)
+            RoundedRectangle(cornerRadius: 3)
+                .strokeBorder(Color.black, lineWidth: 1.5)
+                .frame(width: 16, height: 14)
+        }
+    }
+
+    private var screenColorSwatch: Color {
+        switch screenColor {
+        case .green: return Color(red: 0.20, green: 0.78, blue: 0.30)
+        case .blue: return Color(red: 0.20, green: 0.42, blue: 0.95)
         }
     }
 }
 
-/// Compact toolbar that sits alongside the preview and lets the user
-/// pick a hint tool. Embedded inside `EditorView` so it travels with
-/// the preview area.
-struct OSCToolbar: View {
+/// Compact `Menu` that the transport bar embeds next to the Loop
+/// toggle. Replaces the earlier floating `OSCToolbar` overlay — the
+/// floating overlay was visually competing with the keyed preview
+/// and (worse) intercepting right-clicks meant for the backdrop
+/// picker. Living in the transport bar gives the controls a stable
+/// home next to the rest of the playback chrome.
+///
+/// Each tool gets a `Cmd-Shift-Letter` shortcut so a power user can
+/// switch hint tools without leaving the keyboard. Conventional
+/// modifiers were chosen to stay clear of single-letter conflicts
+/// with the inspector's text fields and the standard playback
+/// shortcuts (Space, Cmd-Z, etc.).
+struct SubjectHintsMenu: View {
     @Bindable var viewModel: EditorViewModel
 
     var body: some View {
-        HStack(spacing: 8) {
-            ForEach(OnScreenControlTool.allCases) { tool in
-                Button {
-                    viewModel.oscTool = (viewModel.oscTool == tool) ? .disabled : tool
-                } label: {
-                    Label(tool.displayName, systemImage: tool.systemImage)
-                        .labelStyle(.iconOnly)
-                        .frame(width: 32, height: 28)
-                }
-                .buttonStyle(.bordered)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(viewModel.oscTool == tool ? Color.accentColor.opacity(0.25) : Color.clear)
-                )
-                .help(toolHelpText(for: tool))
+        Menu {
+            Button("Off", systemImage: "circle.slash") {
+                viewModel.oscTool = .disabled
             }
+            .keyboardShortcut("o", modifiers: [.command, .shift])
 
-            if !viewModel.state.hintPointSet.isEmpty {
-                Divider().frame(height: 18)
-                Button("Clear", systemImage: "trash") {
-                    viewModel.clearAllHints()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help("Remove every hint point.")
+            Button("Mark Foreground", systemImage: "person.fill.badge.plus") {
+                viewModel.oscTool = .foregroundHint
             }
+            .keyboardShortcut("f", modifiers: [.command, .shift])
+
+            Button("Mark Background", systemImage: "rectangle.fill.badge.minus") {
+                viewModel.oscTool = .backgroundHint
+            }
+            .keyboardShortcut("b", modifiers: [.command, .shift])
+
+            Button("Erase Nearest Hint", systemImage: "eraser") {
+                viewModel.oscTool = .eraseHint
+            }
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+
+            Divider()
+
+            Button("Clear All Hints", systemImage: "trash") {
+                viewModel.clearAllHints()
+            }
+            .disabled(viewModel.state.hintPointSet.isEmpty)
+            .keyboardShortcut(.delete, modifiers: [.command, .shift])
+        } label: {
+            Label(menuLabelTitle, systemImage: menuLabelIcon)
         }
-        .padding(8)
-        .background(.regularMaterial, in: .rect(cornerRadius: 10))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.white.opacity(0.05), lineWidth: 0.5)
-        )
-        .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
+        .menuStyle(.borderlessButton)
+        .controlSize(.regular)
+        .help("Mark foreground / background regions to guide the keyer.")
     }
 
-    private func toolHelpText(for tool: OnScreenControlTool) -> String {
-        switch tool {
-        case .disabled: return "Disable hint placement (default)."
-        case .foregroundHint: return "Mark a region as foreground."
-        case .backgroundHint: return "Mark a region as background."
-        case .eraseHint: return "Erase the closest hint."
+    private var menuLabelTitle: String {
+        switch viewModel.oscTool {
+        case .disabled: return "Subject"
+        case .foregroundHint: return "Marking FG"
+        case .backgroundHint: return "Marking BG"
+        case .eraseHint: return "Erasing"
+        }
+    }
+
+    private var menuLabelIcon: String {
+        switch viewModel.oscTool {
+        case .disabled: return "person.crop.rectangle"
+        case .foregroundHint: return "person.fill.badge.plus"
+        case .backgroundHint: return "rectangle.fill.badge.minus"
+        case .eraseHint: return "eraser"
+        }
+    }
+}
+
+extension OnScreenControlTool {
+    /// Menu-row title that disambiguates the four states beyond just
+    /// the enum's displayName ("Off" / "Foreground" / "Background" /
+    /// "Erase"). The transport-bar menu reads more naturally as
+    /// "Mark Foreground" than the bare "Foreground".
+    var menuDisplayName: String {
+        switch self {
+        case .disabled: return "Off"
+        case .foregroundHint: return "Mark Foreground"
+        case .backgroundHint: return "Mark Background"
+        case .eraseHint: return "Erase Nearest Hint"
         }
     }
 }

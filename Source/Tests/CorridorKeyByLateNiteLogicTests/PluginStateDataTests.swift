@@ -21,7 +21,7 @@ struct PluginStateDataTests {
         let original = PluginStateData(
             screenColor: .blue,
             qualityMode: .ultra1536,
-            autoSubjectHintEnabled: false,
+            hintMode: .automatic,
             sourcePassthroughEnabled: false,
             passthroughErodeNormalized: 12,
             passthroughBlurNormalized: 18,
@@ -49,6 +49,7 @@ struct PluginStateDataTests {
 
         #expect(decoded.screenColor == .blue)
         #expect(decoded.qualityMode == .ultra1536)
+        #expect(decoded.hintMode == .automatic)
         #expect(decoded.autoSubjectHintEnabled == false)
         #expect(decoded.sourcePassthroughEnabled == false)
         #expect(decoded.passthroughErodeNormalized == 12)
@@ -76,19 +77,19 @@ struct PluginStateDataTests {
     @Test("Temporal stability defaults preserve backward compatibility")
     func temporalStabilityDefaults() {
         let defaults = PluginStateData()
-        // Defaults OFF in v1.0 — the feature is sound but on subjects
-        // with rapid hand or hair motion the gate occasionally lets a
-        // partial blend through which can soften legitimate detail
-        // for one or two frames. Surface as opt-in so users with
-        // visible flicker can enable it per-clip.
-        #expect(defaults.temporalStabilityEnabled == false)
+        // Default ON in v1.0 — alongside Light Wrap, Edge Decontaminate,
+        // Auto Despeckle, and Apple Vision hinting, this lands users on
+        // a comp-ready key on first frame. Users tuning a tricky shot
+        // can flip it off via the inspector.
+        #expect(defaults.temporalStabilityEnabled == true)
         #expect(defaults.temporalStabilityStrength == 0.5)
 
         // A blob written before this key existed must still decode
-        // cleanly and inherit the new default — otherwise projects
-        // saved by an earlier build would refuse to open.
+        // cleanly. Empty blobs hit the default branch which now
+        // returns an enabled stabiliser, matching the new product
+        // default.
         let decoded = PluginStateData.decoded(from: NSData())
-        #expect(decoded.temporalStabilityEnabled == false)
+        #expect(decoded.temporalStabilityEnabled == true)
         #expect(decoded.temporalStabilityStrength == 0.5)
     }
 
@@ -121,24 +122,32 @@ struct PluginStateDataTests {
         #expect(decoded.cachedMatteInferenceResolution == 0)
     }
 
-    @Test("Auto subject hint defaults to disabled and survives round-trip")
-    func autoSubjectHintDefaultsAndRoundTrip() throws {
+    @Test("Hint mode defaults to Apple Vision and survives round-trip")
+    func hintModeDefaultsAndRoundTrip() throws {
         let defaults = PluginStateData()
-        // Defaults OFF in v1.0: the MLX bridge was trained on the
-        // soft gradient green-bias hint, and Vision returns a binary
-        // mask which is structurally different. Opt-in only.
-        #expect(defaults.autoSubjectHintEnabled == false)
+        // Default ON in v1.0: Vision's foreground prior beats the
+        // chroma prior on most footage, and the MLX network handles
+        // the harder boundaries Vision produces well enough that
+        // shipping it as the default is the right call.
+        #expect(defaults.hintMode == .appleVision)
+        #expect(defaults.autoSubjectHintEnabled == true)
 
-        // A blob written before this key existed must still decode
-        // cleanly and inherit the safe default.
+        // Empty blob falls back to the default mode.
         let legacyDecoded = PluginStateData.decoded(from: NSData())
-        #expect(legacyDecoded.autoSubjectHintEnabled == false)
+        #expect(legacyDecoded.hintMode == .appleVision)
 
-        // On explicitly should round-trip.
-        let original = PluginStateData(autoSubjectHintEnabled: true)
-        let encoded = try original.encodedForHost()
+        // Manual should round-trip.
+        let manual = PluginStateData(screenColor: .green, qualityMode: .high1024, hintMode: .manual)
+        let encoded = try manual.encodedForHost()
         let decoded = PluginStateData.decoded(from: encoded)
-        #expect(decoded.autoSubjectHintEnabled == true)
+        #expect(decoded.hintMode == .manual)
+        #expect(decoded.autoSubjectHintEnabled == false)
+
+        // Automatic should round-trip.
+        let automatic = PluginStateData(screenColor: .green, qualityMode: .high1024, hintMode: .automatic)
+        let encodedAutomatic = try automatic.encodedForHost()
+        let decodedAutomatic = PluginStateData.decoded(from: encodedAutomatic)
+        #expect(decodedAutomatic.hintMode == .automatic)
     }
 
     @Test("destinationPixelRadius scales by clip size")

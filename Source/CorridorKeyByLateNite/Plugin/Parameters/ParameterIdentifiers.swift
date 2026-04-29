@@ -28,10 +28,19 @@ enum ParameterIdentifier {
     static let screenColor: UInt32 = 1001
     static let qualityMode: UInt32 = 1002
 
-    /// When on, the analyser uses Vision's foreground-subject detector
-    /// to seed the MLX bridge's hint channel. Falls back to the legacy
-    /// green-bias hint when Vision finds no salient subject (rare) or
-    /// when running on a build without Vision available.
+    /// Picks how the upstream alpha hint is generated. Replaces the
+    /// legacy `autoSubjectHintEnabled` toggle: instead of one Bool
+    /// flipping between Vision and the chroma prior, the user picks
+    /// one of three modes (Automatic / Apple Vision / Manual). See
+    /// `HintMode` for the per-case behaviour.
+    static let hintMode: UInt32 = 1007
+
+    /// Legacy Bool toggle that the `hintMode` popup replaces. The ID
+    /// stays in the namespace so saved projects' value isn't
+    /// orphaned (FxPlug still serializes it) but the parameter is
+    /// no longer declared in `addParameters`, which makes it
+    /// invisible in the inspector — the popup is the single source
+    /// of truth going forward.
     static let autoSubjectHintEnabled: UInt32 = 1004
 
     /// Show / hide the on-screen subject marker on the canvas.

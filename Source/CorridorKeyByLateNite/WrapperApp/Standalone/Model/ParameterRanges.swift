@@ -39,9 +39,14 @@ enum ParameterRanges {
 
     // Settings
     static let qualityModeName = "Quality"
+    static let hintModeName = "Hint"
     static let screenColorName = "Screen Colour"
     static let upscaleMethodName = "Upscale Method"
     static let outputModeName = "Output"
+    /// Legacy label kept for back-compat with code paths that still
+    /// reference the old toggle. New UI surfaces `hintModeName`
+    /// instead — the popup that replaced the "Auto Subject Hint"
+    /// checkbox.
     static let autoSubjectHintName = "Auto Subject Hint"
 
     // Interior detail

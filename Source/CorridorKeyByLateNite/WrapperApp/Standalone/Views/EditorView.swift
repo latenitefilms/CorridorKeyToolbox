@@ -25,6 +25,11 @@ struct EditorView: View {
     @State private var isDropTargeted = false
     @State private var isImportingBackdropImage = false
     @State private var backdropImportError: String?
+    /// SwiftUI hands us the hosting `NSWindow`'s `UndoManager` here.
+    /// The editor pipes it into `EditorViewModel` so hint-point
+    /// edits register undo/redo against the manager Cmd-Z is
+    /// already wired to dispatch through.
+    @Environment(\.undoManager) private var undoManager
 
     /// `EditorViewModel` requires a `StandaloneRenderEngine` constructed
     /// at view-creation time so we can fail fast if Metal isn't
@@ -75,6 +80,9 @@ struct EditorView: View {
             if case .loadFailed(let message) = phase {
                 loadFailureMessage = message
             }
+        }
+        .onChange(of: undoManager, initial: true) { _, manager in
+            viewModel.undoManager = manager
         }
         .alert(
             "Couldn't load clip",
@@ -148,10 +156,17 @@ struct EditorView: View {
                 OnScreenControlOverlay(
                     viewModel: viewModel,
                     renderSize: viewModel.renderSize
-                )
-                .allowsHitTesting(viewModel.oscTool != .disabled)
-                OSCToolbar(viewModel: viewModel)
-                    .padding(.top, 12)
+                ) {
+                    // Right-click on the click-target rectangle —
+                    // shows the same backdrop picker the
+                    // `MetalPreviewView` exposes when the OSC tool
+                    // is off, so the user can change their preview
+                    // background while marking subject hints.
+                    PreviewBackdropMenu(
+                        viewModel: viewModel,
+                        onPickImage: { isImportingBackdropImage = true }
+                    )
+                }
                 if viewModel.latestPreview == nil {
                     Text("Rendering preview…")
                         .foregroundStyle(.secondary)

@@ -146,10 +146,16 @@ extension CorridorKeyToolboxPlugIn {
         // Surface as an opt-in so users can try it on subjects where
         // Vision happens to nail the boundary; the default is the
         // green-bias hint the model knows.
-        create.addToggleButton(
-            withName: "Auto Subject Hint",
-            parameterID: ParameterIdentifier.autoSubjectHintEnabled,
-            defaultValue: false,
+        // Hint Mode popup — replaces the earlier "Auto Subject Hint"
+        // toggle with an explicit three-way choice. Sits second in
+        // the Settings group (right under Quality) because hint
+        // generation is the second-biggest decision driver for the
+        // resulting matte.
+        create.addPopupMenu(
+            withName: "Hint",
+            parameterID: ParameterIdentifier.hintMode,
+            defaultValue: UInt32(HintMode.appleVision.rawValue),
+            menuEntries: HintMode.allCases.map(\.displayName),
             parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
 
@@ -295,7 +301,7 @@ extension CorridorKeyToolboxPlugIn {
         create.addToggleButton(
             withName: "Auto Despeckle",
             parameterID: ParameterIdentifier.autoDespeckle,
-            defaultValue: false,
+            defaultValue: true,
             parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
 
@@ -375,7 +381,7 @@ extension CorridorKeyToolboxPlugIn {
         create.addToggleButton(
             withName: "Light Wrap",
             parameterID: ParameterIdentifier.lightWrapEnabled,
-            defaultValue: false,
+            defaultValue: true,
             parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
 
@@ -406,7 +412,7 @@ extension CorridorKeyToolboxPlugIn {
         create.addToggleButton(
             withName: "Edge Decontaminate",
             parameterID: ParameterIdentifier.edgeDecontaminateEnabled,
-            defaultValue: false,
+            defaultValue: true,
             parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
 
@@ -450,7 +456,7 @@ extension CorridorKeyToolboxPlugIn {
         create.addToggleButton(
             withName: "Reduce Edge Flicker",
             parameterID: ParameterIdentifier.temporalStabilityEnabled,
-            defaultValue: false,
+            defaultValue: true,
             parameterFlags: CorridorKeyParameterFlags.nonAnimatableChoice.fxFlags
         )
 

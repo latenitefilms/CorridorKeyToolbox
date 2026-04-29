@@ -206,7 +206,10 @@ final class EditorViewModel {
     var isPlaying: Bool = false
     /// Whether playback should restart from frame 0 when it reaches
     /// the end of the clip. QuickTime's loop control mirrored.
-    var loopEnabled: Bool = false
+    /// Defaults to on so users dragging through a short keying clip
+    /// can let it loop while they tune parameters without having to
+    /// rewind every time the playhead hits the end.
+    var loopEnabled: Bool = true
     /// Rolling average of the per-tick playback frame rate, in
     /// frames per second. Computed by `runPlaybackLoop` from the
     /// wall-clock interval between successive renders. Zero outside
@@ -269,6 +272,21 @@ final class EditorViewModel {
     /// caught up to the playhead.
     @ObservationIgnored
     private var playbackTask: Task<Void, Never>?
+    /// Polls the shared MLX bridge registry while the rung is warming
+    /// up so the inspector badge tracks `cold → warming → ready` in
+    /// real time. Cancelled when the engine becomes `.ready` /
+    /// `.failed`, when the user closes the clip, or when a fresh
+    /// warm-up kicks off for a different rung.
+    @ObservationIgnored
+    private var warmupPollingTask: Task<Void, Never>?
+    /// `UndoManager` the SwiftUI environment hands us at view-mount
+    /// time. Hint-point mutations register undo / redo against this
+    /// manager so Cmd-Z / Cmd-Shift-Z step through the user's edit
+    /// history. Held weakly because the manager belongs to the
+    /// hosting `NSWindow`; the view model must not extend its
+    /// lifetime.
+    @ObservationIgnored
+    weak var undoManager: UndoManager?
 
     init(renderEngine: StandaloneRenderEngine) {
         self.renderEngine = renderEngine
@@ -712,26 +730,51 @@ final class EditorViewModel {
         let tool = oscTool
         let clampedX = min(max(Double(point.x), 0), 1)
         let clampedY = min(max(Double(point.y), 0), 1)
+        var nextSet = state.hintPointSet
+        let actionName: String?
         switch tool {
         case .disabled:
             return
         case .foregroundHint:
-            state.hintPointSet.add(HintPoint(x: clampedX, y: clampedY, kind: .foreground))
+            nextSet.add(HintPoint(x: clampedX, y: clampedY, kind: .foreground))
+            actionName = "Add Foreground Hint"
         case .backgroundHint:
-            state.hintPointSet.add(HintPoint(x: clampedX, y: clampedY, kind: .background))
+            nextSet.add(HintPoint(x: clampedX, y: clampedY, kind: .background))
+            actionName = "Add Background Hint"
         case .eraseHint:
-            state.hintPointSet.removeNearest(toX: clampedX, y: clampedY, tolerance: 0.05)
+            let didRemove = nextSet.removeNearest(toX: clampedX, y: clampedY, tolerance: 0.05)
+            actionName = didRemove ? "Erase Hint" : nil
         }
-        // Hints feed the MLX bridge at analysis time. Re-render the
-        // preview now so the dot appears immediately, and prompt the
-        // user to re-analyse to see the matte respond to the new
-        // hints.
-        parameterDidChange()
+        // No-op clicks (erase tool with nothing in tolerance) skip
+        // the undo registration so they don't pollute the history
+        // with steps the user can't see.
+        guard let actionName, nextSet != state.hintPointSet else { return }
+        applyHintPointSet(nextSet, actionName: actionName)
     }
 
     /// Wipes every placed hint point.
     func clearAllHints() {
-        state.hintPointSet.clear()
+        guard !state.hintPointSet.isEmpty else { return }
+        applyHintPointSet(HintPointSet(), actionName: "Clear All Hints")
+    }
+
+    /// Replaces the active hint set with `newSet` and registers an
+    /// undo that restores whatever was there before. Calling
+    /// `undoManager.undo()` later runs the closure, which itself
+    /// registers a redo via this same code path — that's the
+    /// standard `UndoManager` snapshot pattern.
+    private func applyHintPointSet(_ newSet: HintPointSet, actionName: String) {
+        let previous = state.hintPointSet
+        if let undoManager {
+            undoManager.registerUndo(withTarget: self) { target in
+                target.applyHintPointSet(previous, actionName: actionName)
+            }
+            undoManager.setActionName(actionName)
+        }
+        state.hintPointSet = newSet
+        // Hints feed the MLX bridge at analysis time. Re-render the
+        // preview now so the dots appear immediately; the user can
+        // re-analyse to see the matte respond to the new hints.
         parameterDidChange()
     }
 
@@ -895,11 +938,44 @@ final class EditorViewModel {
         } catch {
             // Warm-up is best-effort. If it fails the analyse pass
             // surfaces the same error the moment it tries to use MLX.
+            return
+        }
+        // Drive a poll of the registry until the engine is ready or
+        // failed so the inspector badge transitions out of "warming"
+        // on its own. Without this the user only saw the status
+        // refresh when they next clicked Analyse Clip — the value
+        // was set once and then went stale.
+        startWarmupStatusPolling(forResolution: resolution)
+    }
+
+    /// Polls the shared MLX bridge registry every 400 ms and republishes
+    /// the result on `warmupStatus` so the inspector badge tracks the
+    /// engine's lifecycle in real time. Stops when the engine is ready,
+    /// failed, or the user closed the clip.
+    private func startWarmupStatusPolling(forResolution resolution: Int) {
+        warmupPollingTask?.cancel()
+        warmupPollingTask = Task { @MainActor [weak self] in
+            // First tick is immediate so the badge updates within the
+            // same frame that kicked off the warm-up.
+            while let self, !Task.isCancelled {
+                let latest = self.renderEngine.warmupStatus(forResolution: resolution)
+                if latest != self.warmupStatus {
+                    self.warmupStatus = latest
+                }
+                switch latest {
+                case .ready, .failed:
+                    return
+                case .cold, .warming:
+                    break
+                }
+                try? await Task.sleep(for: .milliseconds(400))
+            }
         }
     }
 
     private func cancelInflightWork() {
         pendingPreviewTask?.cancel(); pendingPreviewTask = nil
+        warmupPollingTask?.cancel(); warmupPollingTask = nil
         stopPlayback()
         cancelAnalysis()
         cancelExport()

@@ -179,6 +179,19 @@ final class RenderPipeline: @unchecked Sendable {
                 cachedHeight: header.height
             )
         }
+        // Manual hint mode demands at least one user-placed hint —
+        // the network can't produce a useful matte from an empty
+        // hint channel. Surface as a pass-through so the user sees
+        // their footage rather than a black frame, and label the
+        // backend so the inspector status row can explain why.
+        if inputs.state.hintMode.requiresUserHints,
+           inputs.state.hintPointSet.points.isEmpty {
+            return try renderSourcePassThrough(
+                inputs: inputs,
+                context: context,
+                backendDescription: "Manual Hint — add at least one foreground / background point"
+            )
+        }
         // Unanalysed → leave the source untouched. Running MLX on the render
         // thread made toggling the effect feel laggy and produced inconsistent
         // output while the analysis cache was being built, so pass-through is
@@ -233,6 +246,16 @@ final class RenderPipeline: @unchecked Sendable {
         commandQueue: any MTLCommandQueue,
         readbackSource: Bool = false
     ) throws -> AnalysisExtraction {
+        // Manual hint mode requires at least one user-placed hint —
+        // an empty hint channel would feed MLX a degenerate prior and
+        // the analyser would fill the cache with garbage. Fail fast
+        // so the caller can surface the error in the analysis status
+        // row instead of silently producing a bad matte sequence.
+        if state.hintMode.requiresUserHints, state.hintPointSet.points.isEmpty {
+            throw KeyingInferenceError.modelUnavailable(
+                "Manual Hint mode needs at least one foreground or background hint point. Open the Subject menu in the transport bar and click the preview to drop one."
+            )
+        }
         let screenTransform = ScreenColorEstimator.defaultTransform(for: state.screenColor)
         let gamutTransform = ColorGamutMatrix.transform(for: workingGamut)
         let longEdge = max(sourceTexture.width, sourceTexture.height)
@@ -495,10 +518,13 @@ final class RenderPipeline: @unchecked Sendable {
 
     /// Writes the source tile straight through to the destination. Used when
     /// the clip hasn't been analysed yet — the plug-in stays out of the way
-    /// until the cache is populated.
+    /// until the cache is populated. The optional `backendDescription`
+    /// override lets the Manual Hint pass-through surface a more
+    /// specific reason in the inspector's status row.
     private func renderSourcePassThrough(
         inputs: ResolvedRenderInputs,
-        context: DeviceContext
+        context: DeviceContext,
+        backendDescription: String = "Source Pass-Through"
     ) throws -> RenderReport {
         guard let commandBuffer = context.commandQueue.makeCommandBuffer() else {
             throw MetalDeviceCacheError.commandBufferCreationFailed
@@ -523,7 +549,7 @@ final class RenderPipeline: @unchecked Sendable {
         try commitAndWait(commandBuffer: commandBuffer)
 
         return RenderReport(
-            backendDescription: "Source Pass-Through",
+            backendDescription: backendDescription,
             guideSourceDescription: "Clip not analysed",
             effectiveInferenceResolution: 0,
             deviceName: context.device.name

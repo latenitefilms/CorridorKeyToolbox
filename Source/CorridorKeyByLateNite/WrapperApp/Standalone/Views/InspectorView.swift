@@ -176,6 +176,18 @@ private struct SettingsGroup: View {
                 selection: $viewModel.state.qualityMode,
                 onChange: viewModel.parameterDidChange
             )
+            // The Hint dropdown sits directly under Quality because
+            // hint generation is the second-most-impactful decision
+            // for the matte (after the inference rung). Replaces the
+            // old "Auto Subject Hint" checkbox — the dropdown's three
+            // values map cleanly to Automatic (chroma prior),
+            // Apple Vision (Neural-Engine subject mask), and Manual
+            // (user-placed dots only).
+            EnumPicker(
+                title: ParameterRanges.hintModeName,
+                selection: $viewModel.state.hintMode,
+                onChange: viewModel.parameterDidChange
+            )
             EnumPicker(
                 title: ParameterRanges.screenColorName,
                 selection: $viewModel.state.screenColor,
@@ -191,11 +203,16 @@ private struct SettingsGroup: View {
                 selection: $viewModel.state.outputMode,
                 onChange: viewModel.parameterDidChange
             )
-            ParameterToggle(
-                title: ParameterRanges.autoSubjectHintName,
-                isOn: $viewModel.state.autoSubjectHintEnabled,
-                onChange: viewModel.parameterDidChange
-            )
+
+            if viewModel.state.hintMode == .manual && viewModel.state.hintPointSet.isEmpty {
+                Label(
+                    "Manual Hint mode needs at least one foreground / background point — open the Subject menu in the transport bar.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }
@@ -496,3 +513,4 @@ extension QualityMode: DisplayNamed, Identifiable { public var id: Int { rawValu
 extension OutputMode: DisplayNamed, Identifiable { public var id: Int { rawValue } }
 extension SpillMethod: DisplayNamed, Identifiable { public var id: Int { rawValue } }
 extension UpscaleMethod: DisplayNamed, Identifiable { public var id: Int { rawValue } }
+extension HintMode: DisplayNamed, Identifiable { public var id: Int { rawValue } }
