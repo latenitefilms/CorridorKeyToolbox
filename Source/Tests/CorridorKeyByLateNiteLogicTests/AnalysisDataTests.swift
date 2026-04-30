@@ -84,6 +84,27 @@ struct AnalysisDataTests {
         #expect(data.frameIndex(for: CMTime(value: -1, timescale: 30)) == nil)
     }
 
+    @Test("Frame index honours non-zero first frame time")
+    func frameIndexMappingWithOffsetStart() {
+        let data = AnalysisData(
+            schemaVersion: AnalysisData.currentSchemaVersion,
+            frameDuration: CMTime(value: 1, timescale: 24),
+            firstFrameTime: CMTime(value: 48, timescale: 24),
+            frameCount: 4,
+            analyzedCount: 4,
+            screenColorRaw: 0,
+            qualityModeRaw: QualityMode.draft512.rawValue,
+            inferenceResolution: 512,
+            matteWidth: 512,
+            matteHeight: 512,
+            mattes: [:]
+        )
+        #expect(data.frameIndex(for: CMTime(value: 47, timescale: 24)) == nil)
+        #expect(data.frameIndex(for: CMTime(value: 48, timescale: 24)) == 0)
+        #expect(data.frameIndex(for: CMTime(value: 51, timescale: 24)) == 3)
+        #expect(data.frameIndex(for: CMTime(value: 52, timescale: 24)) == nil)
+    }
+
     @Test("Matte lookup returns the entry for the requested time")
     func matteLookup() {
         let data = AnalysisData(
@@ -106,5 +127,34 @@ struct AnalysisDataTests {
         #expect(data.matte(at: CMTime(value: 1, timescale: 30)) == nil)
         #expect(data.matte(at: CMTime(value: 2, timescale: 30)) == Data([0xCC]))
         #expect(data.matte(at: CMTime(value: 3, timescale: 30)) == nil)
+    }
+
+    @Test("Cached matte lookup also validates screen colour")
+    func cachedMatteLookupValidatesScreenColor() throws {
+        let matte = Data([0x11, 0x22])
+        let data = AnalysisData(
+            schemaVersion: AnalysisData.currentSchemaVersion,
+            frameDuration: CMTime(value: 1, timescale: 30),
+            firstFrameTime: CMTime(value: 0, timescale: 30),
+            frameCount: 1,
+            analyzedCount: 1,
+            screenColorRaw: ScreenColor.green.rawValue,
+            qualityModeRaw: QualityMode.draft512.rawValue,
+            inferenceResolution: 512,
+            matteWidth: 512,
+            matteHeight: 512,
+            mattes: [0: matte]
+        )
+
+        let cacheHit = try #require(data.cachedMatte(
+            at: CMTime(value: 0, timescale: 30),
+            screenColorRaw: ScreenColor.green.rawValue
+        ))
+        #expect(cacheHit.blob == matte)
+        #expect(cacheHit.inferenceResolution == 512)
+        #expect(data.cachedMatte(
+            at: CMTime(value: 0, timescale: 30),
+            screenColorRaw: ScreenColor.blue.rawValue
+        ) == nil)
     }
 }

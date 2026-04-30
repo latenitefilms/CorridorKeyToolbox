@@ -32,6 +32,7 @@ extension CorridorKeyToolboxPlugIn {
         let width = Int(destinationImage.imagePixelBounds.right - destinationImage.imagePixelBounds.left)
         let height = Int(destinationImage.imagePixelBounds.top - destinationImage.imagePixelBounds.bottom)
         state.destinationLongEdgePixels = max(width, height)
+        refreshCachedMatteIfAvailable(for: &state, at: renderTime)
 
         let gamut = currentWorkingGamut()
         let alphaHint = sourceImages.count > 1 ? sourceImages[1] : nil
@@ -64,5 +65,40 @@ extension CorridorKeyToolboxPlugIn {
         }
         let raw = UInt(gamutAPI.colorPrimaries())
         return ColorGamutMatrix.gamut(fromColorPrimariesRaw: raw)
+    }
+
+    /// Rehydrates the per-frame matte from the in-memory analysis snapshot.
+    ///
+    /// FxPlug supplies `pluginState` as a host-managed blob. During frame
+    /// stepping we can receive a blob generated before the hidden analysis
+    /// parameter became visible for the requested time. The analysis snapshot
+    /// store is updated whenever we successfully persist or load a cache, so
+    /// prefer its current-frame lookup over the potentially stale embedded
+    /// blob. If this render instance has not seen the cache yet, load it
+    /// once from the hidden parameter and seed the same-process store.
+    private func refreshCachedMatteIfAvailable(
+        for state: inout PluginStateData,
+        at renderTime: CMTime
+    ) {
+        if let cachedMatte = analysisSnapshotStore.cachedMatte(
+            at: renderTime,
+            screenColorRaw: state.screenColor.rawValue
+        ) {
+            state.cachedMatteBlob = cachedMatte.blob
+            state.cachedMatteInferenceResolution = cachedMatte.inferenceResolution
+            return
+        }
+
+        guard let retrieval = apiManager.api(
+            for: (any FxParameterRetrievalAPI_v6).self
+        ) as? any FxParameterRetrievalAPI_v6,
+              let analysis = loadAnalysisData(using: retrieval),
+              let cachedMatte = analysis.cachedMatte(
+                  at: renderTime,
+                  screenColorRaw: state.screenColor.rawValue
+              )
+        else { return }
+        state.cachedMatteBlob = cachedMatte.blob
+        state.cachedMatteInferenceResolution = cachedMatte.inferenceResolution
     }
 }

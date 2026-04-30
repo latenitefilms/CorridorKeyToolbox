@@ -104,6 +104,45 @@ final class AnalysisSessionState: @unchecked Sendable {
     }
 }
 
+/// Last known persisted analysis snapshot for this plug-in instance.
+///
+/// Final Cut Pro may render with an older encoded `pluginState` immediately
+/// after a seek or custom-parameter write. Keeping the same-process snapshot
+/// lets the render callback recover the current frame's matte without waiting
+/// for the hidden custom parameter to round-trip through the host.
+final class AnalysisSnapshotStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var snapshot: AnalysisData?
+
+    func store(_ snapshot: AnalysisData) {
+        lock.lock()
+        self.snapshot = snapshot
+        lock.unlock()
+    }
+
+    func clear() {
+        lock.lock()
+        snapshot = nil
+        lock.unlock()
+    }
+
+    func currentSnapshot() -> AnalysisData? {
+        lock.lock()
+        defer { lock.unlock() }
+        return snapshot
+    }
+
+    func cachedMatte(
+        at renderTime: CMTime,
+        screenColorRaw: Int
+    ) -> CachedAnalysisMatte? {
+        currentSnapshot()?.cachedMatte(
+            at: renderTime,
+            screenColorRaw: screenColorRaw
+        )
+    }
+}
+
 extension CorridorKeyToolboxPlugIn {
 
     // MARK: - Inspector wiring (called by the +Parameters extension)
@@ -143,6 +182,7 @@ extension CorridorKeyToolboxPlugIn {
         session.lock.lock()
         session.resetLocked()
         session.lock.unlock()
+        analysisSnapshotStore.clear()
 
         guard let actionAPI = apiManager.api(for: (any FxCustomParameterActionAPI_v4).self) as? any FxCustomParameterActionAPI_v4 else {
             PluginLog.error("Reset Analysis: FxCustomParameterActionAPI_v4 is unavailable.")
@@ -276,6 +316,7 @@ extension CorridorKeyToolboxPlugIn {
         session.hintModeRaw = hintModeValue.rawValue
         session.hintPointSet = hintPoints
         session.lock.unlock()
+        analysisSnapshotStore.clear()
 
         PluginLog.notice(
             "Analyse setup: \(frameCount) frame(s) at \(inferenceResolution)px, screen=\(screenColor.displayName), hint=\(hintModeValue.displayName), userHints=\(hintPoints.points.count)."
@@ -530,6 +571,8 @@ extension CorridorKeyToolboxPlugIn {
     /// Writes the current in-memory cache back to the hidden custom
     /// parameter so Final Cut Pro picks it up on the next render request.
     private func persist(snapshot: AnalysisData) {
+        analysisSnapshotStore.store(snapshot)
+
         guard let setAPI = apiManager.api(for: (any FxParameterSettingAPI_v5).self) as? any FxParameterSettingAPI_v5 else {
             PluginLog.error("Persist analysis: FxParameterSettingAPI_v5 is unavailable.")
             return
@@ -550,7 +593,11 @@ extension CorridorKeyToolboxPlugIn {
             fromParameter: ParameterIdentifier.analysisData,
             at: CMTime.zero
         )
-        return AnalysisData.fromParameterDictionary(rawValue as? NSDictionary)
+        if let analysis = AnalysisData.fromParameterDictionary(rawValue as? NSDictionary) {
+            analysisSnapshotStore.store(analysis)
+            return analysis
+        }
+        return analysisSnapshotStore.currentSnapshot()
     }
 
     // MARK: - Frame index math

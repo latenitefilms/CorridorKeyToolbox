@@ -40,6 +40,11 @@ final class CorridorKeyToolboxPlugIn: NSObject, FxTileableEffect, FxAnalyzer {
     /// registry leaked a full clip's worth of mattes per instance.
     let analysisSession = AnalysisSessionState()
 
+    /// Last persisted analysis cache for this plug-in instance. The render
+    /// callback uses it as a same-process fallback when Final Cut Pro hands
+    /// back an older `pluginState` blob after a seek.
+    let analysisSnapshotStore = AnalysisSnapshotStore()
+
     // MARK: - Init
 
     @objc required init?(apiManager: any PROAPIAccessing) {

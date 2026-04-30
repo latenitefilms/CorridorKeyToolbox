@@ -225,10 +225,12 @@ extension CorridorKeyToolboxPlugIn {
         // render callback can skip MLX entirely. Screen colour must match the
         // analysis run — mismatches invalidate the cache for that frame.
         if let analysis = loadAnalysisData(using: retrieval),
-           analysis.screenColorRaw == state.screenColor.rawValue,
-           let blob = analysis.matte(at: renderTime) {
-            state.cachedMatteBlob = blob
-            state.cachedMatteInferenceResolution = analysis.inferenceResolution
+           let cachedMatte = analysis.cachedMatte(
+                at: renderTime,
+                screenColorRaw: state.screenColor.rawValue
+           ) {
+            state.cachedMatteBlob = cachedMatte.blob
+            state.cachedMatteInferenceResolution = cachedMatte.inferenceResolution
         }
 
         // Load the user's OSC-placed hint dots. Stored in a hidden custom

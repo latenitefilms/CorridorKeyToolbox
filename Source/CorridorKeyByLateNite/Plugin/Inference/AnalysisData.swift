@@ -85,6 +85,18 @@ struct AnalysisData: Sendable {
         return mattes[index]
     }
 
+    /// Returns the cached matte and its inference resolution when the
+    /// analysis metadata matches the current render request.
+    func cachedMatte(
+        at renderTime: CMTime,
+        screenColorRaw requestedScreenColorRaw: Int
+    ) -> CachedAnalysisMatte? {
+        guard screenColorRaw == requestedScreenColorRaw,
+              let blob = matte(at: renderTime)
+        else { return nil }
+        return CachedAnalysisMatte(blob: blob, inferenceResolution: inferenceResolution)
+    }
+
     // MARK: - Dictionary round-trip
 
     /// Packs the cache into a dictionary that FxPlug can persist. Uses
@@ -174,4 +186,10 @@ struct AnalysisData: Sendable {
             mattes: mattes
         )
     }
+}
+
+/// Per-frame matte payload lifted from an `AnalysisData` snapshot.
+struct CachedAnalysisMatte: Sendable {
+    let blob: Data
+    let inferenceResolution: Int
 }
