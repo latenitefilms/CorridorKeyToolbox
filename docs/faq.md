@@ -39,6 +39,7 @@ If you've tested and compared, please let us know in the [FCP Cafe Discord](http
 Here's some cool projects:
 
 - [CorridorKey AE](https://github.com/iamjoshuadavies/corridorkey-ae) - Native Adobe After Effects plugin for advanced green-screen keying.
+- [CorridorKey by Baskl.ai](https://aescripts.com/corridorkey-for-green-screens/) - Plugin Implementation for easy use of CorridorKey by Corridor Digital
 - [CorridorKey by blace.ai](https://aescripts.com/corridorkey-by-blace-ai/) - High rendering performance (2x-4x faster rendering times) and completely C++ based for maximum stability.
 - [CorridorKey Engine](https://github.com/99oblivius/CorridorKey-Engine) - Async multi-GPU inference, optimization profiles, a JSON-RPC engine API, and a Textual TUI.
 - [corridorkey-mlx](https://github.com/cmoyates/corridorkey-mlx) - MLX inference port of CorridorKey for Apple Silicon.
