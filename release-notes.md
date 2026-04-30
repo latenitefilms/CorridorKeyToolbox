@@ -1,5 +1,15 @@
 # Release Notes
 
+### 1.0.0 (Build 8)
+
+**🎉 Released:**
+- 30th April 2026
+
+**🐞 Bug Fix:**
+- Fixed a crash on quit, that could happen if you try quit the application whilst the MLX pipeline is still processing something.
+
+---
+
 ### 1.0.0 (Build 7)
 
 **🎉 Released:**
