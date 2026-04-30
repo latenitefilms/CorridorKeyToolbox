@@ -82,7 +82,7 @@ public struct HintPointSet: Hashable, Sendable, Codable {
         if let blob = try? encodedForHost() {
             dict["blob"] = blob as NSData
         }
-        return dict
+        return dict.copy() as? NSDictionary ?? NSDictionary()
     }
 
     public static func fromParameterDictionary(_ dictionary: NSDictionary?) -> HintPointSet {

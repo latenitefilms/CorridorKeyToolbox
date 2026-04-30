@@ -114,8 +114,8 @@ struct AnalysisData: Sendable {
         contents[AnalysisDataKey.inferenceResolution] = NSNumber(value: inferenceResolution)
         contents[AnalysisDataKey.matteWidth] = NSNumber(value: matteWidth)
         contents[AnalysisDataKey.matteHeight] = NSNumber(value: matteHeight)
-        contents[AnalysisDataKey.mattes] = framesDictionary
-        return contents
+        contents[AnalysisDataKey.mattes] = framesDictionary.copy() as? NSDictionary ?? NSDictionary()
+        return contents.copy() as? NSDictionary ?? NSDictionary()
     }
 
     /// Reconstructs the cache from the dictionary the host hands us. Returns

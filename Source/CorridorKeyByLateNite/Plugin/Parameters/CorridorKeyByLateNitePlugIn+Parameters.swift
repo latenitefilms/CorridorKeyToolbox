@@ -43,18 +43,22 @@ extension CorridorKeyToolboxPlugIn {
 
     /// Tells FxPlug which Foundation classes may appear inside our hidden
     /// custom parameter so the host can safely decode it through
-    /// `NSSecureCoding`. The analysis dictionary is a tree of NSDictionary /
-    /// NSString / NSNumber / NSData nodes — listing any additional classes
-    /// here would open the plug-in to decoding attacker-supplied payloads.
+    /// `NSSecureCoding`. The analysis dictionary is a tree of Foundation
+    /// dictionary / string / number / data nodes. Mutable variants are
+    /// whitelisted only for older values that may have been archived before
+    /// we normalised the writer to immutable dictionaries.
+    @objc(classesForCustomParameterID:)
     func classes(forCustomParameterID parameterID: UInt32) -> Set<AnyHashable> {
         switch parameterID {
         case ParameterIdentifier.analysisData,
              ParameterIdentifier.subjectPoints:
             let classes: [AnyClass] = [
                 NSDictionary.self,
+                NSMutableDictionary.self,
                 NSString.self,
                 NSNumber.self,
-                NSData.self
+                NSData.self,
+                NSMutableData.self
             ]
             let set = NSSet(array: classes)
             return (set as? Set<AnyHashable>) ?? []
@@ -90,7 +94,7 @@ extension CorridorKeyToolboxPlugIn {
         create.addCustomParameter(
             withName: "Subject Points",
             parameterID: ParameterIdentifier.subjectPoints,
-            defaultValue: NSDictionary(),
+            defaultValue: HintPointSet().asParameterDictionary(),
             parameterFlags: hiddenFlags.fxFlags
         )
     }

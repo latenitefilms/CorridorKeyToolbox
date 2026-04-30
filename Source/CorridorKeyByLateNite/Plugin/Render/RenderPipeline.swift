@@ -22,11 +22,11 @@
 //    buffer that used them. The render path no longer allocates fresh
 //    textures per frame on the hot path.
 //
-//  * GPU→CPU synchronisation uses `addCompletedHandler` + `DispatchSemaphore`
-//    instead of `waitUntilCompleted`. `waitUntilCompleted` spin-waits inside
-//    the Metal driver on some macOS builds, which prevented Final Cut Pro
-//    from pipelining the next tile's command queue kickoff while we were
-//    nominally "done".
+//  * Staging GPU→CPU synchronisation uses `addCompletedHandler` +
+//    `DispatchSemaphore` instead of `waitUntilCompleted`. The final command
+//    buffer that writes Final Cut Pro's destination tile still uses Metal's
+//    synchronous completion wait so the host does not preview the untouched
+//    source while the processed IOSurface is still settling.
 //
 
 import Foundation
@@ -546,7 +546,7 @@ final class RenderPipeline: @unchecked Sendable {
             commandBuffer: commandBuffer
         )
 
-        try commitAndWait(commandBuffer: commandBuffer)
+        try commitAndWaitForDestination(commandBuffer: commandBuffer)
 
         return RenderReport(
             backendDescription: backendDescription,
@@ -686,7 +686,7 @@ final class RenderPipeline: @unchecked Sendable {
         )
         PluginLog.notice("Hint Diagnostic: composed (hintTextureFormat=\(hintPooled.texture.pixelFormat.rawValue), destTextureFormat=\(context.destinationTexture.pixelFormat.rawValue), tileWidth=\(Int(context.outputWidth)), tileHeight=\(Int(context.outputHeight)))")
 
-        try commitAndWait(commandBuffer: commandBuffer)
+        try commitAndWaitForDestination(commandBuffer: commandBuffer)
 
         // One-time readback of the hint texture (pre-compose) AND
         // the destination (post-compose). Together they answer the
@@ -1082,7 +1082,7 @@ final class RenderPipeline: @unchecked Sendable {
             commandBuffer: postCommandBuffer
         )
 
-        try commitAndWait(commandBuffer: postCommandBuffer)
+        try commitAndWaitForDestination(commandBuffer: postCommandBuffer)
 
         // Return every pooled texture we acquired along the way. None of
         // these can be reused before the command buffer retires, but
@@ -1625,6 +1625,21 @@ final class RenderPipeline: @unchecked Sendable {
         commandBuffer.addCompletedHandler { _ in semaphore.signal() }
         commandBuffer.commit()
         semaphore.wait()
+        if let error = commandBuffer.error { throw error }
+    }
+
+    /// Commits a command buffer that writes directly into Final Cut Pro's
+    /// destination tile and waits through Metal's synchronous completion API.
+    ///
+    /// The cooperative semaphore wait above is still used for staging work
+    /// and readbacks, but FCP preview scrubbing is sensitive to when the
+    /// destination IOSurface is considered ready. Using Metal's own
+    /// `waitUntilCompleted()` here preserves the older host-visible
+    /// behaviour: the render callback does not yield back with the source
+    /// frame visible while the processed tile is still settling.
+    private func commitAndWaitForDestination(commandBuffer: any MTLCommandBuffer) throws {
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
         if let error = commandBuffer.error { throw error }
     }
 
