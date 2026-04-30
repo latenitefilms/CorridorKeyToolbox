@@ -60,7 +60,6 @@ struct TransportBar: View {
                     .disabled(!viewModel.phase.isReady)
 
                 Button("Export…", systemImage: "square.and.arrow.up", action: onExport)
-                    .buttonStyle(.borderedProminent)
                     .disabled(!viewModel.phase.isReady || viewModel.exportStatus.inProgress)
             }
 
