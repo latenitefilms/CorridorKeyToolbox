@@ -35,6 +35,9 @@ enum EditorWindow {
 
 @main
 struct CorridorKeyToolboxApp: App {
+    @NSApplicationDelegateAdaptor(CorridorKeyApplicationDelegate.self)
+    private var applicationDelegate
+
     var body: some Scene {
         WindowGroup("CorridorKey by LateNite") {
             WelcomeView()
@@ -67,6 +70,56 @@ struct CorridorKeyToolboxApp: App {
                 .frame(minWidth: 1100, minHeight: 700)
         }
         .windowResizability(.contentMinSize)
+    }
+}
+
+/// Gives standalone analysis/export work a short cooperative-cancel
+/// window before macOS tears down the process. This prevents MLX/Metal
+/// evaluation from racing global library deallocation during Quit or
+/// AppKit memory-pressure termination.
+@MainActor
+final class CorridorKeyApplicationDelegate: NSObject, NSApplicationDelegate {
+    private let terminationGracePeriod: Duration = .seconds(3)
+    private var pendingTerminationIdentifier: UUID?
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard pendingTerminationIdentifier == nil else { return .terminateLater }
+        guard EditorWorkRegistry.shared.hasInflightEditorWork else { return .terminateNow }
+
+        let tasks = EditorWorkRegistry.shared.cancelAllWorkForAppTermination()
+        guard !tasks.isEmpty else { return .terminateNow }
+
+        let identifier = UUID()
+        pendingTerminationIdentifier = identifier
+        waitForTerminationWork(tasks, identifier: identifier)
+        finishTerminationAfterGracePeriod(identifier)
+        return .terminateLater
+    }
+
+    private func waitForTerminationWork(
+        _ tasks: [Task<Void, Never>],
+        identifier: UUID
+    ) {
+        Task { @MainActor [weak self] in
+            for task in tasks {
+                await task.value
+            }
+            self?.replyToPendingTermination(identifier)
+        }
+    }
+
+    private func finishTerminationAfterGracePeriod(_ identifier: UUID) {
+        let gracePeriod = terminationGracePeriod
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: gracePeriod)
+            self?.replyToPendingTermination(identifier)
+        }
+    }
+
+    private func replyToPendingTermination(_ identifier: UUID) {
+        guard pendingTerminationIdentifier == identifier else { return }
+        pendingTerminationIdentifier = nil
+        NSApp.reply(toApplicationShouldTerminate: true)
     }
 }
 

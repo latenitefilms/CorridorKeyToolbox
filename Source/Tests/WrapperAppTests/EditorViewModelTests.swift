@@ -97,6 +97,32 @@ struct EditorViewModelTests {
         #expect(viewModel.phase == .noClipLoaded)
     }
 
+    @Test("app termination cancellation reaches the active analysis runner")
+    func terminationCancellationStopsActiveAnalysisRunner() async throws {
+        let url = try await SyntheticVideoFixture.writeMP4(frameCount: 24, fps: 24)
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+
+        let engine = try StandaloneRenderEngine()
+        let viewModel = EditorViewModel(renderEngine: engine)
+        await viewModel.loadClip(at: url)
+        for task in viewModel.cancelWorkForEditorShutdown() {
+            await task.value
+        }
+
+        viewModel.state.qualityMode = .draft512
+        viewModel.runAnalysis()
+        #expect(viewModel.hasInflightEditorWork)
+        #expect(EditorWorkRegistry.shared.hasInflightEditorWork)
+
+        let tasks = EditorWorkRegistry.shared.cancelAllWorkForAppTermination()
+        #expect(tasks.count >= 2, "Expected both the UI task and analysis runner task to be cancelled.")
+
+        for task in tasks {
+            await task.value
+        }
+        #expect(!viewModel.hasInflightEditorWork)
+    }
+
     @Test("Quality-Mode change picks an inference resolution within the supported ladder")
     func qualityModeRespectsLadder() {
         for mode in QualityMode.allCases {

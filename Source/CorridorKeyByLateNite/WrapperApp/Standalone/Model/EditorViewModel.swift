@@ -269,7 +269,15 @@ final class EditorViewModel {
     @ObservationIgnored
     private var analysisTask: Task<Void, Never>?
     @ObservationIgnored
+    private var analysisRunnerTask: Task<Void, Never>?
+    @ObservationIgnored
+    private var analysisRunIdentifier = 0
+    @ObservationIgnored
     private var exportTask: Task<Void, Never>?
+    @ObservationIgnored
+    private var exportRunnerTask: Task<Void, Never>?
+    @ObservationIgnored
+    private var exportRunIdentifier = 0
     /// Debounces preview re-renders during slider drags so the GPU
     /// isn't flooded with intermediate states. Reset every parameter
     /// edit; whoever fires last wins.
@@ -290,6 +298,8 @@ final class EditorViewModel {
     /// warm-up kicks off for a different rung.
     @ObservationIgnored
     private var warmupPollingTask: Task<Void, Never>?
+    @ObservationIgnored
+    private var activeWarmupResolution: Int?
     /// `UndoManager` the SwiftUI environment hands us at view-mount
     /// time. Hint-point mutations register undo / redo against this
     /// manager so Cmd-Z / Cmd-Shift-Z step through the user's edit
@@ -302,6 +312,7 @@ final class EditorViewModel {
     init(renderEngine: StandaloneRenderEngine) {
         self.renderEngine = renderEngine
         self.customBackdropColor = BackdropPreferences.loadCustomColor() ?? .default
+        EditorWorkRegistry.shared.register(self)
         // Restore the user's last imported image asynchronously so
         // the editor window appears immediately. If the bookmark is
         // stale (file moved / deleted) we silently fall back to
@@ -808,6 +819,8 @@ final class EditorViewModel {
     func runAnalysis() {
         guard let source = videoSource else { return }
         cancelAnalysis()
+        analysisRunIdentifier += 1
+        let runIdentifier = analysisRunIdentifier
         let runner = AnalysisRunner(renderEngine: renderEngine, videoSource: source)
         let stateSnapshot = state
         let startingPlayhead = playheadTime
@@ -820,22 +833,47 @@ final class EditorViewModel {
         // self entirely — only the surrounding for-await loop touches the
         // view model, and that loop is already main-actor-isolated.
         let (eventStream, continuation) = AsyncStream<AnalysisRunnerEvent>.makeStream()
-        analysisTask = Task { [weak self] in
-            let runTask = Task.detached(priority: .userInitiated) {
-                await runner.run(state: stateSnapshot) { event in
-                    continuation.yield(event)
-                }
+        let runTask = Task(priority: .userInitiated) {
+            await runner.run(state: stateSnapshot) { event in
+                continuation.yield(event)
+            }
+            continuation.finish()
+        }
+        analysisRunnerTask = runTask
+        continuation.onTermination = { @Sendable _ in
+            runTask.cancel()
+        }
+        analysisTask = Task { [weak self, runTask, continuation] in
+            var shouldRefreshPreview = true
+            defer {
                 continuation.finish()
+                runTask.cancel()
+                if let self, self.analysisRunIdentifier == runIdentifier {
+                    self.analysisTask = nil
+                    self.analysisRunnerTask = nil
+                }
             }
             for await event in eventStream {
-                guard let self else { break }
+                if Task.isCancelled {
+                    shouldRefreshPreview = false
+                    break
+                }
+                guard let self else {
+                    shouldRefreshPreview = false
+                    break
+                }
                 self.handleAnalysisEvent(event, fallbackTotalFrames: self.totalFrames)
             }
+            if Task.isCancelled || !shouldRefreshPreview {
+                runTask.cancel()
+                continuation.finish()
+            }
             _ = await runTask.value
-            self?.analysisTask = nil
+            guard shouldRefreshPreview, !Task.isCancelled else { return }
+            guard let self, self.analysisRunIdentifier == runIdentifier else { return }
             // After analysis completes, refresh the preview so the
             // current playhead picks up its newly-cached matte.
-            self?.renderPreview(at: startingPlayhead)
+            self.renderPreview(at: startingPlayhead)
         }
     }
 
@@ -843,8 +881,7 @@ final class EditorViewModel {
     /// in the cache so the user can still preview them; the rest of
     /// the clip will re-trigger pass-through.
     func cancelAnalysis() {
-        analysisTask?.cancel()
-        analysisTask = nil
+        cancelAnalysisTasks()
         if case .running = analysisStatus {
             analysisStatus = .cancelled
         }
@@ -897,6 +934,8 @@ final class EditorViewModel {
     func runExport(options: ExportOptions) {
         guard let source = videoSource else { return }
         cancelExport()
+        exportRunIdentifier += 1
+        let runIdentifier = exportRunIdentifier
         let snapshot = ExportProjectSnapshot(state: state, cachedMattes: matteCache)
         let exporter = ProResExporter(
             renderEngine: renderEngine,
@@ -907,26 +946,49 @@ final class EditorViewModel {
         exportStatus = .running(processed: 0, total: totalFramesSnapshot)
 
         let (eventStream, continuation) = AsyncStream<ExportRunnerEvent>.makeStream()
-        exportTask = Task { [weak self] in
-            let runTask = Task.detached(priority: .userInitiated) {
-                await exporter.run(options: options) { event in
-                    continuation.yield(event)
-                }
+        let runTask = Task(priority: .userInitiated) {
+            await exporter.run(options: options) { event in
+                continuation.yield(event)
+            }
+            continuation.finish()
+        }
+        exportRunnerTask = runTask
+        continuation.onTermination = { @Sendable _ in
+            runTask.cancel()
+        }
+        exportTask = Task { [weak self, runTask, continuation] in
+            var shouldFinishNormally = true
+            defer {
                 continuation.finish()
+                runTask.cancel()
+                if let self, self.exportRunIdentifier == runIdentifier {
+                    self.exportTask = nil
+                    self.exportRunnerTask = nil
+                }
             }
             for await event in eventStream {
-                guard let self else { break }
+                if Task.isCancelled {
+                    shouldFinishNormally = false
+                    break
+                }
+                guard let self else {
+                    shouldFinishNormally = false
+                    break
+                }
                 self.handleExportEvent(event, fallbackTotalFrames: totalFramesSnapshot)
             }
+            if Task.isCancelled || !shouldFinishNormally {
+                runTask.cancel()
+                continuation.finish()
+            }
             _ = await runTask.value
-            self?.exportTask = nil
+            guard shouldFinishNormally, !Task.isCancelled else { return }
         }
     }
 
     /// Cancels an in-flight export pass.
     func cancelExport() {
-        exportTask?.cancel()
-        exportTask = nil
+        cancelExportTasks()
         if case .running = exportStatus {
             exportStatus = .cancelled
         }
@@ -963,6 +1025,10 @@ final class EditorViewModel {
         let longEdge = max(Int(renderSize.width.rounded()), Int(renderSize.height.rounded()))
         guard longEdge > 0 else { return }
         let resolution = state.qualityMode.resolvedInferenceResolution(forLongEdge: longEdge)
+        if let activeWarmupResolution, activeWarmupResolution != resolution {
+            renderEngine.cancelWarmup(forResolution: activeWarmupResolution)
+        }
+        activeWarmupResolution = resolution
         do {
             try renderEngine.beginWarmup(forResolution: resolution)
             warmupStatus = renderEngine.warmupStatus(forResolution: resolution)
@@ -1004,12 +1070,89 @@ final class EditorViewModel {
         }
     }
 
-    private func cancelInflightWork() {
-        pendingPreviewTask?.cancel(); pendingPreviewTask = nil
-        warmupPollingTask?.cancel(); warmupPollingTask = nil
+    /// Cancels work that should not survive editor/window teardown.
+    /// The returned task handles let app termination briefly wait for
+    /// cooperative cancellation without keeping the view model alive.
+    @discardableResult
+    func cancelWorkForEditorShutdown() -> [Task<Void, Never>] {
+        cancelInflightWork()
+    }
+
+    var hasInflightEditorWork: Bool {
+        inflightRenderTask != nil
+            || pendingPreviewTask != nil
+            || warmupPollingTask != nil
+            || playbackTask != nil
+            || analysisTask != nil
+            || analysisRunnerTask != nil
+            || exportTask != nil
+            || exportRunnerTask != nil
+    }
+
+    @discardableResult
+    private func cancelInflightWork() -> [Task<Void, Never>] {
+        var tasks: [Task<Void, Never>] = []
+        if let inflightRenderTask {
+            tasks.append(inflightRenderTask)
+            inflightRenderTask.cancel()
+            self.inflightRenderTask = nil
+        }
+        if let pendingPreviewTask {
+            tasks.append(pendingPreviewTask)
+            pendingPreviewTask.cancel()
+            self.pendingPreviewTask = nil
+        }
+        if let warmupPollingTask {
+            tasks.append(warmupPollingTask)
+            warmupPollingTask.cancel()
+            self.warmupPollingTask = nil
+        }
+        tasks.append(contentsOf: cancelActiveWarmup())
+        tasks.append(contentsOf: cancelAnalysisTasks())
+        tasks.append(contentsOf: cancelExportTasks())
+        if let playbackTask {
+            tasks.append(playbackTask)
+        }
         stopPlayback()
-        cancelAnalysis()
-        cancelExport()
+        return tasks
+    }
+
+    @discardableResult
+    private func cancelAnalysisTasks() -> [Task<Void, Never>] {
+        analysisRunIdentifier += 1
+        let tasks = [analysisTask, analysisRunnerTask].compactMap { $0 }
+        analysisTask?.cancel()
+        analysisRunnerTask?.cancel()
+        analysisTask = nil
+        analysisRunnerTask = nil
+        return tasks
+    }
+
+    @discardableResult
+    private func cancelExportTasks() -> [Task<Void, Never>] {
+        exportRunIdentifier += 1
+        let tasks = [exportTask, exportRunnerTask].compactMap { $0 }
+        exportTask?.cancel()
+        exportRunnerTask?.cancel()
+        exportTask = nil
+        exportRunnerTask = nil
+        return tasks
+    }
+
+    private func cancelActiveWarmup() -> [Task<Void, Never>] {
+        var tasks: [Task<Void, Never>] = []
+        warmupPollingTask?.cancel()
+        warmupPollingTask = nil
+        if let activeWarmupResolution {
+            if let warmupTask = renderEngine.cancelWarmup(forResolution: activeWarmupResolution) {
+                tasks.append(warmupTask)
+            }
+            self.activeWarmupResolution = nil
+        }
+        if case .warming = warmupStatus {
+            warmupStatus = .cold
+        }
+        return tasks
     }
 
     private func currentFrameIndex(at time: CMTime) -> Int {
@@ -1027,6 +1170,58 @@ struct PreviewFrame {
     let texture: any MTLTexture
     let pixelBuffer: CVPixelBuffer
     let presentationTime: CMTime
+}
+
+/// Tracks live standalone editor view models so app termination can
+/// cancel their GPU/MLX work before process teardown starts releasing
+/// shared Metal state.
+@MainActor
+final class EditorWorkRegistry {
+    static let shared = EditorWorkRegistry()
+
+    private var entries: [WeakEditorViewModel] = []
+
+    private init() {}
+
+    func register(_ viewModel: EditorViewModel) {
+        prune()
+        guard !entries.contains(where: { $0.viewModel === viewModel }) else { return }
+        entries.append(WeakEditorViewModel(viewModel))
+    }
+
+    func unregister(_ viewModel: EditorViewModel) {
+        entries.removeAll { entry in
+            guard let registered = entry.viewModel else { return true }
+            return registered === viewModel
+        }
+    }
+
+    @discardableResult
+    func cancelAllWorkForAppTermination() -> [Task<Void, Never>] {
+        prune()
+        return entries.flatMap { entry in
+            entry.viewModel?.cancelWorkForEditorShutdown() ?? []
+        }
+    }
+
+    var hasInflightEditorWork: Bool {
+        prune()
+        return entries.contains { entry in
+            entry.viewModel?.hasInflightEditorWork == true
+        }
+    }
+
+    private func prune() {
+        entries.removeAll { $0.viewModel == nil }
+    }
+}
+
+private struct WeakEditorViewModel {
+    weak var viewModel: EditorViewModel?
+
+    init(_ viewModel: EditorViewModel) {
+        self.viewModel = viewModel
+    }
 }
 
 /// Disk-backed persistence for the custom backdrop colour and

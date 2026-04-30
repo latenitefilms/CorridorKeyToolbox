@@ -242,6 +242,17 @@ final class StandaloneRenderEngine: @unchecked Sendable {
             rung: resolution
         )
     }
+
+    /// Cancels an in-flight MLX warm-up for the editor's device.
+    /// Ready engines stay cached; only the background compile/eval
+    /// task is stopped.
+    @discardableResult
+    func cancelWarmup(forResolution resolution: Int) -> Task<Void, Never>? {
+        SharedMLXBridgeRegistry.shared.cancelWarmup(
+            deviceRegistryID: device.registryID,
+            rung: resolution
+        )
+    }
 }
 
 /// Per-frame analysis output. Kept separate from the render result so

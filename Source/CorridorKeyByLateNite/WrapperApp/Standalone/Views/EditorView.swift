@@ -85,6 +85,9 @@ struct EditorView: View {
         .onChange(of: undoManager, initial: true) { _, manager in
             viewModel.undoManager = manager
         }
+        .onDisappear {
+            viewModel.cancelWorkForEditorShutdown()
+        }
         .alert(
             "Couldn't load clip",
             isPresented: Binding(

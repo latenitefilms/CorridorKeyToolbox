@@ -222,13 +222,15 @@ final class SharedMLXBridgeRegistry: @unchecked Sendable {
     /// up lose their in-flight state too, but they'll simply retry on
     /// their next render request. This is the trade-off of sharing —
     /// individual cancellations don't get fine-grained behaviour.
-    func cancelWarmup(deviceRegistryID: UInt64, rung: Int) {
+    @discardableResult
+    func cancelWarmup(deviceRegistryID: UInt64, rung: Int) -> Task<Void, Never>? {
         let key = Key(deviceRegistryID: deviceRegistryID, rung: rung)
         lock.lock()
         let task = warmupTasks[key]
         warmupTasks[key] = nil
         lock.unlock()
         task?.cancel()
+        return task
     }
 
     // MARK: - Internal
