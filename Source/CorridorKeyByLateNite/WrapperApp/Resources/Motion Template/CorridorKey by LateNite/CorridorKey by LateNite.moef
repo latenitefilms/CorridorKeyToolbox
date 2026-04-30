@@ -54,7 +54,7 @@
 	<resolutionMode>0</resolutionMode>
 	<dynamicResolution>0</dynamicResolution>
 	<viewmode>0</viewmode>
-	<overlayOptions>125452</overlayOptions>
+	<overlayOptions>125708</overlayOptions>
 	<oscOptions>30</oscOptions>
 	<compensateAspectRatio>1</compensateAspectRatio>
 	<renderFields>0</renderFields>
@@ -73,7 +73,7 @@
 	<cameraType>0</cameraType>
 	<cameraName>Active Camera</cameraName>
 	<mirrorHMD>0</mirrorHMD>
-	<panZoom camera="0" zoom="1.15625" panX="5" panY="35" mode="2" centered="1"/>
+	<panZoom camera="0" zoom="1.2148147821426392" panX="75" panY="5" mode="2" centered="1"/>
 </viewer>
 
 <projectPanel>
@@ -110,7 +110,7 @@
 	<displayEffects>1</displayEffects>
 	<videoVerticalZoom>1</videoVerticalZoom>
 	<audioVerticalZoom>1</audioVerticalZoom>
-	<displayRange in="-45216564 1177734375 3 0" out="1038392837 1000000000 3 0"/>
+	<displayRange in="-64738908 1932740858 3 0" out="1033495907 1000000000 3 0"/>
 </timeline>
 
 <curveeditor>
@@ -118,8 +118,8 @@
 	<snapping>0</snapping>
 	<displayAudioWaveform>0</displayAudioWaveform>
 	<lockKeyframesInTime>0</lockKeyframesInTime>
-	<displayRange in="-45216564 1177734375 3 0" out="1038392837 1000000000 3 0"/>
-	<currentviewvolume originx="-0.038392837094527364" originy="-62.5" width="1.0767856739999999" height="125"/>
+	<displayRange in="-64738908 1932740858 3 0" out="1033495907 1000000000 3 0"/>
+	<currentviewvolume originx="-0.033495906982062673" originy="-62.5" width="1.0669918140000001" height="125"/>
 	<snapshotChannels>0</snapshotChannels>
 </curveeditor>
 
@@ -159,7 +159,7 @@
 		<savePreviewMovie>0</savePreviewMovie>
 		<Object3DEnvironments>100</Object3DEnvironments>
 		<DRTSupport>0</DRTSupport>
-		<onHDRDisplay>0</onHDRDisplay>
+		<onHDRDisplay>1</onHDRDisplay>
 	</sceneSettings>
 	<publishSettings>
 		<version>2</version>
@@ -172,7 +172,6 @@
 		<target object="10010" channel="./150" name="Temporal Stability"/>
 	</publishSettings>
 	<currentFrame>0 1 1 0</currentFrame>
-	<currentObject>10007</currentObject>
 	<activeLayer>10003</activeLayer>
 	<timeRange offset="0 1 1 0" duration="153600 153600 1 0"/>
 	<playRange offset="0 1 1 0" duration="153600 153600 1 0"/>
@@ -205,10 +204,10 @@
 	<layer name="Group" id="10003">
 		<scenenode name="Effect Source" id="10007" factoryID="3" version="5">
 			<validTracks>1</validTracks>
-			<aspectRatio>0</aspectRatio>
+			<aspectRatio>1</aspectRatio>
 			<flags>0</flags>
 			<timing in="0 1 1 0" out="147456 153600 1 0" offset="0 1 1 0"/>
-			<foldFlags>24576</foldFlags>
+			<foldFlags>16384</foldFlags>
 			<baseFlags>524304</baseFlags>
 			<parameter name="Properties" id="1" flags="8589938704">
 				<parameter name="Cinematic" id="344" flags="8589938706">
@@ -260,53 +259,58 @@
 			</parameter>
 			<filter name="CorridorKey by LateNite" id="10010" factoryID="6" pluginUUID="D29F6B10-4F3A-4C5E-B611-7A2E8D4C9F08" pluginVersion="1" pluginName="CorridorKey by LateNite" pluginDynamicParams="0">
 				<timing in="0 1 1 0" out="147456 153600 1 0" offset="0 1 1 0"/>
-				<baseFlags>8589934609</baseFlags>
-				<parameter name="" id="50" flags="8606711824"/>
+				<baseFlags>8589934608</baseFlags>
+				<parameter name="Analysis Data" id="7003" flags="12905938992">
+					<numberOfKeypoints>0</numberOfKeypoints>
+					<defaultVal>*********PAeMb-gOLBoA11I*E61-*I4-klM75NZQbBdPqtN743mMqVdRaJmJ0FoPr-M74xWOaJXR5AG**44c3wE1otHGqJtNKF-QaBcOLNZQh660Ec9L2FVR437QolZNq3XSJwE1o7gOKtYF43oMIxWOaJXR6*0U*4X1EsDJGFiRKlgHl1oMb-gOLBoA11I*E61-*I4-kdM75NZQbBdPqtN743mMqVdRaJmJ0FoPr-M74xWOaJXR5AG**44c3wE1otHGqJtNKF-QaBcOLNZQh260Jh1RLBoPqoUF43oMM*-ckgA2pIYPbJgPBAB1UwE2F7LHZAiOqJtQpdCImtjMadZMrFnJWFXP43nQu0UU*9G3-IK3pcYMqlVQrBiMKpZK0FXP43nQqJnL2tHF4ZXR4ZjPa3mSO6K43VCIoxWOaJXR*UF4WEdAXR7H3VOLaFfQru3VcS7XdaWfv6********-*E*********N********************ikU*0**F*-c*7**d*16*Bk-7*2s*Kk-h*4w*QE-p*5g-QU********6-*********-********************3n</defaultVal>
+					<dataValue>*********PAeMb-gOLBoA11I*E61-*I4-klM75NZQbBdPqtN743mMqVdRaJmJ0FoPr-M74xWOaJXR5AG**44c3wE1otHGqJtNKF-QaBcOLNZQh660Ec9L2FVR437QolZNq3XSJwE1o7gOKtYF43oMIxWOaJXR6*0U*4X1EsDJGFiRKlgHl1oMb-gOLBoA11I*E61-*I4-kdM75NZQbBdPqtN743mMqVdRaJmJ0FoPr-M74xWOaJXR5AG**44c3wE1otHGqJtNKF-QaBcOLNZQh260Jh1RLBoPqoUF43oMM*-ckgA2pIYPbJgPBAB1UwE2F7LHZAiOqJtQpdCImtjMadZMrFnJWFXP43nQu0UU*9G3-IK3pcYMqlVQrBiMKpZK0FXP43nQqJnL2tHF4ZXR4ZjPa3mSO6K43VCIoxWOaJXR*UF4WEdAXR7H3VOLaFfQru3VcS7XdaWfv6********-*E*********N********************ikU*0**F*-c*7**d*16*Bk-7*2s*Kk-h*4w*QE-p*5g-QU********6-*********-********************3n</dataValue>
+				</parameter>
+				<parameter name="Subject Points" id="7004" flags="12905938992">
+					<numberOfKeypoints>0</numberOfKeypoints>
+					<defaultVal>*********PAeMb-gOLBoA11I*E61-*I4-klM75NZQbBdPqtN743mMqVdRaJmJ0FoPr-M74xWOaJXR5AG**44c3wE1otHGqJtNKF-QaBcOLNZQh660Ec9L2FVR437QolZNq3XSJwE1o7gOKtYF43oMIxWOaJXR6*0U*4X1EsDJGFiRKlgHl1oMb-gOLBoA11I*E61-*I4-kdM75NZQbBdPqtN743mMqVdRaJmJ0FoPr-M74xWOaJXR5AG**44c3wE1otHGqJtNKF-QaBcOLNZQh260Jh1RLBoPqoUF43oMM*-ckgA2pIYPbJgPBAB1UwE2F7LHZAiOqJtQpdCImtjMadZMrFnJWFXP43nQu0UU*9G3-IK3pcYMqlVQrBiMKpZK0FXP43nQqJnL2tHF4ZXR4ZjPa3mSO6K43VCIoxWOaJXR*UF4WEdAXR7H3VOLaFfQru3VcS7XdaWfv6********-*E*********N********************ikU*0**F*-c*7**d*16*Bk-7*2s*Kk-h*4w*QE-p*5g-QU********6-*********-********************3n</defaultVal>
+					<dataValue>*********PAeMb-gOLBoA11I*E61-*I4-klM75NZQbBdPqtN743mMqVdRaJmJ0FoPr-M74xWOaJXR5AG**44c3wE1otHGqJtNKF-QaBcOLNZQh660Ec9L2FVR437QolZNq3XSJwE1o7gOKtYF43oMIxWOaJXR6*0U*4X1EsDJGFiRKlgHl1oMb-gOLBoA11I*E61-*I4-kdM75NZQbBdPqtN743mMqVdRaJmJ0FoPr-M74xWOaJXR5AG**44c3wE1otHGqJtNKF-QaBcOLNZQh260Jh1RLBoPqoUF43oMM*-ckgA2pIYPbJgPBAB1UwE2F7LHZAiOqJtQpdCImtjMadZMrFnJWFXP43nQu0UU*9G3-IK3pcYMqlVQrBiMKpZK0FXP43nQqJnL2tHF4ZXR4ZjPa3mSO6K43VCIoxWOaJXR*UF4WEdAXR7H3VOLaFfQru3VcS7XdaWfv6********-*E*********N********************ikU*0**F*-c*7**d*16*Bk-7*2s*Kk-h*4w*QE-p*5g-QU********6-*********-********************3n</dataValue>
+				</parameter>
 				<parameter name="Settings" id="100" flags="8589938704">
-					<parameter name="Screen Colour" id="1001" flags="12884901904" default="0" value="0"/>
-					<parameter name="Quality" id="1002" flags="12884901904" default="0" value="0"/>
-					<parameter name="Hint" id="1007" flags="12884901904" default="1" value="1"/>
-					<parameter name="Output" id="5001" flags="12884901904" default="0" value="0"/>
-					<parameter name="Upscale Method" id="6002" flags="12884901904" default="1" value="1"/>
-					<parameter name="Show Subject Marker" id="1005" flags="12884901904" default="1" value="1"/>
-					<parameter name="Subject Position" id="1006" flags="8589934592">
-						<parameter name="X" id="1" flags="8589934592" default="0.5" value="0.5"/>
-						<parameter name="Y" id="2" flags="8589934592" default="0.5" value="0.5"/>
-					</parameter>
+					<parameter name="Quality" id="1002" flags="12901679120" default="0" value="0"/>
+					<parameter name="Screen Colour" id="1001" flags="12901679120" default="0" value="0"/>
+					<parameter name="Upscale Method" id="6002" flags="12901679120" default="1" value="1"/>
+					<parameter name="Output" id="5001" flags="12901679120" default="0" value="0"/>
+					<parameter name="Hint" id="1007" flags="12901679120" default="1" value="1"/>
+					<parameter name="Show Subject Marker" id="1005" flags="12901679120" default="1" value="1"/>
 				</parameter>
 				<parameter name="Interior Detail" id="110" flags="8589938704">
-					<parameter name="Source Passthrough" id="2001" flags="12884901904" default="0" value="0"/>
-					<parameter name="Edge Erode" id="2002" flags="12884901904" default="3" value="3"/>
-					<parameter name="Edge Blur" id="2003" flags="12884901904" default="7" value="7"/>
+					<parameter name="Source Passthrough" id="2001" flags="12901679120" default="0" value="0"/>
+					<parameter name="Edge Erode" id="2002" flags="12901679120" default="3" value="3"/>
+					<parameter name="Edge Blur" id="2003" flags="12901679120" default="7" value="7"/>
 				</parameter>
 				<parameter name="Matte" id="120" flags="8589938704">
-					<parameter name="Black Point" id="3001" flags="12884901904" default="0" value="0"/>
-					<parameter name="White Point" id="3002" flags="12884901904" default="1" value="1"/>
-					<parameter name="Matte Erode" id="3003" flags="12884901904" default="0" value="0"/>
-					<parameter name="Softness" id="3004" flags="12884901904" default="0" value="0"/>
-					<parameter name="Gamma" id="3005" flags="12884901904" default="1" value="1"/>
-					<parameter name="Auto Despeckle" id="3006" flags="12884901904" default="1" value="1"/>
-					<parameter name="Despeckle Size" id="3007" flags="12884901904" default="100" value="100"/>
-					<parameter name="Refiner Strength" id="3008" flags="12884901904" default="1" value="1"/>
+					<parameter name="Black Point" id="3001" flags="12901679120" default="0" value="0"/>
+					<parameter name="White Point" id="3002" flags="12901679120" default="1" value="1"/>
+					<parameter name="Matte Erode" id="3003" flags="12901679120" default="0" value="0"/>
+					<parameter name="Softness" id="3004" flags="12901679120" default="0" value="0"/>
+					<parameter name="Gamma" id="3005" flags="12901679120" default="1" value="1"/>
+					<parameter name="Auto Despeckle" id="3006" flags="12901679120" default="1" value="1"/>
+					<parameter name="Despeckle Size" id="3007" flags="12901679120" default="100" value="100"/>
+					<parameter name="Refiner Strength" id="3008" flags="12901679120" default="1" value="1"/>
 				</parameter>
 				<parameter name="Edge &amp; Spill" id="130" flags="8589938704">
-					<parameter name="Despill Strength" id="4001" flags="12884901904" default="0.5" value="0.5"/>
-					<parameter name="Spill Method" id="4002" flags="12884901904" default="4" value="4"/>
+					<parameter name="Despill Strength" id="4001" flags="12901679120" default="0.5" value="0.5"/>
+					<parameter name="Spill Method" id="4002" flags="12901679120" default="4" value="4"/>
 				</parameter>
 				<parameter name="Edge Refinement" id="140" flags="8589938704">
-					<parameter name="Light Wrap" id="8001" flags="12884901904" default="1" value="1"/>
-					<parameter name="Wrap Strength" id="8002" flags="12884901904" default="0.25" value="0.25"/>
-					<parameter name="Wrap Radius" id="8003" flags="12884901904" default="10" value="10"/>
-					<parameter name="Edge Decontaminate" id="8004" flags="12884901904" default="1" value="1"/>
-					<parameter name="Decontam. Strength" id="8005" flags="12884901904" default="0.5" value="0.5"/>
+					<parameter name="Light Wrap" id="8001" flags="12901679120" default="1" value="1"/>
+					<parameter name="Wrap Strength" id="8002" flags="12901679120" default="0.25" value="0.25"/>
+					<parameter name="Wrap Radius" id="8003" flags="12901679120" default="10" value="10"/>
+					<parameter name="Edge Decontaminate" id="8004" flags="12901679120" default="1" value="1"/>
+					<parameter name="Decontam. Strength" id="8005" flags="12901679120" default="0.5" value="0.5"/>
 				</parameter>
 				<parameter name="Temporal Stability" id="150" flags="8589938704">
-					<parameter name="Reduce Edge Flicker" id="8006" flags="12884901904" default="1" value="1"/>
-					<parameter name="Stability Strength" id="8007" flags="12884901904" default="0.5" value="0.5"/>
+					<parameter name="Reduce Edge Flicker" id="8006" flags="12901679120" default="1" value="1"/>
+					<parameter name="Stability Strength" id="8007" flags="12901679120" default="0.5" value="0.5"/>
 				</parameter>
-				<parameter name="Mix" id="10001" flags="12884901888" default="1" value="1"/>
-				<parameter name="Flip" id="10002" flags="12889161760" default="0" value="0"/>
-				<parameter name="Input Points" id="10003" flags="12889161760" default="1" value="1"/>
+				<parameter name="Mix" id="10001" flags="12901679104" default="1" value="1"/>
+				<parameter name="Flip" id="10002" flags="12905938976" default="0" value="0"/>
+				<parameter name="Input Points" id="10003" flags="12905938976" default="1" value="1"/>
 				<parameter name="Publish OSC" id="10005" flags="12901679104" default="0" value="1"/>
 			</filter>
 		</scenenode>
