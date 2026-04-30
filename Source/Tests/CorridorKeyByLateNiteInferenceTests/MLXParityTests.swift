@@ -82,12 +82,12 @@ struct MLXParityTests {
         let engine = MLXKeyingEngine(cacheEntry: entry)
         try await engine.prepare(bridgeURL: bridgeURL, rung: 512)
 
-        let request = try makeRequest(rung: 512, entry: entry)
-        let output = try makeOutput(rung: 512, entry: entry)
+        let request = try InferenceTestHarness.makeRequest(rung: 512, entry: entry)
+        let output = try InferenceTestHarness.makeOutput(rung: 512, entry: entry)
 
         // Frame 1 reference.
         try engine.run(request: request, output: output)
-        let frame1 = readAlpha(output: output)
+        let frame1 = InferenceTestHarness.readAlpha(output: output)
 
         // Run 29 more, checking each against frame 1 — the input is
         // identical every iteration so output must be too. If the
@@ -95,7 +95,7 @@ struct MLXParityTests {
         // this is what would catch it.
         for iteration in 2...30 {
             try engine.run(request: request, output: output)
-            let frameN = readAlpha(output: output)
+            let frameN = InferenceTestHarness.readAlpha(output: output)
 
             #expect(frame1.count == frameN.count, "Output count diverged at iteration \(iteration).")
 
@@ -155,24 +155,6 @@ struct MLXParityTests {
 
     // MARK: - Helpers
 
-    private func readAlpha(output: KeyingInferenceOutput) -> [Float] {
-        let width = output.alphaTexture.width
-        let height = output.alphaTexture.height
-        var pixels = [Float](repeating: 0, count: width * height)
-        let bytesPerRow = width * MemoryLayout<Float>.size
-        pixels.withUnsafeMutableBufferPointer { pointer in
-            if let base = pointer.baseAddress {
-                output.alphaTexture.getBytes(
-                    base,
-                    bytesPerRow: bytesPerRow,
-                    from: MTLRegionMake2D(0, 0, width, height),
-                    mipmapLevel: 0
-                )
-            }
-        }
-        return pixels
-    }
-
     /// Boots a fresh engine, applies the requested strategy, runs one
     /// inference on a deterministic gradient input, and returns the
     /// alpha texture pixels read back to CPU.
@@ -188,87 +170,10 @@ struct MLXParityTests {
         engine.testOverrideInputStrategy(strategy)
         try await engine.prepare(bridgeURL: bridgeURL, rung: 512)
 
-        let request = try makeRequest(rung: 512, entry: entry)
-        let output = try makeOutput(rung: 512, entry: entry)
+        let request = try InferenceTestHarness.makeRequest(rung: 512, entry: entry)
+        let output = try InferenceTestHarness.makeOutput(rung: 512, entry: entry)
         try engine.run(request: request, output: output)
 
-        return readAlpha(output: output)
+        return InferenceTestHarness.readAlpha(output: output)
     }
-
-    /// Allocates a normalised input buffer filled with a smooth gradient
-    /// — spatially structured so the model's response is non-trivial,
-    /// deterministic so successive runs are bit-equal at the input.
-    private func makeRequest(rung: Int, entry: MetalDeviceCacheEntry) throws -> KeyingInferenceRequest {
-        guard let buffer = entry.normalizedInputBuffer(forRung: rung) else {
-            throw InferenceTestHarness.MetalUnavailable(reason: "Could not allocate normalised input buffer.")
-        }
-        let elementCount = rung * rung * 4
-        let pointer = buffer.contents().assumingMemoryBound(to: Float.self)
-        // 4-channel structured pattern: greens for "screen", magentas for
-        // "subject", with a soft circular boundary that the model should
-        // segment cleanly. Same layout the normalise kernel produces:
-        // [(R, G, B, hint)…] in row-major order.
-        for row in 0..<rung {
-            for column in 0..<rung {
-                let dx = Float(column) - Float(rung) / 2
-                let dy = Float(row) - Float(rung) / 2
-                let radius = sqrt(dx * dx + dy * dy) / Float(rung) * 2
-                let isSubject = radius < 0.4
-                let baseIndex = (row * rung + column) * 4
-                if isSubject {
-                    pointer[baseIndex + 0] = 0.85   // R
-                    pointer[baseIndex + 1] = 0.30   // G
-                    pointer[baseIndex + 2] = 0.50   // B
-                    pointer[baseIndex + 3] = 0.0    // hint: foreground
-                } else {
-                    pointer[baseIndex + 0] = 0.10   // R
-                    pointer[baseIndex + 1] = 0.85   // G (green screen)
-                    pointer[baseIndex + 2] = 0.10   // B
-                    pointer[baseIndex + 3] = 1.0    // hint: background
-                }
-            }
-        }
-        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .rgba16Float,
-            width: rung,
-            height: rung,
-            mipmapped: false
-        )
-        descriptor.usage = [.shaderRead]
-        descriptor.storageMode = .shared
-        guard let rawSource = entry.device.makeTexture(descriptor: descriptor) else {
-            throw InferenceTestHarness.MetalUnavailable(reason: "Could not allocate raw source texture.")
-        }
-        return KeyingInferenceRequest(
-            normalisedInputBuffer: buffer,
-            rawSourceTexture: rawSource,
-            inferenceResolution: rung
-        )
-    }
-
-    private func makeOutput(rung: Int, entry: MetalDeviceCacheEntry) throws -> KeyingInferenceOutput {
-        guard let alpha = entry.makeIntermediateTexture(
-            width: rung,
-            height: rung,
-            pixelFormat: .r32Float,
-            storageMode: .shared
-        ) else {
-            throw InferenceTestHarness.MetalUnavailable(reason: "Could not allocate alpha texture.")
-        }
-        guard let foreground = entry.makeIntermediateTexture(
-            width: rung,
-            height: rung,
-            pixelFormat: .rgba32Float,
-            storageMode: .shared
-        ) else {
-            throw InferenceTestHarness.MetalUnavailable(reason: "Could not allocate foreground texture.")
-        }
-        return KeyingInferenceOutput(alphaTexture: alpha, foregroundTexture: foreground)
-    }
-}
-
-private struct XCTSkip: Error, CustomStringConvertible {
-    let underlying: any Error
-    init(_ error: any Error) { self.underlying = error }
-    var description: String { "Skipped: \(underlying)" }
 }

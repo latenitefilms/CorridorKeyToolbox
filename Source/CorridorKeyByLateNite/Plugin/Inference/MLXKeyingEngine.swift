@@ -252,8 +252,10 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         let zeros = [Float](repeating: 0, count: rung * rung * 4)
         let input = MLXArray(zeros, [1, rung, rung, 4])
         do {
-            let outputs = try function(input)
-            eval(outputs)
+            let outputs = try withError {
+                try function(input)
+            }
+            try checkedEval(outputs)
         } catch {
             PluginLog.error("MLX JIT warm-up failed (non-fatal): \(error.localizedDescription)")
             return
@@ -324,8 +326,8 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
             // Copy 67 MB once into the Swift scratch. On Apple Silicon's
             // unified memory both source and destination are CPU-visible,
             // so this is just a memcpy with no GPU sync. Lets MLX own the
-            // input layout end-to-end, which empirically keeps `eval()`
-            // on the fast path.
+            // input layout end-to-end, which empirically keeps MLX
+            // evaluation on the fast path.
             inputScratch.withUnsafeMutableBufferPointer { destination in
                 guard let destinationBase = destination.baseAddress else { return }
                 memcpy(destinationBase, inputBuffer.contents(), expectedCount * MemoryLayout<Float>.size)
@@ -337,7 +339,9 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         // `(alpha, foreground)` per CorridorKey's bridge exporter.
         let results: [MLXArray]
         do {
-            results = try function(inputArray)
+            results = try withError {
+                try function(inputArray)
+            }
         } catch {
             throw KeyingInferenceError.modelUnavailable(
                 "MLX apply failed: \(error.localizedDescription)"
@@ -351,7 +355,13 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         try assertOutputShapes(alpha: results[0], foreground: results[1], rung: rung)
 
         // Step 3: force evaluation so the backing buffers are populated.
-        eval(results[0], results[1])
+        do {
+            try checkedEval(results[0], results[1])
+        } catch {
+            throw KeyingInferenceError.modelUnavailable(
+                "MLX eval failed: \(error.localizedDescription)"
+            )
+        }
 
         // Step 4: alias MLX's own output storage as MTLBuffers (still on
         // the GPU, no CPU copy) and encode a compute pass that reads them

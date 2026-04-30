@@ -39,8 +39,8 @@ struct MLXMemoryTests {
         let engine = MLXKeyingEngine(cacheEntry: entry)
         try await engine.prepare(bridgeURL: bridgeURL, rung: 512)
 
-        let request = try makeRequest(rung: 512, entry: entry)
-        let output = try makeOutput(rung: 512, entry: entry)
+        let request = try InferenceTestHarness.makeRequest(rung: 512, entry: entry, pattern: .linearRamp)
+        let output = try InferenceTestHarness.makeOutput(rung: 512, entry: entry)
         try engine.run(request: request, output: output)
     }
 
@@ -69,8 +69,8 @@ struct MLXMemoryTests {
         let engine = MLXKeyingEngine(cacheEntry: entry)
         try await engine.prepare(bridgeURL: bridgeURL, rung: 512)
 
-        let request = try makeRequest(rung: 512, entry: entry)
-        let output = try makeOutput(rung: 512, entry: entry)
+        let request = try InferenceTestHarness.makeRequest(rung: 512, entry: entry, pattern: .linearRamp)
+        let output = try InferenceTestHarness.makeOutput(rung: 512, entry: entry)
 
         // Drop any state from the warmup so iteration 0 starts clean.
         MLX.Memory.clearCache()
@@ -131,8 +131,8 @@ struct MLXMemoryTests {
         let engine = MLXKeyingEngine(cacheEntry: entry)
         try await engine.prepare(bridgeURL: bridgeURL, rung: 512)
 
-        let request = try makeRequest(rung: 512, entry: entry)
-        let output = try makeOutput(rung: 512, entry: entry)
+        let request = try InferenceTestHarness.makeRequest(rung: 512, entry: entry, pattern: .linearRamp)
+        let output = try InferenceTestHarness.makeOutput(rung: 512, entry: entry)
 
         for _ in 0..<30 {
             try engine.run(request: request, output: output)
@@ -186,8 +186,8 @@ struct MLXMemoryTests {
         let engine = MLXKeyingEngine(cacheEntry: entry)
         try await engine.prepare(bridgeURL: bridgeURL, rung: 512)
 
-        let request = try makeRequest(rung: 512, entry: entry)
-        let output = try makeOutput(rung: 512, entry: entry)
+        let request = try InferenceTestHarness.makeRequest(rung: 512, entry: entry, pattern: .linearRamp)
+        let output = try InferenceTestHarness.makeOutput(rung: 512, entry: entry)
 
         // Single warm-up to reach steady-state allocation, then sample
         // before/after the full loop.
@@ -213,95 +213,4 @@ struct MLXMemoryTests {
               "(delta: \(delta / 1024) KB).")
     }
 
-
-    // MARK: - Helpers
-
-    private func readAlpha(output: KeyingInferenceOutput) -> [Float] {
-        let width = output.alphaTexture.width
-        let height = output.alphaTexture.height
-        var pixels = [Float](repeating: 0, count: width * height)
-        let bytesPerRow = width * MemoryLayout<Float>.size
-        pixels.withUnsafeMutableBufferPointer { pointer in
-            if let base = pointer.baseAddress {
-                output.alphaTexture.getBytes(
-                    base,
-                    bytesPerRow: bytesPerRow,
-                    from: MTLRegionMake2D(0, 0, width, height),
-                    mipmapLevel: 0
-                )
-            }
-        }
-        return pixels
-    }
-
-    /// Allocates a normalised-input MTLBuffer matching the shape MLX
-    /// expects (1 × rung × rung × 4 floats), filled with a deterministic
-    /// gradient so each iteration sees real values rather than zeros
-    /// that MLX could constant-fold.
-    private func makeRequest(rung: Int, entry: MetalDeviceCacheEntry) throws -> KeyingInferenceRequest {
-        guard let buffer = entry.normalizedInputBuffer(forRung: rung) else {
-            throw InferenceTestHarness.MetalUnavailable(reason: "Could not allocate normalised input buffer.")
-        }
-        // Fill with a smooth gradient. MLX's optimiser will not constant-
-        // fold across non-trivial inputs, so this exercises the full
-        // graph the same way real footage would.
-        let elementCount = rung * rung * 4
-        let pointer = buffer.contents().assumingMemoryBound(to: Float.self)
-        for index in 0..<elementCount {
-            pointer[index] = Float(index % 256) / 255.0
-        }
-
-        // Dummy raw-source texture — `MLXKeyingEngine.run` ignores the
-        // contents but takes the texture handle to satisfy the request
-        // type. Allocate at the smallest legal size.
-        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .rgba16Float,
-            width: rung,
-            height: rung,
-            mipmapped: false
-        )
-        descriptor.usage = [.shaderRead]
-        descriptor.storageMode = .shared
-        guard let rawSource = entry.device.makeTexture(descriptor: descriptor) else {
-            throw InferenceTestHarness.MetalUnavailable(reason: "Could not allocate raw source texture.")
-        }
-        return KeyingInferenceRequest(
-            normalisedInputBuffer: buffer,
-            rawSourceTexture: rawSource,
-            inferenceResolution: rung
-        )
-    }
-
-    /// Allocates the alpha + foreground destination textures the engine
-    /// writes into. Both are `.shared` so the production code can read
-    /// them back; that lifecycle matches `InferenceCoordinator.makeOutputTextures`.
-    private func makeOutput(rung: Int, entry: MetalDeviceCacheEntry) throws -> KeyingInferenceOutput {
-        guard let alpha = entry.makeIntermediateTexture(
-            width: rung,
-            height: rung,
-            pixelFormat: .r32Float,
-            storageMode: .shared
-        ) else {
-            throw InferenceTestHarness.MetalUnavailable(reason: "Could not allocate alpha texture.")
-        }
-        guard let foreground = entry.makeIntermediateTexture(
-            width: rung,
-            height: rung,
-            pixelFormat: .rgba32Float,
-            storageMode: .shared
-        ) else {
-            throw InferenceTestHarness.MetalUnavailable(reason: "Could not allocate foreground texture.")
-        }
-        return KeyingInferenceOutput(alphaTexture: alpha, foregroundTexture: foreground)
-    }
-}
-
-/// Minimal stand-in for XCTSkipError, mirroring the shape used by
-/// `CorridorKeyToolboxMetalStagesTests`. Tests catch `MetalUnavailable`
-/// and rethrow as this so the runner reports a skip instead of a failure
-/// when the host has no GPU.
-private struct XCTSkip: Error, CustomStringConvertible {
-    let underlying: any Error
-    init(_ error: any Error) { self.underlying = error }
-    var description: String { "Skipped: \(underlying)" }
 }

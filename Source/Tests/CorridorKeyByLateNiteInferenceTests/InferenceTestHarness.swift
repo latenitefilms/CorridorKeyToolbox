@@ -14,6 +14,11 @@ import Metal
 
 enum InferenceTestHarness {
 
+    enum InputPattern {
+        case linearRamp
+        case structuredKey
+    }
+
     /// Skippable failure for CI runners without a Metal device.
     struct MetalUnavailable: Error, CustomStringConvertible {
         let reason: String
@@ -32,18 +37,147 @@ enum InferenceTestHarness {
         return try MetalDeviceCacheEntry(device: device, library: library)
     }
 
+    static var allBridgeRungs: [Int] {
+        MLXBridgeArtifact.ladder
+    }
+
+    /// Locates an MLX bridge by resolution. The 512px bridge is copied
+    /// into the inference test bundle for fast CI runs; the larger
+    /// production bridges stay in the app resources directory so we do
+    /// not duplicate another ~1.5 GB into SwiftPM build products.
+    static func bridgeURL(forRung rung: Int) throws -> URL {
+        let filename = MLXBridgeArtifact.filename(forResolution: rung)
+        let filenameURL = URL(fileURLWithPath: filename)
+        let filenameStem = filenameURL.deletingPathExtension().lastPathComponent
+        let filenameExtension = filenameURL.pathExtension
+        if let bundled = Bundle.module.url(
+            forResource: filenameStem,
+            withExtension: filenameExtension
+        ) {
+            return bundled
+        }
+
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let productionURL = sourceRoot
+            .appending(path: "CorridorKeyByLateNite/Plugin/Resources/MLX Models")
+            .appending(path: filename)
+        if FileManager.default.fileExists(atPath: productionURL.path) {
+            return productionURL
+        }
+
+        throw MetalUnavailable(reason: "\(filename) missing from the test bundle and production resources.")
+    }
+
     /// Locates the bundled 512px MLX bridge inside the test target's
     /// resources bundle. `MLXBridgeResourceLocator` walks `Bundle.main` /
     /// `Bundle.allBundles`, neither of which reliably picks up SPM test
     /// resource bundles, so tests pass the URL explicitly.
     static func bridgeURL512() throws -> URL {
-        guard let url = Bundle.module.url(
-            forResource: "corridorkey_mlx_bridge_512",
-            withExtension: "mlxfn"
-        ) else {
-            throw MetalUnavailable(reason: "corridorkey_mlx_bridge_512.mlxfn missing from test bundle.")
+        try bridgeURL(forRung: 512)
+    }
+
+    static func readAlpha(output: KeyingInferenceOutput) -> [Float] {
+        let width = output.alphaTexture.width
+        let height = output.alphaTexture.height
+        var pixels = [Float](repeating: 0, count: width * height)
+        let bytesPerRow = width * MemoryLayout<Float>.size
+        pixels.withUnsafeMutableBufferPointer { pointer in
+            if let base = pointer.baseAddress {
+                output.alphaTexture.getBytes(
+                    base,
+                    bytesPerRow: bytesPerRow,
+                    from: MTLRegionMake2D(0, 0, width, height),
+                    mipmapLevel: 0
+                )
+            }
         }
-        return url
+        return pixels
+    }
+
+    /// Allocates a normalised-input MTLBuffer matching the shape MLX
+    /// expects (1 × rung × rung × 4 floats), filled with deterministic
+    /// input so each test exercises a real graph rather than all-zero
+    /// tensors that MLX could constant-fold.
+    static func makeRequest(
+        rung: Int,
+        entry: MetalDeviceCacheEntry,
+        pattern: InputPattern = .structuredKey
+    ) throws -> KeyingInferenceRequest {
+        guard let buffer = entry.normalizedInputBuffer(forRung: rung) else {
+            throw MetalUnavailable(reason: "Could not allocate normalised input buffer.")
+        }
+        let pointer = buffer.contents().assumingMemoryBound(to: Float.self)
+        switch pattern {
+        case .linearRamp:
+            let elementCount = rung * rung * 4
+            for index in 0..<elementCount {
+                pointer[index] = Float(index % 256) / 255.0
+            }
+        case .structuredKey:
+            for row in 0..<rung {
+                for column in 0..<rung {
+                    let dx = Float(column) - Float(rung) / 2
+                    let dy = Float(row) - Float(rung) / 2
+                    let radius = sqrt(dx * dx + dy * dy) / Float(rung) * 2
+                    let isSubject = radius < 0.4
+                    let baseIndex = (row * rung + column) * 4
+                    if isSubject {
+                        pointer[baseIndex + 0] = 0.85
+                        pointer[baseIndex + 1] = 0.30
+                        pointer[baseIndex + 2] = 0.50
+                        pointer[baseIndex + 3] = 0.0
+                    } else {
+                        pointer[baseIndex + 0] = 0.10
+                        pointer[baseIndex + 1] = 0.85
+                        pointer[baseIndex + 2] = 0.10
+                        pointer[baseIndex + 3] = 1.0
+                    }
+                }
+            }
+        }
+
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .rgba16Float,
+            width: rung,
+            height: rung,
+            mipmapped: false
+        )
+        descriptor.usage = [.shaderRead]
+        descriptor.storageMode = .shared
+        guard let rawSource = entry.device.makeTexture(descriptor: descriptor) else {
+            throw MetalUnavailable(reason: "Could not allocate raw source texture.")
+        }
+        return KeyingInferenceRequest(
+            normalisedInputBuffer: buffer,
+            rawSourceTexture: rawSource,
+            inferenceResolution: rung
+        )
+    }
+
+    /// Allocates the alpha + foreground destination textures the engine
+    /// writes into. Both are `.shared` so the production code can read
+    /// them back; that lifecycle matches `InferenceCoordinator`.
+    static func makeOutput(rung: Int, entry: MetalDeviceCacheEntry) throws -> KeyingInferenceOutput {
+        guard let alpha = entry.makeIntermediateTexture(
+            width: rung,
+            height: rung,
+            pixelFormat: .r32Float,
+            storageMode: .shared
+        ) else {
+            throw MetalUnavailable(reason: "Could not allocate alpha texture.")
+        }
+        guard let foreground = entry.makeIntermediateTexture(
+            width: rung,
+            height: rung,
+            pixelFormat: .rgba32Float,
+            storageMode: .shared
+        ) else {
+            throw MetalUnavailable(reason: "Could not allocate foreground texture.")
+        }
+        return KeyingInferenceOutput(alphaTexture: alpha, foregroundTexture: foreground)
     }
 
     /// Compiles the bundled shader source at run-time so the SPM build
@@ -87,6 +221,16 @@ enum InferenceTestHarness {
             throw MetalUnavailable(reason: "Corridor Key shader compile failed: \(error.localizedDescription)")
         }
     }
+}
+
+/// Minimal stand-in for XCTSkipError, mirroring the shape used by
+/// `CorridorKeyToolboxMetalStagesTests`. Tests catch `MetalUnavailable`
+/// and rethrow as this so the runner reports a skip instead of a failure
+/// when the host has no GPU.
+struct XCTSkip: Error, CustomStringConvertible {
+    let underlying: any Error
+    init(_ error: any Error) { self.underlying = error }
+    var description: String { "Skipped: \(underlying)" }
 }
 
 /// Tiny shim that exposes `Bundle.module` from `CorridorKeyToolboxMetalStages`

@@ -175,9 +175,3 @@ struct MatteOrientationTests {
         return KeyingInferenceOutput(alphaTexture: alpha, foregroundTexture: foreground)
     }
 }
-
-private struct XCTSkip: Error, CustomStringConvertible {
-    let underlying: any Error
-    init(_ error: any Error) { self.underlying = error }
-    var description: String { "Skipped: \(underlying)" }
-}
