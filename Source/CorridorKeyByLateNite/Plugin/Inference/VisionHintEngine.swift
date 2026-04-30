@@ -155,7 +155,29 @@ final class VisionHintEngine: @unchecked Sendable {
     /// device cache and is committed before this function returns —
     /// the returned texture is fully valid the moment it lands.
     func generateMask(source: any MTLTexture) throws -> VisionMask? {
-        guard let baseImage = CIImage(mtlTexture: source, options: nil) else {
+        // Tag the CIImage with a known colour space — without this
+        // option Core Image picks a host-specific default and Vision
+        // interprets the same `Float16` bytes differently depending
+        // on which surface delivered the texture. The FxPlug receives
+        // pixels Rec.709-video-gamma encoded (the project the host
+        // serves us via `kFxImageColorInfo_RGB_GAMMA_VIDEO`), the
+        // Standalone Editor's AVFoundation reader produces sRGB-
+        // encoded pixels — naming the colour space here means Core
+        // Image converts to its working space using the same EOTF
+        // either way, so Vision sees the *same* image and returns
+        // the same foreground mask. Empirically the untagged path
+        // landed Vision on 12.92% mask coverage in the FxPlug vs
+        // 17.24% in the editor on the NikoDruid first frame —
+        // exactly the legs/lower-body region the user reported
+        // FCP losing.
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else {
+            PluginLog.error("Vision hint: failed to allocate sRGB colour space.")
+            return nil
+        }
+        guard let baseImage = CIImage(
+            mtlTexture: source,
+            options: [.colorSpace: colorSpace]
+        ) else {
             PluginLog.notice("Vision hint: CIImage(mtlTexture:) returned nil for source format \(source.pixelFormat.rawValue).")
             return nil
         }
