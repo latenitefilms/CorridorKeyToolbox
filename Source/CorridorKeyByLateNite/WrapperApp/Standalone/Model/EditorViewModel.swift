@@ -300,6 +300,13 @@ final class EditorViewModel {
     private var warmupPollingTask: Task<Void, Never>?
     @ObservationIgnored
     private var activeWarmupResolution: Int?
+    /// Screen colour the in-flight warm-up was started against. Tracked
+    /// so flipping the Screen Colour picker mid-session cancels the
+    /// warm-up for the colour we're leaving and kicks one off for the
+    /// colour we're entering, instead of silently leaving the badge on
+    /// the wrong bridge.
+    @ObservationIgnored
+    private var activeWarmupScreenColor: ScreenColor?
     /// `UndoManager` the SwiftUI environment hands us at view-mount
     /// time. Hint-point mutations register undo / redo against this
     /// manager so Cmd-Z / Cmd-Shift-Z step through the user's edit
@@ -749,8 +756,19 @@ final class EditorViewModel {
 
     /// Re-renders the current preview frame. Called whenever the user
     /// edits a parameter so the change is reflected immediately.
+    /// Also re-kicks the MLX warm-up when the user flips the Screen
+    /// Colour picker — Green and Blue ship as separate `.mlxfn`
+    /// bridges, so a colour change has to swap which engine the
+    /// inspector badge tracks and which bridge the next preview render
+    /// will land on. Other parameter edits hit the no-op fast path
+    /// inside `beginWarmupForCurrentQuality` because the cached
+    /// `(resolution, colour)` already matches.
     func parameterDidChange() {
         renderPreview(at: playheadTime)
+        if activeWarmupResolution == nil
+            || activeWarmupScreenColor != state.screenColor {
+            beginWarmupForCurrentQuality()
+        }
     }
 
     // MARK: - On-screen control (OSC)
@@ -1025,13 +1043,24 @@ final class EditorViewModel {
         let longEdge = max(Int(renderSize.width.rounded()), Int(renderSize.height.rounded()))
         guard longEdge > 0 else { return }
         let resolution = state.qualityMode.resolvedInferenceResolution(forLongEdge: longEdge)
-        if let activeWarmupResolution, activeWarmupResolution != resolution {
-            renderEngine.cancelWarmup(forResolution: activeWarmupResolution)
+        let screenColor = state.screenColor
+        // Cancel any prior warm-up against a different `(rung, colour)`
+        // tuple — flipping either knob between Analyse passes used to
+        // leave the previous bridge mid-compile, which the registry
+        // would still warm to completion and pin in unified memory.
+        if let activeWarmupResolution,
+           let activeWarmupScreenColor,
+           (activeWarmupResolution != resolution || activeWarmupScreenColor != screenColor) {
+            renderEngine.cancelWarmup(
+                forResolution: activeWarmupResolution,
+                screenColor: activeWarmupScreenColor
+            )
         }
         activeWarmupResolution = resolution
+        activeWarmupScreenColor = screenColor
         do {
-            try renderEngine.beginWarmup(forResolution: resolution)
-            warmupStatus = renderEngine.warmupStatus(forResolution: resolution)
+            try renderEngine.beginWarmup(forResolution: resolution, screenColor: screenColor)
+            warmupStatus = renderEngine.warmupStatus(forResolution: resolution, screenColor: screenColor)
         } catch {
             // Warm-up is best-effort. If it fails the analyse pass
             // surfaces the same error the moment it tries to use MLX.
@@ -1042,20 +1071,23 @@ final class EditorViewModel {
         // on its own. Without this the user only saw the status
         // refresh when they next clicked Analyse Clip — the value
         // was set once and then went stale.
-        startWarmupStatusPolling(forResolution: resolution)
+        startWarmupStatusPolling(forResolution: resolution, screenColor: screenColor)
     }
 
     /// Polls the shared MLX bridge registry every 400 ms and republishes
     /// the result on `warmupStatus` so the inspector badge tracks the
     /// engine's lifecycle in real time. Stops when the engine is ready,
     /// failed, or the user closed the clip.
-    private func startWarmupStatusPolling(forResolution resolution: Int) {
+    private func startWarmupStatusPolling(forResolution resolution: Int, screenColor: ScreenColor) {
         warmupPollingTask?.cancel()
         warmupPollingTask = Task { @MainActor [weak self] in
             // First tick is immediate so the badge updates within the
             // same frame that kicked off the warm-up.
             while let self, !Task.isCancelled {
-                let latest = self.renderEngine.warmupStatus(forResolution: resolution)
+                let latest = self.renderEngine.warmupStatus(
+                    forResolution: resolution,
+                    screenColor: screenColor
+                )
                 if latest != self.warmupStatus {
                     self.warmupStatus = latest
                 }
@@ -1143,11 +1175,15 @@ final class EditorViewModel {
         var tasks: [Task<Void, Never>] = []
         warmupPollingTask?.cancel()
         warmupPollingTask = nil
-        if let activeWarmupResolution {
-            if let warmupTask = renderEngine.cancelWarmup(forResolution: activeWarmupResolution) {
+        if let activeWarmupResolution, let activeWarmupScreenColor {
+            if let warmupTask = renderEngine.cancelWarmup(
+                forResolution: activeWarmupResolution,
+                screenColor: activeWarmupScreenColor
+            ) {
                 tasks.append(warmupTask)
             }
             self.activeWarmupResolution = nil
+            self.activeWarmupScreenColor = nil
         }
         if case .warming = warmupStatus {
             warmupStatus = .cold

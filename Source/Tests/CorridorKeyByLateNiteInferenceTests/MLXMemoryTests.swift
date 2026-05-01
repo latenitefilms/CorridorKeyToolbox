@@ -37,7 +37,7 @@ struct MLXMemoryTests {
 
         let bridgeURL = try InferenceTestHarness.bridgeURL512()
         let engine = MLXKeyingEngine(cacheEntry: entry)
-        try await engine.prepare(bridgeURL: bridgeURL, rung: 512)
+        try await engine.prepare(bridgeURL: bridgeURL, rung: 512, screenColor: .green)
 
         let request = try InferenceTestHarness.makeRequest(rung: 512, entry: entry, pattern: .linearRamp)
         let output = try InferenceTestHarness.makeOutput(rung: 512, entry: entry)
@@ -67,7 +67,7 @@ struct MLXMemoryTests {
 
         let bridgeURL = try InferenceTestHarness.bridgeURL512()
         let engine = MLXKeyingEngine(cacheEntry: entry)
-        try await engine.prepare(bridgeURL: bridgeURL, rung: 512)
+        try await engine.prepare(bridgeURL: bridgeURL, rung: 512, screenColor: .green)
 
         let request = try InferenceTestHarness.makeRequest(rung: 512, entry: entry, pattern: .linearRamp)
         let output = try InferenceTestHarness.makeOutput(rung: 512, entry: entry)
@@ -129,7 +129,7 @@ struct MLXMemoryTests {
 
         let bridgeURL = try InferenceTestHarness.bridgeURL512()
         let engine = MLXKeyingEngine(cacheEntry: entry)
-        try await engine.prepare(bridgeURL: bridgeURL, rung: 512)
+        try await engine.prepare(bridgeURL: bridgeURL, rung: 512, screenColor: .green)
 
         let request = try InferenceTestHarness.makeRequest(rung: 512, entry: entry, pattern: .linearRamp)
         let output = try InferenceTestHarness.makeOutput(rung: 512, entry: entry)
@@ -184,7 +184,7 @@ struct MLXMemoryTests {
 
         let bridgeURL = try InferenceTestHarness.bridgeURL512()
         let engine = MLXKeyingEngine(cacheEntry: entry)
-        try await engine.prepare(bridgeURL: bridgeURL, rung: 512)
+        try await engine.prepare(bridgeURL: bridgeURL, rung: 512, screenColor: .green)
 
         let request = try InferenceTestHarness.makeRequest(rung: 512, entry: entry, pattern: .linearRamp)
         let output = try InferenceTestHarness.makeOutput(rung: 512, entry: entry)

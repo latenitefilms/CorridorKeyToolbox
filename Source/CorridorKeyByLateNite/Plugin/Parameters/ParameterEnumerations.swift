@@ -9,9 +9,15 @@
 //
 
 import Foundation
+import simd
 
-/// Colour of the screen being keyed out. Blue is rotated into the green domain
-/// before inference and despill, then rotated back for output.
+/// Colour of the screen being keyed out. Each colour now ships with a
+/// dedicated MLX bridge trained on that colour's footage — the green
+/// model on Corridor's original green-screen dataset, the blue model on
+/// the v1.0 blue-screen finetune. Older builds rotated blue into the
+/// green domain so the green-only model could process it; that hop is
+/// no longer needed because the blue model is native, and feeding it
+/// rotated input would push the data outside its training distribution.
 public enum ScreenColor: Int, Sendable, CaseIterable, Codable {
     case green = 0
     case blue = 1
@@ -20,6 +26,28 @@ public enum ScreenColor: Int, Sendable, CaseIterable, Codable {
         switch self {
         case .green: return "Green"
         case .blue: return "Blue"
+        }
+    }
+
+    /// Filename stem for the bundled `.mlxfn` bridge for this colour.
+    /// Resolutions are appended in `MLXBridgeArtifact.filename(...)`.
+    /// Matches the upstream Hugging Face / `prepare_mlx_model_pack.py`
+    /// naming convention so the same bridges can be consumed unmodified.
+    public var bridgeFilenamePrefix: String {
+        switch self {
+        case .green: return "corridorkey_mlx_bridge"
+        case .blue: return "corridorkeyblue_mlx_bridge"
+        }
+    }
+
+    /// Canonical reference for the screen colour in linear RGB. Used by
+    /// the despill / edge-decontaminate kernels to know which channel
+    /// carries the spill. Values match the CorridorKey-Runtime defaults
+    /// in `ofx_screen_color.hpp` so behaviour matches across hosts.
+    public var canonicalScreenReference: SIMD3<Float> {
+        switch self {
+        case .green: return SIMD3<Float>(0.08, 0.84, 0.08)
+        case .blue:  return SIMD3<Float>(0.08, 0.16, 0.84)
         }
     }
 }

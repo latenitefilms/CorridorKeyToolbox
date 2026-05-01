@@ -40,16 +40,23 @@ PluginLog.notice("CorridorKey by LateNite Renderer launching.")
 // `SharedMLXBridgeRegistry.beginWarmup` is idempotent — the per-instance
 // `kickOffDefaultWarmup` call in `CorridorKeyToolboxPlugIn.init` will
 // hit the warm engine instead of starting a second pass.
+//
+// We warm only the default screen colour (green) at startup. If the
+// user picks Blue, the registry warms the blue bridge on first use —
+// preloading both would double the eager-warm-up footprint (~600 MB
+// at 1024px) for a setting most projects never touch.
 if let device = MTLCreateSystemDefaultDevice(),
    let entry = try? MetalDeviceCache.shared.entry(for: device) {
     let defaultRung = QualityMode.automatic.resolvedInferenceResolution(
         forLongEdge: 1920,
         deviceRegistryID: device.registryID
     )
-    PluginLog.notice("Pre-warming MLX bridge at \(defaultRung)px on \(device.name) before FCP attaches.")
+    let defaultScreenColor: ScreenColor = .green
+    PluginLog.notice("Pre-warming \(defaultScreenColor.displayName) MLX bridge at \(defaultRung)px on \(device.name) before FCP attaches.")
     SharedMLXBridgeRegistry.shared.beginWarmup(
         deviceRegistryID: device.registryID,
         rung: defaultRung,
+        screenColor: defaultScreenColor,
         cacheEntry: entry
     )
 }

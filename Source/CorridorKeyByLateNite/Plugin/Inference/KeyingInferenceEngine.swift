@@ -10,6 +10,9 @@
 import Foundation
 import Metal
 import CoreMedia
+#if CORRIDOR_KEY_SPM_MIRROR
+import CorridorKeyToolboxLogic
+#endif
 
 /// Input bundle handed to an inference engine. The normalised tensor is
 /// provided as a raw `MTLBuffer` rather than a texture so MLX can read it
@@ -62,10 +65,14 @@ enum KeyingInferenceError: Error, CustomStringConvertible {
 /// Minimal surface the orchestrator exercises. Concrete engines own their
 /// session lifetime (model load, warm-up) but must be thread-safe because
 /// Final Cut Pro may render multiple frames simultaneously.
+///
+/// `screenColor` is part of `supports` / `prepare` because each colour
+/// ships its own MLX bridge file — Green and Blue are not interchangeable
+/// at the engine level, even when the rung matches.
 protocol KeyingInferenceEngine: AnyObject, Sendable {
     var backendDisplayName: String { get }
     var guideSourceDescription: String { get set }
-    func supports(resolution: Int) -> Bool
-    func prepare(resolution: Int) async throws
+    func supports(resolution: Int, screenColor: ScreenColor) -> Bool
+    func prepare(resolution: Int, screenColor: ScreenColor) async throws
     func run(request: KeyingInferenceRequest, output: KeyingInferenceOutput) throws
 }

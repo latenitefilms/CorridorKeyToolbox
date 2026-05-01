@@ -22,8 +22,10 @@ import CorridorKeyToolboxLogic
 #endif
 
 /// Names of the bundled `.mlxfn` artefacts. Matches CorridorKey-Runtime's
-/// `corridorkey_mlx_bridge_{N}.mlxfn` convention so the same Hugging Face
-/// release can be used unmodified.
+/// `{corridorkey,corridorkeyblue}_mlx_bridge_{N}.mlxfn` convention so the
+/// same Hugging Face / `prepare_mlx_model_pack.py` outputs can be consumed
+/// unmodified — the only difference between the two colour packs is the
+/// trained weights, the architecture is identical.
 ///
 /// **Tiled inference** (deferred — needs upstream model export):
 /// The reference `corridorkey-mlx` Python implementation supports
@@ -44,14 +46,14 @@ import CorridorKeyToolboxLogic
 /// `MLXKeyingEngine`; nothing in the renderer assumes single-tile
 /// inference.
 enum MLXBridgeArtifact {
-    static let filenameStem = "corridorkey_mlx_bridge"
 
     /// Supported bridge resolutions, in preference order from lowest to
-    /// highest. `closestSupportedResolution` walks this list.
+    /// highest. `closestSupportedResolution` walks this list. Both colour
+    /// packs ship the same five rungs so the ladder is colour-agnostic.
     static let ladder: [Int] = [512, 768, 1024, 1536, 2048]
 
-    static func filename(forResolution resolution: Int) -> String {
-        "\(filenameStem)_\(resolution).mlxfn"
+    static func filename(forResolution resolution: Int, screenColor: ScreenColor) -> String {
+        "\(screenColor.bridgeFilenamePrefix)_\(resolution).mlxfn"
     }
 
     /// Returns the ladder rung that is at least as large as `requested`,
@@ -160,8 +162,9 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
     var guideSourceDescription: String
 
     private let cacheEntry: MetalDeviceCacheEntry
-    /// Guards `importedFunction` / `loadedResolution` reads and writes. Held
-    /// briefly so warm-up and per-frame renders never deadlock each other.
+    /// Guards `importedFunction` / `loadedResolution` / `loadedScreenColor`
+    /// reads and writes. Held briefly so warm-up and per-frame renders never
+    /// deadlock each other.
     private let stateLock = NSLock()
     /// Serialises the entire `run(...)` path. FxPlug calls us from multiple
     /// render threads concurrently and `ImportedFunction` is not documented as
@@ -169,6 +172,11 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
     private let runLock = NSLock()
     private var importedFunction: ImportedFunction?
     private var loadedResolution: Int = 0
+    /// Screen colour the currently-loaded bridge was exported for. Tracked
+    /// alongside `loadedResolution` so `alreadyLoaded` rejects a request
+    /// that asks for the same rung at a different colour and forces a
+    /// fresh `ImportedFunction` for the new bridge file.
+    private var loadedScreenColor: ScreenColor = .green
 
     /// Reusable scratch buffer for the `.cpuStaging` strategy. Sized at
     /// warm-up so per-frame inference doesn't pay the 67 MB allocation
@@ -201,32 +209,37 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         }
     }
 
-    func supports(resolution: Int) -> Bool {
+    func supports(resolution: Int, screenColor: ScreenColor) -> Bool {
         guard let rung = MLXBridgeArtifact.closestSupportedResolution(forRequested: resolution) else {
             return false
         }
-        return MLXBridgeResourceLocator.url(for: MLXBridgeArtifact.filename(forResolution: rung)) != nil
+        let filename = MLXBridgeArtifact.filename(forResolution: rung, screenColor: screenColor)
+        return MLXBridgeResourceLocator.url(for: filename) != nil
     }
 
-    func prepare(resolution: Int) async throws {
-        guard let rung = MLXBridgeArtifact.closestSupportedResolution(forRequested: resolution),
-              let bridgeURL = MLXBridgeResourceLocator.url(for: MLXBridgeArtifact.filename(forResolution: rung))
-        else {
+    func prepare(resolution: Int, screenColor: ScreenColor) async throws {
+        guard let rung = MLXBridgeArtifact.closestSupportedResolution(forRequested: resolution) else {
             throw KeyingInferenceError.modelUnavailable(
                 "No MLX bridge file bundled for \(resolution)px."
             )
         }
-        try await prepare(bridgeURL: bridgeURL, rung: rung)
+        let filename = MLXBridgeArtifact.filename(forResolution: rung, screenColor: screenColor)
+        guard let bridgeURL = MLXBridgeResourceLocator.url(for: filename) else {
+            throw KeyingInferenceError.modelUnavailable(
+                "No \(screenColor.displayName) MLX bridge bundled for \(resolution)px."
+            )
+        }
+        try await prepare(bridgeURL: bridgeURL, rung: rung, screenColor: screenColor)
     }
 
     /// Test entry point that loads the bridge from an explicit URL. Useful
     /// from SPM unit tests where the `.mlxfn` lives in the test target's
     /// resources bundle (which is not enumerated by `Bundle.allBundles`).
-    /// Production callers should use `prepare(resolution:)`.
-    func prepare(bridgeURL: URL, rung: Int) async throws {
-        if alreadyLoaded(rung: rung) { return }
+    /// Production callers should use `prepare(resolution:screenColor:)`.
+    func prepare(bridgeURL: URL, rung: Int, screenColor: ScreenColor) async throws {
+        if alreadyLoaded(rung: rung, screenColor: screenColor) { return }
 
-        PluginLog.notice("Loading MLX bridge from \(bridgeURL.path).")
+        PluginLog.notice("Loading MLX bridge from \(bridgeURL.path) (\(screenColor.displayName) screen).")
         let function: ImportedFunction
         do {
             function = try ImportedFunction(url: bridgeURL)
@@ -241,7 +254,7 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         // the engine as loaded means the first real render frame never pays a
         // multi-second stall while MLX compiles on demand.
         await warmJIT(function: function, rung: rung)
-        storeFunction(function, rung: rung)
+        storeFunction(function, rung: rung, screenColor: screenColor)
     }
 
     /// Runs a throwaway inference on a zero tensor so MLX compiles the graph
@@ -439,10 +452,12 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
 
     // MARK: - Lock-guarded state helpers
 
-    private func alreadyLoaded(rung: Int) -> Bool {
+    private func alreadyLoaded(rung: Int, screenColor: ScreenColor) -> Bool {
         stateLock.lock()
         defer { stateLock.unlock() }
-        return importedFunction != nil && loadedResolution == rung
+        return importedFunction != nil
+            && loadedResolution == rung
+            && loadedScreenColor == screenColor
     }
 
     private func loadedState() -> (ImportedFunction?, Int) {
@@ -451,12 +466,15 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         return (importedFunction, loadedResolution)
     }
 
-    private func storeFunction(_ function: ImportedFunction, rung: Int) {
+    private func storeFunction(_ function: ImportedFunction, rung: Int, screenColor: ScreenColor) {
         stateLock.lock()
         defer { stateLock.unlock() }
-        if importedFunction != nil, loadedResolution == rung { return }
+        if importedFunction != nil, loadedResolution == rung, loadedScreenColor == screenColor {
+            return
+        }
         importedFunction = function
         loadedResolution = rung
+        loadedScreenColor = screenColor
     }
 
     /// Validates that the loaded bridge's outputs have the expected NHWC layout.

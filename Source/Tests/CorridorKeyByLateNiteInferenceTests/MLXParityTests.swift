@@ -80,7 +80,7 @@ struct MLXParityTests {
 
         let bridgeURL = try InferenceTestHarness.bridgeURL512()
         let engine = MLXKeyingEngine(cacheEntry: entry)
-        try await engine.prepare(bridgeURL: bridgeURL, rung: 512)
+        try await engine.prepare(bridgeURL: bridgeURL, rung: 512, screenColor: .green)
 
         let request = try InferenceTestHarness.makeRequest(rung: 512, entry: entry)
         let output = try InferenceTestHarness.makeOutput(rung: 512, entry: entry)
@@ -168,7 +168,7 @@ struct MLXParityTests {
         // on the engine for exactly this purpose; production paths
         // continue to use the default.
         engine.testOverrideInputStrategy(strategy)
-        try await engine.prepare(bridgeURL: bridgeURL, rung: 512)
+        try await engine.prepare(bridgeURL: bridgeURL, rung: 512, screenColor: .green)
 
         let request = try InferenceTestHarness.makeRequest(rung: 512, entry: entry)
         let output = try InferenceTestHarness.makeOutput(rung: 512, entry: entry)

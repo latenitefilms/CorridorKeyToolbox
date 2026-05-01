@@ -289,6 +289,7 @@ final class RenderPipeline: @unchecked Sendable {
                 rawSourceTexture: pre.rawSourceAtInferenceResolution.texture,
                 inferenceResolution: inferenceResolution
             ),
+            screenColor: state.screenColor,
             cacheEntry: entry,
             cacheKey: cacheKey
         )
@@ -975,7 +976,14 @@ final class RenderPipeline: @unchecked Sendable {
         )
         let upscaledForeground = upscaledForegroundPooled?.texture ?? foregroundAtInferenceResolution
 
-        // 2. Despill.
+        // 2. Despill. The kernel removes excess green from the
+        // foreground; on blue-screen footage the foreground sits in
+        // the blue domain (no rotation hop) and the green channel is
+        // already low, so this stage is a near-no-op for Blue. The
+        // blue MLX model's `fg_final` head does the heavy spill
+        // suppression itself — the additional kernel is only there
+        // for users who want to push despill harder. Extending the
+        // shader to a screen-colour-aware projection is a follow-up.
         let despilledPooled = try RenderStages.despill(
             foreground: upscaledForeground,
             strength: Float(inputs.state.despillStrength),
@@ -1041,15 +1049,14 @@ final class RenderPipeline: @unchecked Sendable {
         // dispatch. Saves three compute encoders and ~3 MB of
         // intermediate-texture bandwidth per 4K frame vs. the unfused
         // chain.
-        // Edge decontaminate operates on the foreground BEFORE the
-        // inverse rotation back to the original screen colour. So
-        // its `screenColor` reference must always be the canonical
-        // green (0.08, 0.84, 0.08) — that's the screen colour in
-        // the rotated/green domain that despill and edge decontam
-        // both work in. Using `screenTransform.estimatedScreenReference`
-        // here would pass `canonicalBlue` for blue screens, which
-        // produced incorrect edge decontamination on blue-screen
-        // footage (the residual projection used the wrong axis).
+        // Edge decontaminate now reads the actual screen colour for
+        // the user-selected mode (canonical green for Green, canonical
+        // blue for Blue) — both the green and blue MLX bridges return
+        // foreground in their native screen domain, so the decontam
+        // axis tracks the chosen colour rather than always being green.
+        // The inverse-rotation slot stays wired but is now identity for
+        // every supported screen colour because each colour ships its
+        // own bridge.
         let fusedForegroundConfig = RenderStages.FusedForegroundConfig(
             sourcePassthrough: inputs.state.sourcePassthroughEnabled,
             lightWrapEnabled: lightWrapActive,
@@ -1058,7 +1065,7 @@ final class RenderPipeline: @unchecked Sendable {
             edgeDecontaminateEnabled: inputs.state.edgeDecontaminateEnabled
                 && inputs.state.edgeDecontaminateStrength > 0,
             edgeDecontaminateStrength: Float(inputs.state.edgeDecontaminateStrength),
-            screenColor: SIMD3<Float>(0.08, 0.84, 0.08),
+            screenColor: inputs.state.screenColor.canonicalScreenReference,
             inverseScreenMatrix: screenTransform.inverseMatrix,
             applyInverseRotation: !screenTransform.isIdentity
         )

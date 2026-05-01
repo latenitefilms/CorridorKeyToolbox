@@ -10,6 +10,7 @@
 
 import Foundation
 import Metal
+@testable import CorridorKeyToolboxLogic
 @testable import CorridorKeyToolboxMetalStages
 
 enum InferenceTestHarness {
@@ -41,12 +42,13 @@ enum InferenceTestHarness {
         MLXBridgeArtifact.ladder
     }
 
-    /// Locates an MLX bridge by resolution. The 512px bridge is copied
-    /// into the inference test bundle for fast CI runs; the larger
-    /// production bridges stay in the app resources directory so we do
-    /// not duplicate another ~1.5 GB into SwiftPM build products.
-    static func bridgeURL(forRung rung: Int) throws -> URL {
-        let filename = MLXBridgeArtifact.filename(forResolution: rung)
+    /// Locates an MLX bridge by resolution and screen colour. The green
+    /// 512px bridge is copied into the inference test bundle for fast
+    /// CI runs; every other bridge (other rungs, blue at any rung) is
+    /// pulled from the app resources directory so we do not duplicate
+    /// another ~3 GB into SwiftPM build products.
+    static func bridgeURL(forRung rung: Int, screenColor: ScreenColor = .green) throws -> URL {
+        let filename = MLXBridgeArtifact.filename(forResolution: rung, screenColor: screenColor)
         let filenameURL = URL(fileURLWithPath: filename)
         let filenameStem = filenameURL.deletingPathExtension().lastPathComponent
         let filenameExtension = filenameURL.pathExtension
@@ -71,12 +73,13 @@ enum InferenceTestHarness {
         throw MetalUnavailable(reason: "\(filename) missing from the test bundle and production resources.")
     }
 
-    /// Locates the bundled 512px MLX bridge inside the test target's
-    /// resources bundle. `MLXBridgeResourceLocator` walks `Bundle.main` /
-    /// `Bundle.allBundles`, neither of which reliably picks up SPM test
-    /// resource bundles, so tests pass the URL explicitly.
+    /// Locates the bundled green 512px MLX bridge inside the test
+    /// target's resources bundle. `MLXBridgeResourceLocator` walks
+    /// `Bundle.main` / `Bundle.allBundles`, neither of which reliably
+    /// picks up SPM test resource bundles, so tests pass the URL
+    /// explicitly.
     static func bridgeURL512() throws -> URL {
-        try bridgeURL(forRung: 512)
+        try bridgeURL(forRung: 512, screenColor: .green)
     }
 
     static func readAlpha(output: KeyingInferenceOutput) -> [Float] {

@@ -9,6 +9,7 @@
 import Foundation
 import Metal
 import Testing
+@testable import CorridorKeyToolboxLogic
 @testable import CorridorKeyToolboxMetalStages
 
 @Suite("SharedMLXBridgeRegistry wake-up")
@@ -24,10 +25,10 @@ struct SharedMLXBridgeRegistryWaitTests {
         let registry = SharedMLXBridgeRegistry.shared
         let deviceID = entry.device.registryID
 
-        registry.beginWarmup(deviceRegistryID: deviceID, rung: 2, cacheEntry: entry)
-        registry.cancelWarmup(deviceRegistryID: deviceID, rung: 2)
+        registry.beginWarmup(deviceRegistryID: deviceID, rung: 2, screenColor: .green, cacheEntry: entry)
+        registry.cancelWarmup(deviceRegistryID: deviceID, rung: 2, screenColor: .green)
 
-        let unrelatedStatus = registry.status(deviceRegistryID: deviceID, rung: 3)
+        let unrelatedStatus = registry.status(deviceRegistryID: deviceID, rung: 3, screenColor: .green)
         switch unrelatedStatus {
         case .cold:
             break
@@ -63,6 +64,7 @@ struct SharedMLXBridgeRegistryWaitTests {
             _ = try registry.waitForReady(
                 deviceRegistryID: untouchedDeviceID,
                 rung: unbundledRung,
+                screenColor: .green,
                 cacheEntry: entry,
                 timeout: 5
             )
@@ -106,6 +108,7 @@ struct SharedMLXBridgeRegistryWaitTests {
                     _ = try registry.waitForReady(
                         deviceRegistryID: deviceID,
                         rung: unbundledRung,
+                        screenColor: .green,
                         cacheEntry: entry,
                         timeout: 5
                     )

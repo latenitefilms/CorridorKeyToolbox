@@ -38,9 +38,14 @@ final class SharedMLXBridgeRegistry: @unchecked Sendable {
     /// outside — callers just ask for an engine by key.
     static let shared = SharedMLXBridgeRegistry()
 
+    /// `(device, rung, screenColor)` cache key. Screen colour is part
+    /// of the key because Green and Blue ship as separate `.mlxfn`
+    /// bridges; warming both at the same rung is allowed and counts as
+    /// two resident engines against the per-device LRU budget.
     private struct Key: Hashable, Sendable {
         let deviceRegistryID: UInt64
         let rung: Int
+        let screenColor: ScreenColor
     }
 
     /// Per-key list of waiters that should be woken when warm-up
@@ -76,8 +81,8 @@ final class SharedMLXBridgeRegistry: @unchecked Sendable {
     /// Returns the engine immediately if it's already warm. Non-blocking,
     /// used on the render hot path. Bumps the LRU recency tag so a
     /// rung that's actively rendering is never the one evicted.
-    func readyEngine(deviceRegistryID: UInt64, rung: Int) -> MLXKeyingEngine? {
-        let key = Key(deviceRegistryID: deviceRegistryID, rung: rung)
+    func readyEngine(deviceRegistryID: UInt64, rung: Int, screenColor: ScreenColor) -> MLXKeyingEngine? {
+        let key = Key(deviceRegistryID: deviceRegistryID, rung: rung, screenColor: screenColor)
         lock.lock()
         defer { lock.unlock() }
         guard let engine = engines[key] else { return nil }
@@ -105,11 +110,17 @@ final class SharedMLXBridgeRegistry: @unchecked Sendable {
     func waitForReady(
         deviceRegistryID: UInt64,
         rung: Int,
+        screenColor: ScreenColor,
         cacheEntry: MetalDeviceCacheEntry,
         timeout: TimeInterval = 120
     ) throws -> MLXKeyingEngine {
-        let key = Key(deviceRegistryID: deviceRegistryID, rung: rung)
-        beginWarmup(deviceRegistryID: deviceRegistryID, rung: rung, cacheEntry: cacheEntry)
+        let key = Key(deviceRegistryID: deviceRegistryID, rung: rung, screenColor: screenColor)
+        beginWarmup(
+            deviceRegistryID: deviceRegistryID,
+            rung: rung,
+            screenColor: screenColor,
+            cacheEntry: cacheEntry
+        )
         let deadline = DispatchTime.now() + timeout
 
         while true {
@@ -139,7 +150,7 @@ final class SharedMLXBridgeRegistry: @unchecked Sendable {
                 // doesn't accidentally unblock a future caller.
                 detachWaiter(semaphore, forKey: key)
                 throw KeyingInferenceError.modelUnavailable(
-                    "MLX bridge for \(rung)px did not become ready within \(Int(timeout))s."
+                    "\(screenColor.displayName) MLX bridge for \(rung)px did not become ready within \(Int(timeout))s."
                 )
             }
             // Loop back to read state under the lock — covers the rare
@@ -169,9 +180,10 @@ final class SharedMLXBridgeRegistry: @unchecked Sendable {
     func beginWarmup(
         deviceRegistryID: UInt64,
         rung: Int,
+        screenColor: ScreenColor,
         cacheEntry: MetalDeviceCacheEntry
     ) {
-        let key = Key(deviceRegistryID: deviceRegistryID, rung: rung)
+        let key = Key(deviceRegistryID: deviceRegistryID, rung: rung, screenColor: screenColor)
         lock.lock()
         if engines[key] != nil || warmupTasks[key] != nil {
             lock.unlock()
@@ -188,21 +200,22 @@ final class SharedMLXBridgeRegistry: @unchecked Sendable {
         // macOS surfaces that pattern as a priority-inversion
         // warning the moment a `DispatchSemaphore.wait` parks the
         // analyse thread. Eager warm-up (no caller waiting) is
-        // also a one-shot per `(device, rung)`, so bumping the
-        // priority doesn't inflate steady-state CPU usage either.
+        // also a one-shot per `(device, rung, colour)`, so bumping
+        // the priority doesn't inflate steady-state CPU usage either.
         let task = Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
-            await self.runWarmup(key: key, cacheEntry: cacheEntry, rung: rung)
+            await self.runWarmup(key: key, cacheEntry: cacheEntry, rung: rung, screenColor: screenColor)
         }
         lock.lock()
         warmupTasks[key] = task
         lock.unlock()
     }
 
-    /// Current warm-up status for the given `(device, rung)`. Used by
-    /// the inspector bridge to drive the "Loading neural model…" badge.
-    func status(deviceRegistryID: UInt64, rung: Int) -> WarmupStatus {
-        let key = Key(deviceRegistryID: deviceRegistryID, rung: rung)
+    /// Current warm-up status for the given `(device, rung, screenColor)`.
+    /// Used by the inspector bridge to drive the "Loading neural model…"
+    /// badge.
+    func status(deviceRegistryID: UInt64, rung: Int, screenColor: ScreenColor) -> WarmupStatus {
+        let key = Key(deviceRegistryID: deviceRegistryID, rung: rung, screenColor: screenColor)
         lock.lock()
         defer { lock.unlock() }
         if let message = warmupFailures[key] {
@@ -217,14 +230,14 @@ final class SharedMLXBridgeRegistry: @unchecked Sendable {
         return .cold
     }
 
-    /// Cancels the in-flight warm-up for `(device, rung)` if any.
-    /// Other plug-in instances that were also waiting on the same warm-
-    /// up lose their in-flight state too, but they'll simply retry on
+    /// Cancels the in-flight warm-up for `(device, rung, screenColor)` if
+    /// any. Other plug-in instances that were also waiting on the same
+    /// warm-up lose their in-flight state too, but they'll simply retry on
     /// their next render request. This is the trade-off of sharing —
     /// individual cancellations don't get fine-grained behaviour.
     @discardableResult
-    func cancelWarmup(deviceRegistryID: UInt64, rung: Int) -> Task<Void, Never>? {
-        let key = Key(deviceRegistryID: deviceRegistryID, rung: rung)
+    func cancelWarmup(deviceRegistryID: UInt64, rung: Int, screenColor: ScreenColor) -> Task<Void, Never>? {
+        let key = Key(deviceRegistryID: deviceRegistryID, rung: rung, screenColor: screenColor)
         lock.lock()
         let task = warmupTasks[key]
         warmupTasks[key] = nil
@@ -238,19 +251,22 @@ final class SharedMLXBridgeRegistry: @unchecked Sendable {
     private func runWarmup(
         key: Key,
         cacheEntry: MetalDeviceCacheEntry,
-        rung: Int
+        rung: Int,
+        screenColor: ScreenColor
     ) async {
         let engine = MLXKeyingEngine(cacheEntry: cacheEntry)
-        guard engine.supports(resolution: rung) else {
-            record(failure: "No MLX bridge bundled for \(rung)px", forKey: key)
+        guard engine.supports(resolution: rung, screenColor: screenColor) else {
+            record(failure: "No \(screenColor.displayName) MLX bridge bundled for \(rung)px", forKey: key)
             return
         }
         do {
             try Task.checkCancellation()
-            try await engine.prepare(resolution: rung)
+            try await engine.prepare(resolution: rung, screenColor: screenColor)
             try Task.checkCancellation()
             store(engine: engine, forKey: key, device: cacheEntry.device)
-            PluginLog.notice("Shared MLX engine ready: \(rung)px on \(cacheEntry.device.name).")
+            PluginLog.notice(
+                "Shared MLX engine ready: \(screenColor.displayName) \(rung)px on \(cacheEntry.device.name)."
+            )
         } catch is CancellationError {
             record(failure: "Warm-up cancelled.", forKey: key)
         } catch {
@@ -306,7 +322,7 @@ final class SharedMLXBridgeRegistry: @unchecked Sendable {
             engines.removeValue(forKey: key)
             engineLastUsedAt.removeValue(forKey: key)
             PluginLog.notice(
-                "Evicted LRU MLX bridge: \(key.rung)px on device \(key.deviceRegistryID) (kept \(budget) bridges to fit unified-memory budget)."
+                "Evicted LRU MLX bridge: \(key.screenColor.displayName) \(key.rung)px on device \(key.deviceRegistryID) (kept \(budget) bridges to fit unified-memory budget)."
             )
         }
     }
@@ -342,19 +358,24 @@ final class SharedMLXBridgeRegistry: @unchecked Sendable {
 
     // MARK: - Test hooks
 
-    /// Snapshot of `(rung, lastUsedAt)` pairs currently resident for
-    /// `device`. Test-only — production code never inspects this. The
-    /// values are copied out of the lock so the caller can iterate
-    /// without contention.
-    func residentEnginesSnapshot(deviceRegistryID: UInt64) -> [(rung: Int, lastUsedAt: ContinuousClock.Instant)] {
+    /// Snapshot of `(rung, screenColor, lastUsedAt)` triples currently
+    /// resident for `device`. Test-only — production code never inspects
+    /// this. The values are copied out of the lock so the caller can
+    /// iterate without contention.
+    func residentEnginesSnapshot(
+        deviceRegistryID: UInt64
+    ) -> [(rung: Int, screenColor: ScreenColor, lastUsedAt: ContinuousClock.Instant)] {
         lock.lock()
         defer { lock.unlock() }
         return engines.keys
             .filter { $0.deviceRegistryID == deviceRegistryID }
             .compactMap { key in
                 guard let when = engineLastUsedAt[key] else { return nil }
-                return (rung: key.rung, lastUsedAt: when)
+                return (rung: key.rung, screenColor: key.screenColor, lastUsedAt: when)
             }
-            .sorted { $0.rung < $1.rung }
+            .sorted { lhs, rhs in
+                if lhs.rung != rhs.rung { return lhs.rung < rhs.rung }
+                return lhs.screenColor.rawValue < rhs.screenColor.rawValue
+            }
     }
 }

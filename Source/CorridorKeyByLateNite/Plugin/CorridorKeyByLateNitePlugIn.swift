@@ -73,7 +73,10 @@ final class CorridorKeyToolboxPlugIn: NSObject, FxTileableEffect, FxAnalyzer {
 
     /// Non-isolated helper that asks `SharedMLXBridgeRegistry` to warm
     /// the default rung on the system default Metal device. Safe to call
-    /// from `init`; the registry handles concurrency + deduping.
+    /// from `init`; the registry handles concurrency + deduping. Warms
+    /// only the green bridge — the same rationale as `main.swift`'s
+    /// startup warm-up: avoid doubling eager-warm-up memory for a
+    /// setting most projects never flip.
     private static func kickOffDefaultWarmup() {
         guard let device = MTLCreateSystemDefaultDevice() else { return }
         guard let entry = try? MetalDeviceCache.shared.entry(for: device) else { return }
@@ -89,6 +92,7 @@ final class CorridorKeyToolboxPlugIn: NSObject, FxTileableEffect, FxAnalyzer {
         SharedMLXBridgeRegistry.shared.beginWarmup(
             deviceRegistryID: device.registryID,
             rung: defaultRung,
+            screenColor: .green,
             cacheEntry: entry
         )
     }

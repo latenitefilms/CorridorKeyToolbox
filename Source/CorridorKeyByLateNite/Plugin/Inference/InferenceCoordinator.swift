@@ -74,11 +74,12 @@ final class InferenceCoordinator: @unchecked Sendable {
 
     private let stateLock = NSLock()
 
-    /// The `(device, rung)` this coordinator most recently asked the
-    /// registry to warm. Used by `warmupStatus` and `cancelWarmup` to
-    /// target the right key.
+    /// The `(device, rung, screenColor)` this coordinator most recently
+    /// asked the registry to warm. Used by `warmupStatus` and
+    /// `cancelWarmup` to target the right key.
     private var trackedDeviceRegistryID: UInt64 = 0
     private var trackedRung: Int = 0
+    private var trackedScreenColor: ScreenColor = .green
 
     /// Single-frame cache of the latest MLX inference output. Used so a
     /// post-process slider tweak at the same play-head doesn't re-run
@@ -91,8 +92,13 @@ final class InferenceCoordinator: @unchecked Sendable {
         stateLock.lock()
         let device = trackedDeviceRegistryID
         let rung = trackedRung
+        let color = trackedScreenColor
         stateLock.unlock()
-        if rung > 0, let engine = SharedMLXBridgeRegistry.shared.readyEngine(deviceRegistryID: device, rung: rung) {
+        if rung > 0, let engine = SharedMLXBridgeRegistry.shared.readyEngine(
+            deviceRegistryID: device,
+            rung: rung,
+            screenColor: color
+        ) {
             return engine.backendDisplayName
         }
         return "Idle"
@@ -104,9 +110,14 @@ final class InferenceCoordinator: @unchecked Sendable {
         stateLock.lock()
         let device = trackedDeviceRegistryID
         let rung = trackedRung
+        let color = trackedScreenColor
         stateLock.unlock()
         guard rung > 0 else { return .cold }
-        return SharedMLXBridgeRegistry.shared.status(deviceRegistryID: device, rung: rung)
+        return SharedMLXBridgeRegistry.shared.status(
+            deviceRegistryID: device,
+            rung: rung,
+            screenColor: color
+        )
     }
 
     /// Cancels the in-flight MLX warm-up tracked by this coordinator.
@@ -115,9 +126,14 @@ final class InferenceCoordinator: @unchecked Sendable {
         stateLock.lock()
         let device = trackedDeviceRegistryID
         let rung = trackedRung
+        let color = trackedScreenColor
         stateLock.unlock()
         guard rung > 0 else { return }
-        SharedMLXBridgeRegistry.shared.cancelWarmup(deviceRegistryID: device, rung: rung)
+        SharedMLXBridgeRegistry.shared.cancelWarmup(
+            deviceRegistryID: device,
+            rung: rung,
+            screenColor: color
+        )
     }
 
     /// Runs inference for a single frame. Uses MLX when the shared
@@ -130,6 +146,7 @@ final class InferenceCoordinator: @unchecked Sendable {
     /// changed.
     func runInference(
         request: KeyingInferenceRequest,
+        screenColor: ScreenColor,
         cacheEntry: MetalDeviceCacheEntry,
         cacheKey: InferenceCacheKey
     ) throws -> InferenceRunResult {
@@ -142,7 +159,11 @@ final class InferenceCoordinator: @unchecked Sendable {
         }
 
         let deviceRegistryID = cacheEntry.device.registryID
-        trackRequestedBridge(deviceRegistryID: deviceRegistryID, rung: request.inferenceResolution)
+        trackRequestedBridge(
+            deviceRegistryID: deviceRegistryID,
+            rung: request.inferenceResolution,
+            screenColor: screenColor
+        )
 
         // Block until the MLX bridge is warm. Earlier builds fell
         // through to a green-bias rough-matte engine when MLX wasn't
@@ -156,6 +177,7 @@ final class InferenceCoordinator: @unchecked Sendable {
             engine = try SharedMLXBridgeRegistry.shared.waitForReady(
                 deviceRegistryID: deviceRegistryID,
                 rung: request.inferenceResolution,
+                screenColor: screenColor,
                 cacheEntry: cacheEntry
             )
         } catch {
@@ -169,16 +191,18 @@ final class InferenceCoordinator: @unchecked Sendable {
         return InferenceRunResult(output: output, engineDescription: engine.backendDisplayName)
     }
 
-    /// Asks the shared registry to start warm-up for `(device, rung)`
-    /// without waiting. Used by `CorridorKeyToolboxPlugIn.init` to
-    /// pre-warm the default bridge the moment the effect is applied.
-    func requestEagerWarmup(rung: Int, cacheEntry: MetalDeviceCacheEntry) {
+    /// Asks the shared registry to start warm-up for `(device, rung,
+    /// screenColor)` without waiting. Used by
+    /// `CorridorKeyToolboxPlugIn.init` to pre-warm the default bridge the
+    /// moment the effect is applied.
+    func requestEagerWarmup(rung: Int, screenColor: ScreenColor, cacheEntry: MetalDeviceCacheEntry) {
         guard Self.mlxEnabled else { return }
         let deviceRegistryID = cacheEntry.device.registryID
-        trackRequestedBridge(deviceRegistryID: deviceRegistryID, rung: rung)
+        trackRequestedBridge(deviceRegistryID: deviceRegistryID, rung: rung, screenColor: screenColor)
         SharedMLXBridgeRegistry.shared.beginWarmup(
             deviceRegistryID: deviceRegistryID,
             rung: rung,
+            screenColor: screenColor,
             cacheEntry: cacheEntry
         )
     }
@@ -196,12 +220,14 @@ final class InferenceCoordinator: @unchecked Sendable {
         cachedMLXOutput = nil
         let deviceRegistryID = trackedDeviceRegistryID
         let rung = trackedRung
+        let color = trackedScreenColor
         stateLock.unlock()
 
         if rung > 0,
            let mlx = SharedMLXBridgeRegistry.shared.readyEngine(
                deviceRegistryID: deviceRegistryID,
-               rung: rung
+               rung: rung,
+               screenColor: color
            ) {
             mlx.clearMLXCache()
         }
@@ -227,14 +253,17 @@ final class InferenceCoordinator: @unchecked Sendable {
 
     // MARK: - Tracked bridge target
 
-    private func trackRequestedBridge(deviceRegistryID: UInt64, rung: Int) {
+    private func trackRequestedBridge(deviceRegistryID: UInt64, rung: Int, screenColor: ScreenColor) {
         stateLock.lock()
-        if trackedDeviceRegistryID != deviceRegistryID || trackedRung != rung {
+        if trackedDeviceRegistryID != deviceRegistryID
+            || trackedRung != rung
+            || trackedScreenColor != screenColor {
             cachedMLXKey = nil
             cachedMLXOutput = nil
         }
         trackedDeviceRegistryID = deviceRegistryID
         trackedRung = rung
+        trackedScreenColor = screenColor
         stateLock.unlock()
     }
 

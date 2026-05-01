@@ -223,23 +223,28 @@ final class StandaloneRenderEngine: @unchecked Sendable {
         return flipped
     }
 
-    /// Eagerly warms up the MLX bridge for the chosen quality rung.
-    /// Lets the editor surface a "Loading neural model…" status while
-    /// the bridge compiles, the same way the FxPlug does.
-    func beginWarmup(forResolution resolution: Int) throws {
+    /// Eagerly warms up the MLX bridge for the chosen quality rung
+    /// and screen colour. Lets the editor surface a "Loading neural
+    /// model…" status while the bridge compiles, the same way the
+    /// FxPlug does. Defaulting `screenColor` keeps existing callers
+    /// (and tests) source-compatible — they implicitly request the
+    /// green bridge, matching the inspector's default.
+    func beginWarmup(forResolution resolution: Int, screenColor: ScreenColor = .green) throws {
         let entry = try MetalDeviceCache.shared.entry(for: device)
         SharedMLXBridgeRegistry.shared.beginWarmup(
             deviceRegistryID: device.registryID,
             rung: resolution,
+            screenColor: screenColor,
             cacheEntry: entry
         )
     }
 
     /// Queries the warm-up status for the inspector status badge.
-    func warmupStatus(forResolution resolution: Int) -> WarmupStatus {
+    func warmupStatus(forResolution resolution: Int, screenColor: ScreenColor = .green) -> WarmupStatus {
         SharedMLXBridgeRegistry.shared.status(
             deviceRegistryID: device.registryID,
-            rung: resolution
+            rung: resolution,
+            screenColor: screenColor
         )
     }
 
@@ -247,10 +252,11 @@ final class StandaloneRenderEngine: @unchecked Sendable {
     /// Ready engines stay cached; only the background compile/eval
     /// task is stopped.
     @discardableResult
-    func cancelWarmup(forResolution resolution: Int) -> Task<Void, Never>? {
+    func cancelWarmup(forResolution resolution: Int, screenColor: ScreenColor = .green) -> Task<Void, Never>? {
         SharedMLXBridgeRegistry.shared.cancelWarmup(
             deviceRegistryID: device.registryID,
-            rung: resolution
+            rung: resolution,
+            screenColor: screenColor
         )
     }
 }

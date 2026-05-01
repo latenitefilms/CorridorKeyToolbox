@@ -2,10 +2,12 @@
 //  ScreenColorEstimatorTests.swift
 //  CorridorKeyToolboxLogicTests
 //
-//  The render pipeline applies the forward matrix before inference and the
-//  inverse on the way out. If forward × inverse drifts from identity the
-//  output picks up a colour cast that isn't obvious until a real green-screen
-//  clip is loaded in Final Cut Pro — so pin the round-trip numerically here.
+//  Both green and blue now ship dedicated MLX bridges, so the renderer
+//  feeds source frames to inference in their native screen domain — no
+//  rotation hop in either direction. These tests pin that contract: the
+//  estimator returns identity for both colours, but exposes the right
+//  `estimatedScreenReference` so the despill / edge decontaminate
+//  kernels know which channel carries the spill.
 //
 
 import Testing
@@ -21,24 +23,21 @@ struct ScreenColorEstimatorTests {
         #expect(transform.isIdentity == true)
         expectMatricesEqual(transform.forwardMatrix, matrix_identity_float3x3)
         expectMatricesEqual(transform.inverseMatrix, matrix_identity_float3x3)
+        expectVectorsEqual(transform.estimatedScreenReference, ScreenColor.green.canonicalScreenReference)
     }
 
-    @Test("Blue inverts cleanly")
-    func blueInverseRoundTrips() {
+    @Test("Blue returns the identity transform now that a native bridge ships")
+    func blueIsIdentity() {
         let transform = ScreenColorEstimator.defaultTransform(for: .blue)
-        #expect(transform.isIdentity == false)
-
-        let composed = transform.inverseMatrix * transform.forwardMatrix
-        expectMatricesEqual(composed, matrix_identity_float3x3, tolerance: 1e-4)
+        #expect(transform.isIdentity == true)
+        expectMatricesEqual(transform.forwardMatrix, matrix_identity_float3x3)
+        expectMatricesEqual(transform.inverseMatrix, matrix_identity_float3x3)
     }
 
-    @Test("Blue maps a canonical blue pixel into the green domain")
-    func blueForwardMapsCanonicalBlue() {
+    @Test("Blue exposes the canonical blue screen reference for kernels")
+    func blueExposesCanonicalReference() {
         let transform = ScreenColorEstimator.defaultTransform(for: .blue)
-        let canonicalBlue = SIMD3<Float>(0.08, 0.16, 0.84)
-        let canonicalGreen = SIMD3<Float>(0.08, 0.84, 0.08)
-        let mapped = transform.forwardMatrix * canonicalBlue
-        expectVectorsEqual(mapped, canonicalGreen, tolerance: 1e-4)
+        expectVectorsEqual(transform.estimatedScreenReference, SIMD3<Float>(0.08, 0.16, 0.84))
     }
 
     // MARK: - Helpers
