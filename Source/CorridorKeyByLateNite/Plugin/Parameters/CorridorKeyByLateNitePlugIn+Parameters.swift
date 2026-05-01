@@ -327,14 +327,23 @@ extension CorridorKeyToolboxPlugIn {
         // on translucent fabric. Average / Double Limit / Neutral /
         // Screen Subtract remain in the popup for users whose
         // footage responds better to the legacy approaches.
+        // Despill Strength runs 0–5 so users can push past full
+        // model-trained cleanup on problem shots (heavy chroma
+        // reflection on hair, dense motion-blur edges). The default
+        // stays at 0.5 so existing libraries open identically; only
+        // users who pull the slider above 1 get the aggressive over-
+        // correction. Above 1 the new spill-alpha attenuation kernel
+        // also pulls the matte's alpha toward zero in spill regions,
+        // so over-pushed colour ends up hidden behind transparency
+        // rather than showing as a garish anti-screen tint.
         create.addFloatSlider(
             withName: "Despill Strength",
             parameterID: ParameterIdentifier.despillStrength,
             defaultValue: 0.5,
             parameterMin: 0,
-            parameterMax: 1,
+            parameterMax: 5,
             sliderMin: 0,
-            sliderMax: 1,
+            sliderMax: 5,
             delta: 0.01,
             parameterFlags: CorridorKeyParameterFlags.default.fxFlags
         )

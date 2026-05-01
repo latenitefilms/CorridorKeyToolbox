@@ -194,6 +194,63 @@ struct ShaderGoldenTests {
         }
     }
 
+    @Test("Despill at high strength keeps RGB inside [0, 1] for every method")
+    func despillHighStrengthClampsToValidRange() async throws {
+        let entry: MetalDeviceCacheEntry
+        do { entry = try TestHarness.makeEntry() } catch { throw XCTSkipError("\(error)") }
+
+        // The 0–5 slider range means a fully-keyed screen pixel can
+        // be told to "remove 5× the spill" — without saturate guards
+        // the legacy methods write negative RGB into the foreground
+        // texture, which compose then propagates into the destination
+        // and (worst case) into a ProRes export. Verify every method
+        // keeps the output channels inside [0, 1] under a deliberately
+        // hostile input + strength.
+        let greenScreenPixel = SIMD4<Float>(0.05, 0.85, 0.10, 1.0)
+        let bluePixel = SIMD4<Float>(0.10, 0.10, 0.85, 1.0)
+
+        let cases: [(label: String, method: SpillMethod, input: SIMD4<Float>, screen: SIMD3<Float>)] = [
+            ("Average green @5", .average, greenScreenPixel, SIMD3<Float>(0.08, 0.84, 0.08)),
+            ("Double Limit green @5", .doubleLimit, greenScreenPixel, SIMD3<Float>(0.08, 0.84, 0.08)),
+            ("Neutral green @5", .neutral, greenScreenPixel, SIMD3<Float>(0.08, 0.84, 0.08)),
+            ("Screen Subtract green @5", .screenSubtract, greenScreenPixel, SIMD3<Float>(0.08, 0.84, 0.08)),
+            ("Ultra green @5", .ultra, greenScreenPixel, SIMD3<Float>(0.08, 0.84, 0.08)),
+            ("Average blue @5", .average, bluePixel, SIMD3<Float>(0.08, 0.16, 0.84)),
+            ("Ultra blue @5", .ultra, bluePixel, SIMD3<Float>(0.08, 0.16, 0.84))
+        ]
+
+        let commandQueue = try makeCommandQueue(entry: entry)
+        for (label, method, input, screen) in cases {
+            let sourceTexture = try makeColourTexture(
+                entry: entry, width: 2, height: 2, pixelFormat: .rgba32Float, colour: input
+            )
+            guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+                Issue.record("Could not create command buffer for \(label).")
+                return
+            }
+            let pooled = try RenderStages.despill(
+                foreground: sourceTexture,
+                strength: 5.0,
+                method: method,
+                screenColor: screen,
+                entry: entry,
+                commandBuffer: commandBuffer
+            )
+            guard let pooled else {
+                Issue.record("Despill returned nil for \(label).")
+                return
+            }
+            try commitAndWait(commandBuffer)
+            let output = readFirstPixel(texture: pooled.texture)
+            pooled.returnManually()
+
+            #expect(output.x >= 0 && output.x <= 1, "[\(label)] R out of range: \(output.x)")
+            #expect(output.y >= 0 && output.y <= 1, "[\(label)] G out of range: \(output.y)")
+            #expect(output.z >= 0 && output.z <= 1, "[\(label)] B out of range: \(output.z)")
+            print("Despill@5 [\(label)] in=\(input) out=\(output)")
+        }
+    }
+
     @Test("Spill alpha attenuation pulls matte to zero on full screen pixels and leaves foreground pixels alone")
     func spillAlphaAttenuationCutsScreenLeavesForeground() async throws {
         let entry: MetalDeviceCacheEntry

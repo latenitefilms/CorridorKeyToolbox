@@ -96,10 +96,16 @@ enum ParameterRanges {
     )
 
     // Edge & spill
+    // Slider goes to 5 instead of stopping at 1 so problem shots —
+    // heavy chroma reflection on hair, dense motion-blur edges —
+    // can be over-corrected past the "everything keyed by the
+    // network" baseline. Default stays at 0.5 so existing projects
+    // open identically; users who want the aggressive cleanup pull
+    // the slider up themselves.
     static let despillStrength = FloatParameterRange(
         name: "Despill Strength",
-        defaultValue: 0.5, parameterMin: 0, parameterMax: 1,
-        sliderMin: 0, sliderMax: 1, step: 0.01
+        defaultValue: 0.5, parameterMin: 0, parameterMax: 5,
+        sliderMin: 0, sliderMax: 5, step: 0.01
     )
     static let spillMethodName = "Spill Method"
 

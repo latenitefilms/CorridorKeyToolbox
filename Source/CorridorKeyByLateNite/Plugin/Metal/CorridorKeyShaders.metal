@@ -351,10 +351,26 @@ kernel void corridorKeyDespillKernel(
             otherAVal = saturate(otherAVal + saturatedSpill * 0.5);
             otherBVal = saturate(otherBVal + saturatedSpill * 0.5);
         } else {
-            otherAVal = otherAVal + effectiveSpill * 0.5;
-            otherBVal = otherBVal + effectiveSpill * 0.5;
+            // Average / Double Limit: split the removed amount
+            // evenly between the two non-screen channels. Saturate
+            // here so the new 0–5 strength range can't push the
+            // channels above 1.0 — the Neutral / Screen Subtract
+            // branches already saturate, but this branch used to
+            // write through unclamped, and `0.5 + 5 × 0.75 × 0.5`
+            // is 2.4 which compose then propagated as a >1 RGB into
+            // the destination texture.
+            otherAVal = saturate(otherAVal + effectiveSpill * 0.5);
+            otherBVal = saturate(otherBVal + effectiveSpill * 0.5);
         }
-        rgb[screenIdx] = newScreenVal;
+        // Clamp the screen channel too. The other two are already
+        // saturated, but the screen value used to be written straight
+        // through — at strength > 1 (the new 0–5 range)
+        // `effectiveSpill` exceeds the original screen value and the
+        // result drops below zero, which compose then turns into a
+        // muddy "anti-screen" colour leak. Clamping here keeps the
+        // legacy methods well-behaved when the user pushes despill
+        // hard for problem shots.
+        rgb[screenIdx] = saturate(newScreenVal);
         rgb[otherA] = otherAVal;
         rgb[otherB] = otherBVal;
     }
