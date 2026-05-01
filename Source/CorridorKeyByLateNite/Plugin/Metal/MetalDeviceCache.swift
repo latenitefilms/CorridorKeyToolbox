@@ -339,6 +339,33 @@ final class MetalDeviceCacheEntry: @unchecked Sendable {
         return peakInFlightCount
     }
 
+    /// Posts an empty barrier command buffer onto every queue and
+    /// `waitUntilCompleted`s on each, guaranteeing that any GPU work
+    /// the queue had previously committed has finished before the
+    /// caller's next line of code runs. Used at app termination so
+    /// the global compute pipeline state objects don't get released
+    /// while the GPU is mid-frame — without this, Metal's API
+    /// Validation layer fires
+    /// `notifyExternalReferencesNonZeroOnDealloc` and aborts the
+    /// process during a Quit-mid-analysis.
+    ///
+    /// In production (validation off) this is purely belt-and-braces;
+    /// the failure mode it prevents is a Debug-build hard-stop, not a
+    /// shipping crash. Cheap enough to leave on for both because the
+    /// barrier buffers are empty and complete inline if no prior work
+    /// is in flight.
+    func drainAllCommandQueues() {
+        queueLock.lock()
+        let queuesSnapshot = commandQueues
+        queueLock.unlock()
+        for queue in queuesSnapshot {
+            guard let buffer = queue.makeCommandBuffer() else { continue }
+            buffer.label = "CorridorKey by LateNite Termination Drain"
+            buffer.commit()
+            buffer.waitUntilCompleted()
+        }
+    }
+
     func renderPipelines(for pixelFormat: MTLPixelFormat) throws -> CorridorKeyRenderPipelines {
         renderPipelinesLock.lock()
         if let existing = renderPipelines[pixelFormat] {
@@ -946,5 +973,26 @@ final class MetalDeviceCache: @unchecked Sendable {
             return device
         }
         return nil
+    }
+
+    /// Drains every command queue across every device cache entry by
+    /// posting an empty barrier buffer per queue. Called from the app
+    /// termination delegate after the editor's Swift `Task`s have
+    /// resolved, so any GPU work those tasks had previously committed
+    /// (including MLX inference + our writeback kernels) finishes
+    /// before the process tears down its global pipeline-state
+    /// objects.
+    ///
+    /// Snapshots the entries dictionary under the lock and drains
+    /// outside it — `waitUntilCompleted` blocks the calling thread,
+    /// and we don't want to hold the entries lock while every GPU
+    /// queue spins down.
+    func drainAllDevices() {
+        entriesLock.lock()
+        let entriesSnapshot = Array(entries.values)
+        entriesLock.unlock()
+        for entry in entriesSnapshot {
+            entry.drainAllCommandQueues()
+        }
     }
 }

@@ -84,10 +84,21 @@ final class CorridorKeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard pendingTerminationIdentifier == nil else { return .terminateLater }
-        guard EditorWorkRegistry.shared.hasInflightEditorWork else { return .terminateNow }
+        guard EditorWorkRegistry.shared.hasInflightEditorWork else {
+            // Even with no Swift task in flight, MLX or our writeback
+            // command queues might still hold work from the moment
+            // before. Cheap to drain on the way out — guarantees the
+            // global pipeline state objects can't dealloc while a
+            // GPU command buffer still references them.
+            drainGPUWorkBeforeTerminate()
+            return .terminateNow
+        }
 
         let tasks = EditorWorkRegistry.shared.cancelAllWorkForAppTermination()
-        guard !tasks.isEmpty else { return .terminateNow }
+        guard !tasks.isEmpty else {
+            drainGPUWorkBeforeTerminate()
+            return .terminateNow
+        }
 
         let identifier = UUID()
         pendingTerminationIdentifier = identifier
@@ -104,6 +115,17 @@ final class CorridorKeyApplicationDelegate: NSObject, NSApplicationDelegate {
             for task in tasks {
                 await task.value
             }
+            // Swift tasks completing only proves *our* analyse loop
+            // has stopped scheduling new frames — MLX runs inference
+            // on its own GPU stream, and the writeback kernels run on
+            // our pooled command queues. Both can have buffers still
+            // in flight when the loop's last `await` returned. Drain
+            // them before the process tears down so global pipeline
+            // state objects don't release while a buffer still
+            // references them — that's the
+            // `notifyExternalReferencesNonZeroOnDealloc` Debug-build
+            // assertion users hit when quitting mid-analysis.
+            self?.drainGPUWorkBeforeTerminate()
             self?.replyToPendingTermination(identifier)
         }
     }
@@ -112,8 +134,23 @@ final class CorridorKeyApplicationDelegate: NSObject, NSApplicationDelegate {
         let gracePeriod = terminationGracePeriod
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: gracePeriod)
+            // Same reasoning as `waitForTerminationWork` — even when
+            // we had to give up on cooperative cancellation, drain
+            // anyway so the validator doesn't fire on the way out.
+            self?.drainGPUWorkBeforeTerminate()
             self?.replyToPendingTermination(identifier)
         }
+    }
+
+    /// Flushes MLX's GPU stream and every command queue across every
+    /// `MetalDeviceCacheEntry` so no command buffers outlive the
+    /// global pipeline state objects. Always runs on the main actor;
+    /// the underlying `synchronize` / `waitUntilCompleted` calls are
+    /// blocking, but the work being drained is bounded by the in-
+    /// flight analyse frame so the wait is sub-second in practice.
+    private func drainGPUWorkBeforeTerminate() {
+        MLXKeyingEngine.synchronizeMLXGPUStream()
+        MetalDeviceCache.shared.drainAllDevices()
     }
 
     private func replyToPendingTermination(_ identifier: UUID) {

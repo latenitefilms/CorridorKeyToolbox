@@ -209,6 +209,20 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         }
     }
 
+    /// Blocks the calling thread until MLX's GPU stream has retired
+    /// every operation it had outstanding. The Standalone Editor's
+    /// quit path calls this so the global compute pipeline state
+    /// objects can't be released while MLX still has inference work
+    /// queued on its private command queue. Without it, Quit during
+    /// analysis trips Metal's API Validation
+    /// `notifyExternalReferencesNonZeroOnDealloc` assertion in Debug
+    /// builds (the only place Validation is enabled by default);
+    /// release builds wouldn't crash but would still race the same
+    /// release/deinit, so we guard both.
+    static func synchronizeMLXGPUStream() {
+        Stream.gpu.synchronize()
+    }
+
     func supports(resolution: Int, screenColor: ScreenColor) -> Bool {
         guard let rung = MLXBridgeArtifact.closestSupportedResolution(forRequested: resolution) else {
             return false
