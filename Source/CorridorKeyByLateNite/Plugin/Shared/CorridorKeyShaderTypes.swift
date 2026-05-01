@@ -66,6 +66,7 @@ enum CorridorKeyBufferIndex: Int32 {
     case CKBufferIndexCCLabelParams = 10
     case CKBufferIndexCCLabelCounts = 11
     case CKBufferIndexTemporalBlendParams = 12
+    case CKBufferIndexChromaHintParams = 13
 }
 
 let CKBufferIndexDespillParams = CorridorKeyBufferIndex.CKBufferIndexDespillParams
@@ -81,6 +82,7 @@ let CKBufferIndexEdgeDecontaminateParams = CorridorKeyBufferIndex.CKBufferIndexE
 let CKBufferIndexCCLabelParams = CorridorKeyBufferIndex.CKBufferIndexCCLabelParams
 let CKBufferIndexCCLabelCounts = CorridorKeyBufferIndex.CKBufferIndexCCLabelCounts
 let CKBufferIndexTemporalBlendParams = CorridorKeyBufferIndex.CKBufferIndexTemporalBlendParams
+let CKBufferIndexChromaHintParams = CorridorKeyBufferIndex.CKBufferIndexChromaHintParams
 
 // Spill method and output mode enums. Use Int32 so rawValue matches the
 // shader's signed int.
@@ -90,12 +92,14 @@ enum CorridorKeySpillMethod: Int32 {
     case CKSpillMethodDoubleLimit = 1
     case CKSpillMethodNeutral = 2
     case CKSpillMethodScreenSubtract = 3
+    case CKSpillMethodUltra = 4
 }
 
 let CKSpillMethodAverage = CorridorKeySpillMethod.CKSpillMethodAverage
 let CKSpillMethodDoubleLimit = CorridorKeySpillMethod.CKSpillMethodDoubleLimit
 let CKSpillMethodNeutral = CorridorKeySpillMethod.CKSpillMethodNeutral
 let CKSpillMethodScreenSubtract = CorridorKeySpillMethod.CKSpillMethodScreenSubtract
+let CKSpillMethodUltra = CorridorKeySpillMethod.CKSpillMethodUltra
 
 enum CorridorKeyOutputMode: Int32 {
     case CKOutputModeProcessed = 0
@@ -128,6 +132,7 @@ struct CKVertex2D {
 struct CKDespillParams {
     var strength: Float
     var method: Int32
+    var screenColor: SIMD3<Float>
 }
 
 struct CKAlphaEdgeParams {
@@ -165,6 +170,10 @@ struct CKLightWrapParams {
 
 struct CKEdgeDecontaminateParams {
     var strength: Float
+    var screenColor: SIMD3<Float>
+}
+
+struct CKChromaHintParams {
     var screenColor: SIMD3<Float>
 }
 

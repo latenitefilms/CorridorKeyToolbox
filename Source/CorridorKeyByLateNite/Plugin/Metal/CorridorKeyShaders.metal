@@ -225,8 +225,11 @@ kernel void corridorKeyCombineAndNormalizeKernel(
 
 // MARK: - Despill
 
-/// Corridor Key's despill runs in linear RGB. Green is assumed to be the screen
-/// colour; callers rotate blue-screen content into the green domain first.
+/// Corridor Key's despill runs in linear RGB. The screen colour is
+/// passed in via `params.screenColor` — the kernel picks the dominant
+/// channel (G for green, B for blue) and treats the other two as the
+/// "limit" / "fill" pair, so the same code path despills both green
+/// and blue screens without callers having to rotate the input first.
 kernel void corridorKeyDespillKernel(
     texture2d<float, access::read> source [[texture(CKTextureIndexSource)]],
     texture2d<float, access::write> destination [[texture(CKTextureIndexOutput)]],
@@ -237,104 +240,126 @@ kernel void corridorKeyDespillKernel(
     if (gid.x >= dims.x || gid.y >= dims.y) { return; }
 
     float4 rgba = source.read(gid);
-    float r = rgba.r;
-    float g = rgba.g;
-    float b = rgba.b;
+    float3 rgb = rgba.rgb;
+
+    // Identify the screen channel index from the canonical reference.
+    // Green and Blue are the only supported screens in v1.0, but the
+    // logic generalises to any single-channel-dominant reference (a
+    // hypothetical red-screen pack would just need the right
+    // `canonicalScreenReference` and the same code below would key it).
+    const int screenIdx = (params.screenColor.b > params.screenColor.g) ? 2 : 1;
+    const int otherA = (screenIdx == 1) ? 0 : 0; // R is always one of the non-screen channels for G/B screens.
+    const int otherB = (screenIdx == 1) ? 2 : 1;
 
     // Ultra method — chroma-projection despill modelled on After
-    // Effects' Advanced Spill Suppressor. Works in BT.709 YCbCr:
-    // the screen colour (green here, since callers rotate blue
-    // into the green domain) sits at a fixed direction in CbCr
-    // space, so we project each pixel onto that direction and
-    // subtract the positive component while keeping luminance
-    // intact. Result: clean, flat removal that survives soft
-    // edges and translucency without the over-bright mids the
+    // Effects' Advanced Spill Suppressor. Works in BT.709 YCbCr: the
+    // screen colour sits at a fixed direction in CbCr space, so we
+    // project each pixel onto that direction (computed from the
+    // canonical screen colour, so the same kernel handles green and
+    // blue) and subtract the positive component while keeping
+    // luminance intact. Result: clean, flat removal that survives
+    // soft edges and translucency without the over-bright mids the
     // Screen Subtract method introduces.
     if (params.method == CKSpillMethodUltra && params.strength > 0.0) {
         // BT.709 RGB → YCbCr (no offset; values are linear, not
         // studio-range, so we keep Cb/Cr signed around zero).
-        float yLuma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        float cb    = -0.1146 * r - 0.3854 * g + 0.5000 * b;
-        float cr    =  0.5000 * r - 0.4542 * g - 0.0458 * b;
+        const float3 luma = float3(0.2126, 0.7152, 0.0722);
+        const float3 cbBasis = float3(-0.1146, -0.3854, 0.5000);
+        const float3 crBasis = float3( 0.5000, -0.4542, -0.0458);
+        float yLuma = dot(luma, rgb);
+        float cb    = dot(cbBasis, rgb);
+        float cr    = dot(crBasis, rgb);
 
-        // Pure green's CbCr direction, normalised. Computed once
-        // from the BT.709 matrix above so the values track if the
-        // matrix ever changes.
-        const float2 greenDir = normalize(float2(-0.3854, -0.4542));
-        float2 chroma = float2(cb, cr);
-        float greenProjection = dot(chroma, greenDir);
+        // Direction the screen colour points to in CbCr space.
+        // Computed from the canonical reference each frame so the
+        // kernel handles any colour pack without recompilation. The
+        // length guard avoids a NaN when someone passes a neutral
+        // grey reference (which has no chroma direction).
+        float3 sc = params.screenColor;
+        float2 chromaScreen = float2(dot(cbBasis, sc), dot(crBasis, sc));
+        float screenChromaLen = length(chromaScreen);
+        if (screenChromaLen > 1e-4) {
+            float2 screenDir = chromaScreen / screenChromaLen;
+            float2 chroma = float2(cb, cr);
+            float screenProjection = dot(chroma, screenDir);
 
-        // Only positive projections indicate spill — negative ones
-        // mean the pixel is biased *away* from the screen colour
-        // (red / orange / skin tones) and we leave them alone.
-        if (greenProjection > 0.0) {
-            float removed = greenProjection * params.strength;
-            float2 corrected = chroma - greenDir * removed;
-            cb = corrected.x;
-            cr = corrected.y;
+            // Only positive projections indicate spill — negative ones
+            // mean the pixel is biased *away* from the screen colour
+            // (red / orange / skin tones for green keys, warm tones
+            // for blue keys) and we leave them alone.
+            if (screenProjection > 0.0) {
+                float removed = screenProjection * params.strength;
+                float2 corrected = chroma - screenDir * removed;
+                cb = corrected.x;
+                cr = corrected.y;
 
-            // YCbCr → BT.709 RGB (inverse of the matrix above).
-            r = yLuma                 + 1.5748 * cr;
-            g = yLuma - 0.1873 * cb - 0.4681 * cr;
-            b = yLuma + 1.8556 * cb;
+                // YCbCr → BT.709 RGB (inverse of the matrix above).
+                rgb.r = yLuma                + 1.5748 * cr;
+                rgb.g = yLuma - 0.1873 * cb - 0.4681 * cr;
+                rgb.b = yLuma + 1.8556 * cb;
 
-            r = saturate(r);
-            g = saturate(g);
-            b = saturate(b);
+                rgb = saturate(rgb);
+            }
         }
-        destination.write(float4(r, g, b, rgba.a), gid);
+        destination.write(float4(rgb, rgba.a), gid);
         return;
     }
 
+    // Legacy methods (Average / DoubleLimit / Neutral / ScreenSubtract):
+    // remove excess of the screen channel, distribute the removed
+    // amount across the two non-screen channels. Generalises the
+    // historical green-only kernel by indexing into `rgb` via the
+    // resolved channel indices.
+    float screenVal = rgb[screenIdx];
+    float otherAVal = rgb[otherA];
+    float otherBVal = rgb[otherB];
+
     float limit = 0.0;
     if (params.method == CKSpillMethodDoubleLimit) {
-        limit = max(r, b);
+        limit = max(otherAVal, otherBVal);
     } else {
-        limit = (r + b) * 0.5;
+        limit = (otherAVal + otherBVal) * 0.5;
     }
 
-    float spill = max(0.0, g - limit);
+    float spill = max(0.0, screenVal - limit);
     if (spill > 0.0 && params.strength > 0.0) {
         float effectiveSpill = spill * params.strength;
-        float newG = g - effectiveSpill;
+        float newScreenVal = screenVal - effectiveSpill;
 
         if (params.method == CKSpillMethodNeutral) {
             // Guard against division by near-zero on dark pixels. The
             // reference CorridorKey-Runtime uses 1e-3 (src/post_process/
             // despill.cpp) to avoid the noise amplification a 1e-6 floor
             // produced on dark skin tones / hair.
-            float gray = (r + newG + b) * (1.0 / 3.0);
+            float gray = (otherAVal + newScreenVal + otherBVal) * (1.0 / 3.0);
             float fill = effectiveSpill * 0.5;
-            r = r + fill * (gray / max(r, 1e-3));
-            b = b + fill * (gray / max(b, 1e-3));
-            // Clamp the result to [0, 1] so extreme mixers can't blow out
-            // the foreground — matches the reference behaviour.
-            r = saturate(r);
-            b = saturate(b);
+            otherAVal = saturate(otherAVal + fill * (gray / max(otherAVal, 1e-3)));
+            otherBVal = saturate(otherBVal + fill * (gray / max(otherBVal, 1e-3)));
         } else if (params.method == CKSpillMethodScreenSubtract) {
             // Keylight-style "screen subtract": treat the spill as a
             // contamination by the screen colour rather than just
-            // excess green. Subtract the spill weighted by saturation
-            // so de-saturated regions (white shirts, hair specular)
-            // don't get pushed magenta. This is the method most VFX
-            // artists default to in Nuke / Fusion because it keeps
-            // the foreground's neutral tones neutral.
-            float maxRGB = max(max(r, newG), b);
-            float minRGB = min(min(r, newG), b);
+            // excess of one channel. Subtract the spill weighted by
+            // saturation so de-saturated regions (white shirts, hair
+            // specular) don't get pushed magenta on green or yellow
+            // on blue. This is the method most VFX artists default to
+            // in Nuke / Fusion because it keeps the foreground's
+            // neutral tones neutral.
+            float maxRGB = max(max(otherAVal, newScreenVal), otherBVal);
+            float minRGB = min(min(otherAVal, newScreenVal), otherBVal);
             float saturation = max(maxRGB - minRGB, 0.0);
             float saturatedSpill = effectiveSpill * saturation;
-            r = r + saturatedSpill * 0.5;
-            b = b + saturatedSpill * 0.5;
-            r = saturate(r);
-            b = saturate(b);
+            otherAVal = saturate(otherAVal + saturatedSpill * 0.5);
+            otherBVal = saturate(otherBVal + saturatedSpill * 0.5);
         } else {
-            r = r + effectiveSpill * 0.5;
-            b = b + effectiveSpill * 0.5;
+            otherAVal = otherAVal + effectiveSpill * 0.5;
+            otherBVal = otherBVal + effectiveSpill * 0.5;
         }
-        g = newG;
+        rgb[screenIdx] = newScreenVal;
+        rgb[otherA] = otherAVal;
+        rgb[otherB] = otherBVal;
     }
 
-    destination.write(float4(r, g, b, rgba.a), gid);
+    destination.write(float4(rgb, rgba.a), gid);
 }
 
 // MARK: - Alpha levels + gamma
@@ -801,27 +826,37 @@ kernel void corridorKeyApplyHintPointsKernel(
     hint.write(float4(pulled, 0.0, 0.0, 1.0), gid);
 }
 
-// MARK: - Green screen detection / rough matte fallback
+// MARK: - Chroma-prior alpha hint (rough-matte fallback)
 
 /// Coarse alpha-hint for the neural model. Matches the CorridorKey-Runtime
 /// reference (`ColorUtils::generate_rough_matte` in
 /// src/post_process/color_utils.cpp): the hint uses matte convention —
 /// `1.0` means foreground/keep, `0.0` means screen/remove — so the trained
-/// network reads it the same way it was trained. Sending raw greenness
-/// here flips the model's output and the whole key inverts. This single
-/// kernel replaces the previous separate `roughMatte` / `greenHint` kernels
-/// which were byte-identical.
-kernel void corridorKeyGreenHintKernel(
+/// network reads it the same way it was trained. Sending raw screen-
+/// channel dominance flips the model's output and the whole key inverts.
+///
+/// `params.screenColor` selects which channel the kernel treats as the
+/// screen — passing canonical green reproduces the v1.0 behaviour, passing
+/// canonical blue keys blue-screen footage natively. Replaces the previous
+/// `corridorKeyGreenHintKernel` / `roughMatte` kernels which hard-coded
+/// the green channel and only worked because callers rotated blue input
+/// into the green domain first.
+kernel void corridorKeyChromaHintKernel(
     texture2d<float, access::read> source [[texture(CKTextureIndexSource)]],
     texture2d<float, access::write> destination [[texture(CKTextureIndexOutput)]],
+    constant CKChromaHintParams &params [[buffer(CKBufferIndexChromaHintParams)]],
     uint2 gid [[thread_position_in_grid]]
 ) {
     uint2 dims = uint2(destination.get_width(), destination.get_height());
     if (gid.x >= dims.x || gid.y >= dims.y) { return; }
 
     float4 rgba = source.read(gid);
-    float greenBias = rgba.g - max(rgba.r, rgba.b);
-    float matte = 1.0 - saturate(greenBias * 2.0);
+    float3 rgb = rgba.rgb;
+    const int screenIdx = (params.screenColor.b > params.screenColor.g) ? 2 : 1;
+    const int otherA = 0;
+    const int otherB = (screenIdx == 1) ? 2 : 1;
+    float screenBias = rgb[screenIdx] - max(rgb[otherA], rgb[otherB]);
+    float matte = 1.0 - saturate(screenBias * 2.0);
     destination.write(float4(matte, 0.0, 0.0, 1.0), gid);
 }
 
@@ -983,9 +1018,11 @@ kernel void corridorKeyForegroundPostProcessKernel(
         rgb = max(rgb, float3(0.0));
     }
 
-    // Stage 4: inverse screen-colour rotation. Identity bypass for
-    // green screens; the matrix multiply here costs 9 mul-adds when
-    // applied so we gate it on a flag.
+    // Stage 4: inverse screen-colour rotation. Identity for both
+    // Green and Blue in the v1.0 native-bridge era — kept wired so a
+    // future colour pack that *does* need a domain rotation can flip
+    // the flag without re-introducing the `rgb` round-trip cost on
+    // the common path.
     if (params.applyInverseRotation != 0) {
         rgb = params.inverseScreenMatrix * rgb;
     }

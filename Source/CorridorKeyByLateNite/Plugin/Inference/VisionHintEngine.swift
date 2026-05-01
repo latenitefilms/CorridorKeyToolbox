@@ -124,7 +124,7 @@ final class VisionHintEngine: @unchecked Sendable {
     /// Runs Vision's foreground-instance detector on `source` and returns
     /// a Metal texture containing the union of every detected subject's
     /// scaled mask. Returns `nil` when Vision detected no foreground —
-    /// the caller should fall back to `RenderStages.generateGreenHint`
+    /// the caller should fall back to `RenderStages.generateChromaHint`
     /// in that case.
     ///
     /// `source` may be in any pixel format Core Image can interpret;

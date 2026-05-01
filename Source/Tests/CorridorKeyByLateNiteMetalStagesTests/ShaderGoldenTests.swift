@@ -48,6 +48,7 @@ struct ShaderGoldenTests {
             foreground: sourceTexture,
             strength: 1.0,
             method: .average,
+            screenColor: SIMD3<Float>(0.08, 0.84, 0.08),
             entry: entry,
             commandBuffer: commandBuffer
         )
@@ -72,6 +73,57 @@ struct ShaderGoldenTests {
         #expect(abs(output.z - expectedB) < 1e-3, "B mismatch: \(output.z) vs \(expectedB)")
     }
 
+    @Test("Despill Average on a blue-screen pixel removes blue, not green")
+    func despillAverageOnBlueScreen() async throws {
+        let entry: MetalDeviceCacheEntry
+        do { entry = try TestHarness.makeEntry() } catch { throw XCTSkipError("\(error)") }
+
+        // A "spillful" blue pixel — high blue, lower red/green. Mirrors
+        // the green-screen test above but with the spill on the blue
+        // channel, so we can verify the kernel pivots on the dominant
+        // colour in `screenColor` instead of always treating green as
+        // the screen.
+        let input = SIMD4<Float>(0.30, 0.35, 0.75, 1.0)
+        let sourceTexture = try makeColourTexture(
+            entry: entry, width: 2, height: 2, pixelFormat: .rgba32Float, colour: input
+        )
+
+        let commandQueue = try makeCommandQueue(entry: entry)
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            Issue.record("Could not create command buffer.")
+            return
+        }
+        let pooled = try RenderStages.despill(
+            foreground: sourceTexture,
+            strength: 1.0,
+            method: .average,
+            screenColor: SIMD3<Float>(0.08, 0.16, 0.84),
+            entry: entry,
+            commandBuffer: commandBuffer
+        )
+        guard let pooled else {
+            Issue.record("Despill stage returned nil.")
+            return
+        }
+        try commitAndWait(commandBuffer)
+        let output = readFirstPixel(texture: pooled.texture)
+        pooled.returnManually()
+
+        // Expected: Average on blue → limit = (R+G)/2, spill = max(0, B-limit),
+        // B -= spill, R += spill*0.5, G += spill*0.5.
+        let expectedLimit: Float = (input.x + input.y) * 0.5
+        let expectedSpill = max(0, input.z - expectedLimit)
+        let expectedR = input.x + expectedSpill * 0.5
+        let expectedG = input.y + expectedSpill * 0.5
+        let expectedB = input.z - expectedSpill
+
+        #expect(abs(output.x - expectedR) < 1e-3, "R mismatch: \(output.x) vs \(expectedR)")
+        #expect(abs(output.y - expectedG) < 1e-3, "G mismatch: \(output.y) vs \(expectedG)")
+        #expect(abs(output.z - expectedB) < 1e-3, "B mismatch: \(output.z) vs \(expectedB)")
+        // Sanity check the green channel is *not* the one being driven down.
+        #expect(output.y >= input.y - 1e-3, "Green should not have been reduced on a blue-screen despill.")
+    }
+
     @Test("Despill Neutral with low R/B does not amplify noise past the 1e-3 guard")
     func despillNeutralStability() async throws {
         let entry: MetalDeviceCacheEntry
@@ -93,6 +145,7 @@ struct ShaderGoldenTests {
             foreground: sourceTexture,
             strength: 1.0,
             method: .neutral,
+            screenColor: SIMD3<Float>(0.08, 0.84, 0.08),
             entry: entry,
             commandBuffer: commandBuffer
         )
@@ -185,18 +238,24 @@ struct ShaderGoldenTests {
         }
     }
 
-    // MARK: - Green hint
+    // MARK: - Chroma hint
 
-    @Test("Green hint kernel matches the reference formula")
-    func greenHint() async throws {
+    @Test("Chroma hint kernel keys the screen colour and passes the foreground")
+    func chromaHint() async throws {
         let entry: MetalDeviceCacheEntry
         do { entry = try TestHarness.makeEntry() } catch { throw XCTSkipError("\(error)") }
 
-        // Two colours: a bright green (should map near 0 matte) and a
-        // warm fleshtone (should map near 1 matte).
+        // Three colours per screen: the screen colour itself (matte ≈ 0),
+        // a warm fleshtone (matte ≈ 1), and the *other* screen colour
+        // (matte ≈ 1 — must not be keyed by mistake). The third case is
+        // the regression gate: with the legacy green-only kernel a blue
+        // pixel would've keyed near 0 because it has high blue and low
+        // green, but only because the kernel was hard-coded to look at
+        // the green channel — the new screen-aware version must treat
+        // it as foreground when the chosen screen is green.
         let commandQueue = try makeCommandQueue(entry: entry)
 
-        func testColour(_ rgb: SIMD4<Float>) throws -> Float {
+        func testColour(_ rgb: SIMD4<Float>, screenColor: SIMD3<Float>) throws -> Float {
             let source = try makeColourTexture(
                 entry: entry, width: 1, height: 1, pixelFormat: .rgba32Float, colour: rgb
             )
@@ -204,8 +263,9 @@ struct ShaderGoldenTests {
                 Issue.record("Could not create command buffer.")
                 return -1
             }
-            let pooled = try RenderStages.generateGreenHint(
+            let pooled = try RenderStages.generateChromaHint(
                 source: source,
+                screenColor: screenColor,
                 entry: entry,
                 commandBuffer: commandBuffer
             )
@@ -224,11 +284,22 @@ struct ShaderGoldenTests {
             return hint
         }
 
-        let greenMatte = try testColour(SIMD4<Float>(0.05, 0.85, 0.10, 1.0))
-        let skinMatte = try testColour(SIMD4<Float>(0.60, 0.45, 0.40, 1.0))
+        let greenScreen = SIMD3<Float>(0.08, 0.84, 0.08)
+        let blueScreen = SIMD3<Float>(0.08, 0.16, 0.84)
 
-        #expect(greenMatte < 0.1, "Green pixel should produce matte near 0; got \(greenMatte).")
-        #expect(skinMatte > 0.95, "Skin pixel should produce matte near 1; got \(skinMatte).")
+        let greenOnGreen = try testColour(SIMD4<Float>(0.05, 0.85, 0.10, 1.0), screenColor: greenScreen)
+        let skinOnGreen = try testColour(SIMD4<Float>(0.60, 0.45, 0.40, 1.0), screenColor: greenScreen)
+        let blueOnGreen = try testColour(SIMD4<Float>(0.05, 0.10, 0.85, 1.0), screenColor: greenScreen)
+        let blueOnBlue = try testColour(SIMD4<Float>(0.05, 0.10, 0.85, 1.0), screenColor: blueScreen)
+        let skinOnBlue = try testColour(SIMD4<Float>(0.60, 0.45, 0.40, 1.0), screenColor: blueScreen)
+        let greenOnBlue = try testColour(SIMD4<Float>(0.05, 0.85, 0.10, 1.0), screenColor: blueScreen)
+
+        #expect(greenOnGreen < 0.1, "Green pixel on green screen should matte near 0; got \(greenOnGreen).")
+        #expect(skinOnGreen > 0.95, "Skin pixel on green screen should matte near 1; got \(skinOnGreen).")
+        #expect(blueOnGreen > 0.95, "Blue pixel on green screen must matte near 1 (foreground); got \(blueOnGreen).")
+        #expect(blueOnBlue < 0.1, "Blue pixel on blue screen should matte near 0; got \(blueOnBlue).")
+        #expect(skinOnBlue > 0.95, "Skin pixel on blue screen should matte near 1; got \(skinOnBlue).")
+        #expect(greenOnBlue > 0.95, "Green pixel on blue screen must matte near 1 (foreground); got \(greenOnBlue).")
     }
 
     // MARK: - Refiner strength blend

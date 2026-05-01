@@ -65,11 +65,20 @@ enum RenderStages {
         return output
     }
 
-    // MARK: - Green hint / rough matte
+    // MARK: - Chroma-prior hint / rough matte
 
-    /// Generates a green-bias hint texture from the source RGB.
-    static func generateGreenHint(
+    /// Generates a screen-colour-bias hint texture from the source RGB.
+    /// The kernel reads `screenColor` to pick which channel to treat as
+    /// the screen — pass `ScreenColor.green.canonicalScreenReference`
+    /// for green keys, `ScreenColor.blue.canonicalScreenReference` for
+    /// blue keys. Now that the renderer no longer rotates blue input
+    /// into the green domain, getting this colour right is critical:
+    /// a green-biased hint applied to blue-screen RGB produces a hint
+    /// that says "everything is foreground" and the model has nothing
+    /// useful to refine.
+    static func generateChromaHint(
         source: any MTLTexture,
+        screenColor: SIMD3<Float>,
         entry: MetalDeviceCacheEntry,
         commandBuffer: any MTLCommandBuffer
     ) throws -> PooledTexture {
@@ -82,13 +91,19 @@ enum RenderStages {
             output.returnManually()
             throw MetalDeviceCacheError.commandEncoderCreationFailed
         }
-        encoder.label = "CorridorKey by LateNite Green Hint"
-        encoder.setComputePipelineState(entry.computePipelines.greenHint)
+        encoder.label = "CorridorKey by LateNite Chroma Hint"
+        encoder.setComputePipelineState(entry.computePipelines.chromaHint)
         encoder.setTexture(source, index: Int(CKTextureIndexSource.rawValue))
         encoder.setTexture(output.texture, index: Int(CKTextureIndexOutput.rawValue))
+        var params = CKChromaHintParams(screenColor: screenColor)
+        encoder.setBytes(
+            &params,
+            length: MemoryLayout<CKChromaHintParams>.size,
+            index: Int(CKBufferIndexChromaHintParams.rawValue)
+        )
         dispatch(
             encoder: encoder,
-            pipeline: entry.computePipelines.greenHint,
+            pipeline: entry.computePipelines.chromaHint,
             width: output.texture.width,
             height: output.texture.height
         )
@@ -398,11 +413,15 @@ enum RenderStages {
     // MARK: - Despill
 
     /// Runs the despill pass. `strength == 0` returns `nil` so the caller
-    /// continues with the original foreground texture.
+    /// continues with the original foreground texture. `screenColor` is
+    /// the canonical reference for the keyed colour — the kernel uses
+    /// it to identify which channel carries the spill, so the same
+    /// pipeline despills both green and blue without per-colour code.
     static func despill(
         foreground: any MTLTexture,
         strength: Float,
         method: SpillMethod,
+        screenColor: SIMD3<Float>,
         entry: MetalDeviceCacheEntry,
         commandBuffer: any MTLCommandBuffer
     ) throws -> PooledTexture? {
@@ -421,7 +440,8 @@ enum RenderStages {
         encoder.setTexture(output.texture, index: Int(CKTextureIndexOutput.rawValue))
         var params = CKDespillParams(
             strength: strength,
-            method: method.shaderValue
+            method: method.shaderValue,
+            screenColor: screenColor
         )
         encoder.setBytes(
             &params,

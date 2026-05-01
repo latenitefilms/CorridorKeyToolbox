@@ -48,7 +48,8 @@ typedef enum CorridorKeyBufferIndex {
     CKBufferIndexEdgeDecontaminateParams = 9,
     CKBufferIndexCCLabelParams = 10,
     CKBufferIndexCCLabelCounts = 11,
-    CKBufferIndexTemporalBlendParams = 12
+    CKBufferIndexTemporalBlendParams = 12,
+    CKBufferIndexChromaHintParams = 13
 } CorridorKeyBufferIndex;
 
 // Mirrors the Swift `SpillMethod` enum.
@@ -81,9 +82,18 @@ typedef struct CKVertex2D {
 } CKVertex2D;
 
 // Per-frame parameter blocks. Kept tightly packed for efficient Metal uploads.
+//
+// `screenColor` is the canonical reference for the keyed screen colour
+// in linear RGB (e.g. `(0.08, 0.84, 0.08)` for green or `(0.08, 0.16,
+// 0.84)` for blue). The kernel reads it to identify which channel is
+// the screen channel — every spill method generalises to "remove
+// excess of the screen channel and rebalance across the two non-screen
+// channels", so a single kernel handles both colours without branching
+// on a separate `screenColor` enum.
 typedef struct CKDespillParams {
     float strength;
     int method; // CorridorKeySpillMethod
+    vector_float3 screenColor;
 } CKDespillParams;
 
 typedef struct CKAlphaEdgeParams {
@@ -133,12 +143,23 @@ typedef struct CKLightWrapParams {
 
 // Edge colour decontamination parameters. Subtracts screen-colour residual
 // from the foreground RGB, weighted by `(1 - matte)` so the opaque interior
-// is never touched. `screenColor` is the reference screen colour (green by
-// default, rotated from blue via `ScreenColorEstimator`).
+// is never touched. `screenColor` is the canonical reference for the keyed
+// screen — green or blue, picked from `ScreenColor.canonicalScreenReference`
+// in Swift.
 typedef struct CKEdgeDecontaminateParams {
     float strength;
     vector_float3 screenColor;
 } CKEdgeDecontaminateParams;
+
+// Chroma-prior alpha-hint generator parameters. The hint is a single-channel
+// matte derived from the source RGB, biased to produce `0` where the screen
+// colour dominates and `1` where the foreground does. `screenColor` selects
+// which channel the kernel treats as the screen — passing canonical green
+// reproduces the v1.0 behaviour, passing canonical blue keys blue-screen
+// footage without rotation.
+typedef struct CKChromaHintParams {
+    vector_float3 screenColor;
+} CKChromaHintParams;
 
 // Connected-components despeckle parameters.
 // * `areaThreshold` — a component is preserved if its pixel count is at or

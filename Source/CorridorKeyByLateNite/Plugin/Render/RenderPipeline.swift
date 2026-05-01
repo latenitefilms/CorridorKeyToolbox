@@ -646,8 +646,9 @@ final class RenderPipeline: @unchecked Sendable {
             // matching branch in `runPreInference` for why a pure
             // zero-base hint produces nonsense mattes. Manual mode's
             // contract is enforced upstream by the empty-hint guard.
-            hintPooled = try RenderStages.generateGreenHint(
+            hintPooled = try RenderStages.generateChromaHint(
                 source: rotatedSource,
+                screenColor: screenTransform.estimatedScreenReference,
                 entry: context.entry,
                 commandBuffer: commandBuffer
             )
@@ -871,8 +872,9 @@ final class RenderPipeline: @unchecked Sendable {
             // refuses to run Manual mode without at least one user
             // dot, so the user's clicks still gate progress; they
             // just augment the chroma prior on top of feeding it.
-            hintTexturePooled = try RenderStages.generateGreenHint(
+            hintTexturePooled = try RenderStages.generateChromaHint(
                 source: rotatedSource,
+                screenColor: screenTransform.estimatedScreenReference,
                 entry: entry,
                 commandBuffer: preCommandBuffer
             )
@@ -976,18 +978,19 @@ final class RenderPipeline: @unchecked Sendable {
         )
         let upscaledForeground = upscaledForegroundPooled?.texture ?? foregroundAtInferenceResolution
 
-        // 2. Despill. The kernel removes excess green from the
-        // foreground; on blue-screen footage the foreground sits in
-        // the blue domain (no rotation hop) and the green channel is
-        // already low, so this stage is a near-no-op for Blue. The
-        // blue MLX model's `fg_final` head does the heavy spill
-        // suppression itself — the additional kernel is only there
-        // for users who want to push despill harder. Extending the
-        // shader to a screen-colour-aware projection is a follow-up.
+        // 2. Despill. The kernel takes `screenColor` and parameterises
+        // its math on the dominant channel — green for green keys,
+        // blue for blue keys — so the same dispatch handles both
+        // colour packs without a per-colour code path. The blue MLX
+        // model's `fg_final` head already does most of the spill
+        // suppression on its own; this stage stays in the pipeline as
+        // a user-controllable knob for footage that benefits from a
+        // harder push.
         let despilledPooled = try RenderStages.despill(
             foreground: upscaledForeground,
             strength: Float(inputs.state.despillStrength),
             method: inputs.state.spillMethod,
+            screenColor: inputs.state.screenColor.canonicalScreenReference,
             entry: context.entry,
             commandBuffer: postCommandBuffer
         )

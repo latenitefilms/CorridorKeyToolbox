@@ -55,7 +55,11 @@ final class CorridorKeyComputePipelines: Sendable {
     let morphologyVertical: any MTLComputePipelineState
     let gaussianHorizontal: any MTLComputePipelineState
     let gaussianVertical: any MTLComputePipelineState
-    let greenHint: any MTLComputePipelineState
+    /// Chroma-prior alpha-hint generator. Picks the screen channel
+    /// from `CKChromaHintParams.screenColor`, so the same pipeline
+    /// services both green and blue keys without needing a separate
+    /// kernel per colour.
+    let chromaHint: any MTLComputePipelineState
     let sourcePassthrough: any MTLComputePipelineState
     let applyScreenMatrix: any MTLComputePipelineState
     let resample: any MTLComputePipelineState
@@ -90,7 +94,7 @@ final class CorridorKeyComputePipelines: Sendable {
         morphologyVertical = try compute("corridorKeyMorphologyVerticalKernel")
         gaussianHorizontal = try compute("corridorKeyGaussianHorizontalKernel")
         gaussianVertical = try compute("corridorKeyGaussianVerticalKernel")
-        greenHint = try compute("corridorKeyGreenHintKernel")
+        chromaHint = try compute("corridorKeyChromaHintKernel")
         sourcePassthrough = try compute("corridorKeySourcePassthroughKernel")
         applyScreenMatrix = try compute("corridorKeyApplyScreenMatrixKernel")
         resample = try compute("corridorKeyResampleKernel")
