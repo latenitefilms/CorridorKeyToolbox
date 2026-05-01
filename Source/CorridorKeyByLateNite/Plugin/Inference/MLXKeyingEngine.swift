@@ -21,11 +21,40 @@ import simd
 import CorridorKeyToolboxLogic
 #endif
 
+/// Precision the `.mlxfn` bridge expects on its inputs/outputs. Bridges
+/// exported with `Source/scripts/export_mlxfn.py --fp16` use
+/// `.float16`; legacy bridges produced before that script existed use
+/// `.float32`. The engine probes the bundle for the fp16 variant first
+/// (its filename has an `_fp16` suffix) and falls back to fp32 when the
+/// fp16 file isn't available, so neither developer machines without the
+/// re-exported pack nor older test fixtures break.
+enum BridgePrecision: Sendable {
+    case float32
+    case float16
+
+    /// Bytes per scalar in the i/o tensors. Used by the Metal-side
+    /// buffer allocator to size the input ring.
+    var elementBytes: Int {
+        switch self {
+        case .float32: return 4
+        case .float16: return 2
+        }
+    }
+
+    /// Human-readable label for logs.
+    var displayName: String {
+        switch self {
+        case .float32: return "fp32"
+        case .float16: return "fp16"
+        }
+    }
+}
+
 /// Names of the bundled `.mlxfn` artefacts. Matches CorridorKey-Runtime's
 /// `{corridorkey,corridorkeyblue}_mlx_bridge_{N}.mlxfn` convention so the
-/// same Hugging Face / `prepare_mlx_model_pack.py` outputs can be consumed
-/// unmodified — the only difference between the two colour packs is the
-/// trained weights, the architecture is identical.
+/// same Hugging Face / `Source/scripts/export_mlxfn.py` outputs can be
+/// consumed unmodified — the only difference between the two colour
+/// packs is the trained weights, the architecture is identical.
 ///
 /// **Tiled inference** (deferred — needs upstream model export):
 /// The reference `corridorkey-mlx` Python implementation supports
@@ -48,18 +77,54 @@ import CorridorKeyToolboxLogic
 enum MLXBridgeArtifact {
 
     /// Supported bridge resolutions, in preference order from lowest to
-    /// highest. `closestSupportedResolution` walks this list. Both colour
-    /// packs ship the same five rungs so the ladder is colour-agnostic.
-    static let ladder: [Int] = [512, 768, 1024, 1536, 2048]
+    /// highest. `closestSupportedResolution` walks this list. Rungs ≤ 2048
+    /// run a full Hiera encoder at the rung size; the 4096 rung ships
+    /// only as an `_fp16.mlxfn` and is a *hybrid* bridge — input arrives
+    /// at 4096, the bridge downsamples internally to 1024 for the Hiera
+    /// encoder/decoder, then upsamples logits back to 4096 and runs the
+    /// CNN refiner at full target size. Mirrors the closed-source
+    /// approach for fast 4K keying without retraining: encoder grid drops
+    /// from 4 M tokens to 65 k tokens with no learned-weight changes.
+    static let ladder: [Int] = [512, 768, 1024, 1536, 2048, 4096]
 
     static func filename(forResolution resolution: Int, screenColor: ScreenColor) -> String {
-        "\(screenColor.bridgeFilenamePrefix)_\(resolution).mlxfn"
+        filename(forResolution: resolution, screenColor: screenColor, precision: .float32)
+    }
+
+    /// Precision-aware filename. The fp16 variants append `_fp16` to
+    /// the rung so an installed bundle can ship both alongside each
+    /// other and `BridgeVariantResolver` can pick the right one.
+    static func filename(forResolution resolution: Int, screenColor: ScreenColor, precision: BridgePrecision) -> String {
+        let suffix = precision == .float16 ? "_fp16" : ""
+        return "\(screenColor.bridgeFilenamePrefix)_\(resolution)\(suffix).mlxfn"
     }
 
     /// Returns the ladder rung that is at least as large as `requested`,
     /// falling back to the maximum if nothing larger exists.
     static func closestSupportedResolution(forRequested requested: Int) -> Int? {
         ladder.first(where: { $0 >= requested }) ?? ladder.last
+    }
+}
+
+/// Resolves the best available bridge file in the bundle for a given
+/// `(rung, screenColor)`. Prefers the fp16 variant when present, falls
+/// back to fp32. Centralised so call sites never have to re-implement
+/// the prefer-fp16 policy.
+enum BridgeVariantResolver {
+    static func resolve(rung: Int, screenColor: ScreenColor) -> (URL, BridgePrecision)? {
+        let halfFilename = MLXBridgeArtifact.filename(
+            forResolution: rung, screenColor: screenColor, precision: .float16
+        )
+        if let url = MLXBridgeResourceLocator.url(for: halfFilename) {
+            return (url, .float16)
+        }
+        let floatFilename = MLXBridgeArtifact.filename(
+            forResolution: rung, screenColor: screenColor, precision: .float32
+        )
+        if let url = MLXBridgeResourceLocator.url(for: floatFilename) {
+            return (url, .float32)
+        }
+        return nil
     }
 }
 
@@ -177,6 +242,10 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
     /// that asks for the same rung at a different colour and forces a
     /// fresh `ImportedFunction` for the new bridge file.
     private var loadedScreenColor: ScreenColor = .green
+    /// Precision of the currently-loaded bridge. Determines which Metal
+    /// kernel pair the writeback path uses and what dtype the engine
+    /// constructs the input MLXArray with.
+    private var loadedPrecision: BridgePrecision = .float32
 
     /// Reusable scratch buffer for the `.cpuStaging` strategy. Sized at
     /// warm-up so per-frame inference doesn't pay the 67 MB allocation
@@ -227,8 +296,17 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         guard let rung = MLXBridgeArtifact.closestSupportedResolution(forRequested: resolution) else {
             return false
         }
-        let filename = MLXBridgeArtifact.filename(forResolution: rung, screenColor: screenColor)
-        return MLXBridgeResourceLocator.url(for: filename) != nil
+        return BridgeVariantResolver.resolve(rung: rung, screenColor: screenColor) != nil
+    }
+
+    /// Precision the currently-loaded bridge expects on its input/output
+    /// tensors. `.float32` until a successful `prepare` call lands. The
+    /// pre-inference pipeline asks for this so it can size the input
+    /// buffer and pick the right normalise kernel.
+    func currentPrecision() -> BridgePrecision {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return loadedPrecision
     }
 
     func prepare(resolution: Int, screenColor: ScreenColor) async throws {
@@ -237,23 +315,35 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
                 "No MLX bridge file bundled for \(resolution)px."
             )
         }
-        let filename = MLXBridgeArtifact.filename(forResolution: rung, screenColor: screenColor)
-        guard let bridgeURL = MLXBridgeResourceLocator.url(for: filename) else {
+        guard let (bridgeURL, precision) = BridgeVariantResolver.resolve(
+            rung: rung, screenColor: screenColor
+        ) else {
             throw KeyingInferenceError.modelUnavailable(
                 "No \(screenColor.displayName) MLX bridge bundled for \(resolution)px."
             )
         }
-        try await prepare(bridgeURL: bridgeURL, rung: rung, screenColor: screenColor)
+        try await prepare(bridgeURL: bridgeURL, rung: rung, screenColor: screenColor, precision: precision)
     }
 
     /// Test entry point that loads the bridge from an explicit URL. Useful
     /// from SPM unit tests where the `.mlxfn` lives in the test target's
     /// resources bundle (which is not enumerated by `Bundle.allBundles`).
     /// Production callers should use `prepare(resolution:screenColor:)`.
-    func prepare(bridgeURL: URL, rung: Int, screenColor: ScreenColor) async throws {
-        if alreadyLoaded(rung: rung, screenColor: screenColor) { return }
+    /// `precision` defaults to `.float32` for backward compatibility with
+    /// tests that hand a legacy fp32 bridge directly; the production
+    /// `prepare(resolution:screenColor:)` path resolves the precision from
+    /// the bundle and forwards it through.
+    func prepare(
+        bridgeURL: URL,
+        rung: Int,
+        screenColor: ScreenColor,
+        precision: BridgePrecision = .float32
+    ) async throws {
+        if alreadyLoaded(rung: rung, screenColor: screenColor, precision: precision) { return }
 
-        PluginLog.notice("Loading MLX bridge from \(bridgeURL.path) (\(screenColor.displayName) screen).")
+        PluginLog.notice(
+            "Loading MLX bridge from \(bridgeURL.path) (\(screenColor.displayName) screen, \(precision.displayName))."
+        )
         let function: ImportedFunction
         do {
             function = try ImportedFunction(url: bridgeURL)
@@ -267,17 +357,29 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         // allocate the Metal buffer pool. Finishing this before we advertise
         // the engine as loaded means the first real render frame never pays a
         // multi-second stall while MLX compiles on demand.
-        await warmJIT(function: function, rung: rung)
-        storeFunction(function, rung: rung, screenColor: screenColor)
+        await warmJIT(function: function, rung: rung, precision: precision)
+        storeFunction(function, rung: rung, screenColor: screenColor, precision: precision)
+        prewarmVisionHint()
+    }
+
+    /// Issues a tiny synthetic Vision request so the foreground-instance
+    /// model is loaded onto the Neural Engine before the user's first
+    /// analyse frame asks for it. The first `perform` of a session is
+    /// the slow one (~50–100 ms cold); priming here hides it. Runs on
+    /// the same warm-up task so callers don't see this cost either.
+    private func prewarmVisionHint() {
+        guard #available(macOS 14.0, *) else { return }
+        guard let engine = cacheEntry.visionHintEngine() as? VisionHintEngine else { return }
+        engine.prewarm()
     }
 
     /// Runs a throwaway inference on a zero tensor so MLX compiles the graph
     /// and warms the Metal buffer cache. Any failure here is non-fatal — the
     /// real inference will surface the same error to the caller later.
-    private func warmJIT(function: ImportedFunction, rung: Int) async {
+    private func warmJIT(function: ImportedFunction, rung: Int, precision: BridgePrecision) async {
         let warmupStart = Date()
-        let zeros = [Float](repeating: 0, count: rung * rung * 4)
-        let input = MLXArray(zeros, [1, rung, rung, 4])
+        let dtype: DType = precision == .float16 ? .float16 : .float32
+        let input = MLXArray.zeros([1, rung, rung, 4], dtype: dtype)
         do {
             let outputs = try withError {
                 try function(input)
@@ -288,7 +390,9 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
             return
         }
         let elapsedSeconds = Date().timeIntervalSince(warmupStart)
-        PluginLog.notice("MLX JIT warm-up finished in \(String(format: "%.2f", elapsedSeconds))s for \(rung)px.")
+        PluginLog.notice(
+            "MLX JIT warm-up finished in \(String(format: "%.2f", elapsedSeconds))s for \(rung)px (\(precision.displayName))."
+        )
     }
 
     func run(request: KeyingInferenceRequest, output: KeyingInferenceOutput) throws {
@@ -310,7 +414,7 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         // Feed the device capability cache so subsequent `automatic`
         // ceiling decisions reflect real measurements, not the static
         // RAM-tier heuristic.
-        let (_, rung) = loadedState()
+        let (_, rung, _) = loadedState()
         if rung > 0 {
             DeviceCapabilityCache.shared.record(
                 deviceRegistryID: cacheEntry.device.registryID,
@@ -321,12 +425,12 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
     }
 
     private func runBody(request: KeyingInferenceRequest, output: KeyingInferenceOutput) throws {
-        let (function, rung) = loadedState()
+        let (function, rung, precision) = loadedState()
         guard let function, rung > 0 else {
             throw KeyingInferenceError.modelUnavailable("MLX bridge not prepared.")
         }
         _ = request.rawSourceTexture
-        let expectedBytes = rung * rung * 4 * MemoryLayout<Float>.size
+        let expectedBytes = rung * rung * 4 * precision.elementBytes
         guard request.normalisedInputBuffer.length >= expectedBytes else {
             throw KeyingInferenceError.modelUnavailable(
                 "MLX input buffer is \(request.normalisedInputBuffer.length) bytes; expected ≥ \(expectedBytes)."
@@ -337,15 +441,25 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         // `InputStrategy` for the trade-off and the wall-time data.
         let inputBuffer = request.normalisedInputBuffer
         let inputArray: MLXArray
+        let mlxDType: DType = precision == .float16 ? .float16 : .float32
         switch inputStrategy {
         case .zeroCopy:
             inputArray = MLXArray(
                 rawPointer: inputBuffer.contents(),
                 [1, rung, rung, 4],
-                dtype: .float32,
+                dtype: mlxDType,
                 finalizer: { _ = inputBuffer }
             )
         case .cpuStaging:
+            // CPU staging is fp32-only: it goes through a Swift `[Float]`
+            // scratch. fp16 bridges require the zero-copy path because we
+            // don't ship a Swift `Float16` scratch and the strategy is
+            // only kept for parity testing with the legacy fp32 bridges.
+            guard precision == .float32 else {
+                throw KeyingInferenceError.modelUnavailable(
+                    "cpuStaging input strategy is only supported for fp32 bridges; current bridge is \(precision.displayName)."
+                )
+            }
             let expectedCount = rung * rung * 4
             if inputScratch.count != expectedCount {
                 inputScratch = [Float](repeating: 0, count: expectedCount)
@@ -412,17 +526,14 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         }
         commandBuffer.label = "CorridorKey by LateNite MLX Writeback"
 
-        try RenderStages.writeAlphaBufferToTexture(
-            buffer: alphaMLXBuffer,
-            destination: output.alphaTexture,
+        try RenderStages.writeMLXOutputsToTextures(
+            alphaBuffer: alphaMLXBuffer,
+            foregroundBuffer: foregroundMLXBuffer,
+            alphaDestination: output.alphaTexture,
+            foregroundDestination: output.foregroundTexture,
             entry: cacheEntry,
-            commandBuffer: commandBuffer
-        )
-        try RenderStages.writeForegroundBufferToTexture(
-            buffer: foregroundMLXBuffer,
-            destination: output.foregroundTexture,
-            entry: cacheEntry,
-            commandBuffer: commandBuffer
+            commandBuffer: commandBuffer,
+            precision: precision
         )
 
         // Retain the MLXArrays (and the MTLBuffer aliases they back) until
@@ -466,29 +577,39 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
 
     // MARK: - Lock-guarded state helpers
 
-    private func alreadyLoaded(rung: Int, screenColor: ScreenColor) -> Bool {
+    private func alreadyLoaded(rung: Int, screenColor: ScreenColor, precision: BridgePrecision) -> Bool {
         stateLock.lock()
         defer { stateLock.unlock() }
         return importedFunction != nil
             && loadedResolution == rung
             && loadedScreenColor == screenColor
+            && loadedPrecision == precision
     }
 
-    private func loadedState() -> (ImportedFunction?, Int) {
+    private func loadedState() -> (ImportedFunction?, Int, BridgePrecision) {
         stateLock.lock()
         defer { stateLock.unlock() }
-        return (importedFunction, loadedResolution)
+        return (importedFunction, loadedResolution, loadedPrecision)
     }
 
-    private func storeFunction(_ function: ImportedFunction, rung: Int, screenColor: ScreenColor) {
+    private func storeFunction(
+        _ function: ImportedFunction,
+        rung: Int,
+        screenColor: ScreenColor,
+        precision: BridgePrecision
+    ) {
         stateLock.lock()
         defer { stateLock.unlock() }
-        if importedFunction != nil, loadedResolution == rung, loadedScreenColor == screenColor {
+        if importedFunction != nil,
+           loadedResolution == rung,
+           loadedScreenColor == screenColor,
+           loadedPrecision == precision {
             return
         }
         importedFunction = function
         loadedResolution = rung
         loadedScreenColor = screenColor
+        loadedPrecision = precision
     }
 
     /// Validates that the loaded bridge's outputs have the expected NHWC layout.

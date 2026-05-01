@@ -261,16 +261,23 @@ enum RenderStages {
         inferenceResolution: Int,
         workingToRec709: simd_float3x3,
         entry: MetalDeviceCacheEntry,
-        commandBuffer: any MTLCommandBuffer
+        commandBuffer: any MTLCommandBuffer,
+        precision: BridgePrecision = .float32
     ) throws -> any MTLBuffer {
-        guard let buffer = entry.normalizedInputBuffer(forRung: inferenceResolution) else {
+        guard let buffer = entry.normalizedInputBuffer(
+            forRung: inferenceResolution,
+            elementBytes: precision.elementBytes
+        ) else {
             throw MetalDeviceCacheError.textureAllocationFailed
         }
         guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
             throw MetalDeviceCacheError.commandEncoderCreationFailed
         }
-        encoder.label = "CorridorKey by LateNite Normalise → Buffer"
-        encoder.setComputePipelineState(entry.computePipelines.normalizeToBuffer)
+        encoder.label = "CorridorKey by LateNite Normalise → Buffer (\(precision.displayName))"
+        let pipeline: any MTLComputePipelineState = precision == .float16
+            ? entry.computePipelines.normalizeToHalfBuffer
+            : entry.computePipelines.normalizeToBuffer
+        encoder.setComputePipelineState(pipeline)
         encoder.setTexture(source, index: Int(CKTextureIndexSource.rawValue))
         encoder.setTexture(hint, index: Int(CKTextureIndexHint.rawValue))
         encoder.setBuffer(buffer, offset: 0, index: 0)
@@ -293,7 +300,7 @@ enum RenderStages {
         )
         dispatch(
             encoder: encoder,
-            pipeline: entry.computePipelines.normalizeToBuffer,
+            pipeline: pipeline,
             width: inferenceResolution,
             height: inferenceResolution
         )
@@ -395,6 +402,48 @@ enum RenderStages {
             pipeline: entry.computePipelines.foregroundBufferToTexture,
             width: destination.width,
             height: destination.height
+        )
+        encoder.endEncoding()
+    }
+
+    /// Fused MLX writeback: encodes a single compute pass that reads
+    /// both the alpha (1-channel) and foreground (3-channel) MLX output
+    /// buffers and writes both destination textures. Replaces the prior
+    /// `writeAlphaBufferToTexture` + `writeForegroundBufferToTexture`
+    /// pair, saving one encoder boundary per inferred frame. Both
+    /// destinations must share dimensions (the inference resolution).
+    /// `precision` selects which dtype the kernel reads — `.float16`
+    /// for fp16 bridges (`half` reads), `.float32` for the legacy fp32
+    /// bridges. The destinations are mixed-precision: alpha stays
+    /// `r32Float` because the analyse path reads it back as `[Float]`,
+    /// foreground is `rgba16Float` because it only feeds the GPU
+    /// compose pass (Metal auto-converts `float4` writes to half).
+    static func writeMLXOutputsToTextures(
+        alphaBuffer: any MTLBuffer,
+        foregroundBuffer: any MTLBuffer,
+        alphaDestination: any MTLTexture,
+        foregroundDestination: any MTLTexture,
+        entry: MetalDeviceCacheEntry,
+        commandBuffer: any MTLCommandBuffer,
+        precision: BridgePrecision = .float32
+    ) throws {
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            throw MetalDeviceCacheError.commandEncoderCreationFailed
+        }
+        encoder.label = "CorridorKey by LateNite MLX Writeback (\(precision.displayName))"
+        let pipeline: any MTLComputePipelineState = precision == .float16
+            ? entry.computePipelines.mlxWritebackFusedHalf
+            : entry.computePipelines.mlxWritebackFused
+        encoder.setComputePipelineState(pipeline)
+        encoder.setBuffer(alphaBuffer, offset: 0, index: 0)
+        encoder.setBuffer(foregroundBuffer, offset: 0, index: 1)
+        encoder.setTexture(alphaDestination, index: 0)
+        encoder.setTexture(foregroundDestination, index: 1)
+        dispatch(
+            encoder: encoder,
+            pipeline: pipeline,
+            width: alphaDestination.width,
+            height: alphaDestination.height
         )
         encoder.endEncoding()
     }

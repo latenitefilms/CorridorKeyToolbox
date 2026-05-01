@@ -264,6 +264,14 @@ final class RenderPipeline: @unchecked Sendable {
             deviceRegistryID: device.registryID
         )
 
+        // Resolve the bridge variant up front so the pre-inference
+        // normalise pass writes the right dtype into the right-sized
+        // buffer. The variant resolver prefers fp16 when present in the
+        // bundle and silently falls back to legacy fp32 otherwise, so
+        // installations that haven't yet re-exported keep working.
+        let bridgeRung = MLXBridgeArtifact.closestSupportedResolution(forRequested: inferenceResolution) ?? inferenceResolution
+        let bridgePrecision = BridgeVariantResolver.resolve(rung: bridgeRung, screenColor: state.screenColor)?.1 ?? .float32
+
         let pre = try runPreInference(
             sourceTexture: sourceTexture,
             hintTexture: nil,
@@ -274,7 +282,8 @@ final class RenderPipeline: @unchecked Sendable {
             commandQueue: commandQueue,
             screenTransform: screenTransform,
             gamutTransform: gamutTransform,
-            inferenceResolution: inferenceResolution
+            inferenceResolution: inferenceResolution,
+            bridgePrecision: bridgePrecision
         )
 
         let cacheKey = InferenceCacheKey(
@@ -287,7 +296,8 @@ final class RenderPipeline: @unchecked Sendable {
             request: KeyingInferenceRequest(
                 normalisedInputBuffer: pre.normalisedInputBuffer,
                 rawSourceTexture: pre.rawSourceAtInferenceResolution.texture,
-                inferenceResolution: inferenceResolution
+                inferenceResolution: inferenceResolution,
+                inputPrecision: bridgePrecision
             ),
             screenColor: state.screenColor,
             cacheEntry: entry,
@@ -826,7 +836,8 @@ final class RenderPipeline: @unchecked Sendable {
         commandQueue: any MTLCommandQueue,
         screenTransform: ScreenColorTransform,
         gamutTransform: WorkingSpaceTransform,
-        inferenceResolution: Int
+        inferenceResolution: Int,
+        bridgePrecision: BridgePrecision = .float32
     ) throws -> PreInferenceArtifacts {
         // Vision runs on Neural Engine in parallel with the GPU pre-pass,
         // so kick it off BEFORE we encode the screen matrix. Vision reads
@@ -943,7 +954,8 @@ final class RenderPipeline: @unchecked Sendable {
             inferenceResolution: inferenceResolution,
             workingToRec709: gamutTransform.workingToRec709,
             entry: entry,
-            commandBuffer: preCommandBuffer
+            commandBuffer: preCommandBuffer,
+            precision: bridgePrecision
         )
 
         let rawSourceAtInferenceResolutionPooled = try RenderStages.resample(

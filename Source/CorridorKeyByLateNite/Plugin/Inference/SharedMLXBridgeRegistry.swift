@@ -177,16 +177,53 @@ final class SharedMLXBridgeRegistry: @unchecked Sendable {
     /// already running and the engine isn't already warm. Idempotent —
     /// repeated calls return immediately when a task is in flight or the
     /// engine is ready.
+    ///
+    /// On devices whose unified-memory budget can hold every rung
+    /// (≥ 48 GB working set; see `bridgeBudget(forWorkingSetGB:)`),
+    /// the warm-up also fires off background warm-ups for the rungs
+    /// immediately above and below `rung` in `MLXBridgeArtifact.ladder`
+    /// at `.utility` priority. The user pays nothing on the hot path
+    /// (we return as soon as the primary task is queued), and a quality
+    /// toggle to a neighbouring rung becomes instant instead of paying
+    /// a fresh warm-up. The fan-out is bounded to one level deep so
+    /// repeated quality toggles don't cascade into a full sweep of the
+    /// ladder on lower-tier hardware that doesn't have headroom.
     func beginWarmup(
         deviceRegistryID: UInt64,
         rung: Int,
         screenColor: ScreenColor,
         cacheEntry: MetalDeviceCacheEntry
     ) {
+        beginWarmupInternal(
+            deviceRegistryID: deviceRegistryID,
+            rung: rung,
+            screenColor: screenColor,
+            cacheEntry: cacheEntry,
+            fanOutNeighbours: true
+        )
+    }
+
+    private func beginWarmupInternal(
+        deviceRegistryID: UInt64,
+        rung: Int,
+        screenColor: ScreenColor,
+        cacheEntry: MetalDeviceCacheEntry,
+        fanOutNeighbours: Bool
+    ) {
         let key = Key(deviceRegistryID: deviceRegistryID, rung: rung, screenColor: screenColor)
         lock.lock()
         if engines[key] != nil || warmupTasks[key] != nil {
             lock.unlock()
+            // The primary is already warm or in flight; on a fan-out-
+            // capable call we still try to seed the neighbours below,
+            // since they're scheduled independently of this one.
+            if fanOutNeighbours {
+                fanOutNeighbourWarmups(
+                    rung: rung,
+                    screenColor: screenColor,
+                    cacheEntry: cacheEntry
+                )
+            }
             return
         }
         // Clear prior failure so a retry gets a fresh status.
@@ -202,13 +239,50 @@ final class SharedMLXBridgeRegistry: @unchecked Sendable {
         // analyse thread. Eager warm-up (no caller waiting) is
         // also a one-shot per `(device, rung, colour)`, so bumping
         // the priority doesn't inflate steady-state CPU usage either.
-        let task = Task.detached(priority: .userInitiated) { [weak self] in
+        let priority: TaskPriority = fanOutNeighbours ? .userInitiated : .utility
+        let task = Task.detached(priority: priority) { [weak self] in
             guard let self else { return }
             await self.runWarmup(key: key, cacheEntry: cacheEntry, rung: rung, screenColor: screenColor)
         }
         lock.lock()
         warmupTasks[key] = task
         lock.unlock()
+
+        if fanOutNeighbours {
+            fanOutNeighbourWarmups(
+                rung: rung,
+                screenColor: screenColor,
+                cacheEntry: cacheEntry
+            )
+        }
+    }
+
+    /// Kicks off background warm-ups for the ladder rungs immediately
+    /// above and below `rung` at `.utility` priority, but only when the
+    /// device's per-bridge budget can hold every rung at once. On lower-
+    /// tier hardware the LRU would just evict a recently-warmed rung to
+    /// fit the neighbour, which is strictly worse than not warming it.
+    /// `fanOut: false` ensures the recursive entry doesn't itself fan
+    /// out further.
+    private func fanOutNeighbourWarmups(
+        rung: Int,
+        screenColor: ScreenColor,
+        cacheEntry: MetalDeviceCacheEntry
+    ) {
+        let budget = bridgeBudget(for: cacheEntry.device)
+        guard budget >= MLXBridgeArtifact.ladder.count else { return }
+        guard let index = MLXBridgeArtifact.ladder.firstIndex(of: rung) else { return }
+        let neighbourIndices = [index - 1, index + 1].filter { 0..<MLXBridgeArtifact.ladder.count ~= $0 }
+        for neighbourIndex in neighbourIndices {
+            let neighbourRung = MLXBridgeArtifact.ladder[neighbourIndex]
+            beginWarmupInternal(
+                deviceRegistryID: cacheEntry.device.registryID,
+                rung: neighbourRung,
+                screenColor: screenColor,
+                cacheEntry: cacheEntry,
+                fanOutNeighbours: false
+            )
+        }
     }
 
     /// Current warm-up status for the given `(device, rung, screenColor)`.
@@ -349,10 +423,11 @@ final class SharedMLXBridgeRegistry: @unchecked Sendable {
             return 4
         default:
             // Plenty of headroom — cap matches the number of bundled
-            // rungs (512 / 768 / 1024 / 1536 / 2048) so we never have
-            // to touch a stored bridge once the user has loaded one
-            // of each.
-            return 5
+            // rungs (512 / 768 / 1024 / 1536 / 2048 / 4096-hybrid) so
+            // we never have to touch a stored bridge once the user has
+            // loaded one of each. Bumped from 5 → 6 when the 4096
+            // hybrid bridge landed.
+            return 6
         }
     }
 

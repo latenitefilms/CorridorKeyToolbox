@@ -24,10 +24,11 @@ import CorridorKeyToolboxLogic
 /// `rawSourceTexture` instead, so the `normalisedInputBuffer` can stay
 /// entirely in a format the neural bridge owns.
 struct KeyingInferenceRequest {
-    /// NHWC-packed float32 tensor (`[1, rung, rung, 4]`) — the first three
+    /// NHWC-packed tensor (`[1, rung, rung, 4]`) — the first three
     /// channels are ImageNet-normalised RGB, the fourth is the alpha hint.
-    /// Storage mode is `.shared` so MLX can alias the bytes via
-    /// `init(rawPointer:)`.
+    /// Element dtype matches `inputPrecision`: 4 bytes per scalar for
+    /// fp32, 2 bytes for fp16. Storage mode is `.shared` so MLX can
+    /// alias the bytes via `init(rawPointer:)`.
     let normalisedInputBuffer: any MTLBuffer
     /// Raw RGB source at inference resolution, in 0..1 linear/sRGB space.
     /// Any GPU engine that doesn't need the neural network should read
@@ -35,6 +36,24 @@ struct KeyingInferenceRequest {
     let rawSourceTexture: any MTLTexture
     /// Square side length used for inference.
     let inferenceResolution: Int
+    /// Precision the loaded `.mlxfn` bridge expects on its inputs and
+    /// outputs. The pre-inference normalise kernel writes the buffer
+    /// in this dtype; the writeback kernel reads MLX's outputs in the
+    /// same dtype. Defaults to `.float32` for back-compat with callers
+    /// that haven't been precision-plumbed yet.
+    let inputPrecision: BridgePrecision
+
+    init(
+        normalisedInputBuffer: any MTLBuffer,
+        rawSourceTexture: any MTLTexture,
+        inferenceResolution: Int,
+        inputPrecision: BridgePrecision = .float32
+    ) {
+        self.normalisedInputBuffer = normalisedInputBuffer
+        self.rawSourceTexture = rawSourceTexture
+        self.inferenceResolution = inferenceResolution
+        self.inputPrecision = inputPrecision
+    }
 }
 
 /// Textures the engine writes into. Both are created by the caller at the

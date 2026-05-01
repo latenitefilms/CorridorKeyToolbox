@@ -92,6 +92,45 @@ final class VisionHintEngine: @unchecked Sendable {
     private let requestLock = NSLock()
     private var cachedRequest: VNGenerateForegroundInstanceMaskRequest?
 
+    // MARK: - Frame-similarity memoisation
+    //
+    // Vision typically takes 10–30 ms per frame on the Neural Engine.
+    // In an analyse-clip pass over a locked-off shot, consecutive
+    // frames are visually almost identical and Vision returns a near-
+    // identical mask each time. We can skip the call by comparing an
+    // 8×8 BT.709-luminance signature of the source against the previous
+    // frame's signature: if they match within a small mean-absolute-
+    // error threshold, the cached mask is reused.
+    //
+    // The signature is computed by `corridorKeyVisionSignatureKernel`
+    // (see `CorridorKeyShaders.metal`) into an `.r8Unorm` 8×8 staging
+    // texture in shared storage; we then copy 64 bytes back to a
+    // scratch array and compare in Swift. The whole round trip is
+    // sub-millisecond on Apple Silicon — strictly cheaper than a fresh
+    // Vision call once the cache has primed.
+    //
+    // Lifetime: the cached `VisionMask` keeps its underlying private
+    // texture alive for as long as we hold the cache entry, so reusing
+    // it across frames is safe as long as no other code path writes to
+    // the texture (we don't — the texture is the blit destination of a
+    // one-shot upload at creation and is treated as read-only after).
+    private static let signatureSide = 8
+    private static let signatureBytes = signatureSide * signatureSide
+    /// Mean-absolute-error threshold (0…255 luma units) below which two
+    /// signatures are considered equivalent. Picked so a frame-to-frame
+    /// pan or a small subject motion still triggers a refresh, while
+    /// shutter noise and slow-grade exposure shifts don't.
+    private static let signatureMatchThresholdMAE: Double = 4.0
+    private let memoisationLock = NSLock()
+    private var lastSignature: [UInt8]?
+    private var lastSourceWidth: Int = 0
+    private var lastSourceHeight: Int = 0
+    private var lastMask: VisionMask?
+    /// Reusable 8×8 `.r8Unorm` staging texture the signature kernel
+    /// writes into. Lives in `.shared` storage so we can `getBytes` it
+    /// straight back to `signatureScratch` once the kernel commits.
+    private var signatureStagingTexture: (any MTLTexture)?
+
     init(cacheEntry: MetalDeviceCacheEntry) throws {
         self.cacheEntry = cacheEntry
         var cache: CVMetalTextureCache?
@@ -155,6 +194,18 @@ final class VisionHintEngine: @unchecked Sendable {
     /// device cache and is committed before this function returns —
     /// the returned texture is fully valid the moment it lands.
     func generateMask(source: any MTLTexture) throws -> VisionMask? {
+        // Frame-similarity check: if the source content matches the
+        // previous frame inside `signatureMatchThresholdMAE`, reuse the
+        // mask we computed last time. A signature failure is non-fatal
+        // — we just fall through to the full Vision path. We compute
+        // the signature exactly once per call: the same value is
+        // forwarded to `publishMaskCache` on a miss so we don't dispatch
+        // the kernel twice for the same source.
+        let signature = currentSourceSignature(source: source)
+        if let signature, let cached = cachedMaskIfSourceUnchanged(source: source, signature: signature) {
+            return cached
+        }
+
         // Tag the CIImage with a known colour space — without this
         // option Core Image picks a host-specific default and Vision
         // interprets the same `Float16` bytes differently depending
@@ -221,7 +272,130 @@ final class VisionHintEngine: @unchecked Sendable {
             throw VisionHintError.maskGenerationFailed(error)
         }
         PluginLog.notice("Vision hint: produced \(observation.allInstances.count) instance mask(s) at \(CVPixelBufferGetWidth(maskBuffer))×\(CVPixelBufferGetHeight(maskBuffer)).")
-        return try wrapAsMetalTexture(pixelBuffer: maskBuffer)
+        let mask = try wrapAsMetalTexture(pixelBuffer: maskBuffer)
+        publishMaskCache(source: source, mask: mask, signature: signature)
+        return mask
+    }
+
+    /// If the source matches the last-seen content within the MAE
+    /// threshold and we have a cached mask of the same dimensions,
+    /// return it. Returns `nil` on a miss or on the very first call.
+    private func cachedMaskIfSourceUnchanged(
+        source: any MTLTexture,
+        signature: [UInt8]
+    ) -> VisionMask? {
+        memoisationLock.lock()
+        defer { memoisationLock.unlock() }
+        guard let cached = lastMask,
+              let previous = lastSignature,
+              lastSourceWidth == source.width,
+              lastSourceHeight == source.height,
+              previous.count == signature.count else {
+            return nil
+        }
+        var totalAbsoluteError: Int = 0
+        for index in 0..<signature.count {
+            let a = Int(previous[index])
+            let b = Int(signature[index])
+            totalAbsoluteError += abs(a - b)
+        }
+        let mae = Double(totalAbsoluteError) / Double(signature.count)
+        return mae <= Self.signatureMatchThresholdMAE ? cached : nil
+    }
+
+    /// Records a freshly computed mask and the signature of the source
+    /// it was generated from. The next `generateMask` call comparing
+    /// against this entry decides whether to reuse the mask or run
+    /// Vision again. `signature == nil` means we never produced one for
+    /// this frame (kernel/queue allocation failed) — in that case we
+    /// drop any prior entry so we never reuse a mask against a stale
+    /// signature.
+    private func publishMaskCache(
+        source: any MTLTexture,
+        mask: VisionMask,
+        signature: [UInt8]?
+    ) {
+        memoisationLock.lock()
+        if let signature {
+            lastSignature = signature
+            lastMask = mask
+            lastSourceWidth = source.width
+            lastSourceHeight = source.height
+        } else {
+            lastSignature = nil
+            lastMask = nil
+        }
+        memoisationLock.unlock()
+    }
+
+    /// Encodes the 8×8 luminance signature kernel against `source`,
+    /// commits, blocks for completion, then copies the 64 bytes back
+    /// into a Swift array. Returns `nil` on any allocation or queue
+    /// failure — the caller treats `nil` as "skip the cache, run
+    /// Vision normally".
+    private func currentSourceSignature(source: any MTLTexture) -> [UInt8]? {
+        let staging: any MTLTexture
+        if let existing = signatureStagingTexture {
+            staging = existing
+        } else {
+            let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .r8Unorm,
+                width: Self.signatureSide,
+                height: Self.signatureSide,
+                mipmapped: false
+            )
+            descriptor.usage = [.shaderWrite, .shaderRead]
+            descriptor.storageMode = .shared
+            guard let texture = cacheEntry.device.makeTexture(descriptor: descriptor) else {
+                return nil
+            }
+            texture.label = "Vision Hint Signature 8x8"
+            signatureStagingTexture = texture
+            staging = texture
+        }
+
+        guard let queue = cacheEntry.borrowCommandQueue() else { return nil }
+        defer { cacheEntry.returnCommandQueue(queue) }
+        guard let commandBuffer = queue.makeCommandBuffer(),
+              let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            return nil
+        }
+        commandBuffer.label = "Vision Hint Signature"
+        encoder.label = "CorridorKey by LateNite Vision Signature"
+        encoder.setComputePipelineState(cacheEntry.computePipelines.visionSignature)
+        encoder.setTexture(source, index: Int(CKTextureIndexSource.rawValue))
+        encoder.setTexture(staging, index: Int(CKTextureIndexOutput.rawValue))
+        let pipeline = cacheEntry.computePipelines.visionSignature
+        let threadsPerThreadgroup = MTLSize(
+            width: min(pipeline.threadExecutionWidth, Self.signatureSide),
+            height: min(
+                max(pipeline.maxTotalThreadsPerThreadgroup / max(pipeline.threadExecutionWidth, 1), 1),
+                Self.signatureSide
+            ),
+            depth: 1
+        )
+        encoder.dispatchThreads(
+            MTLSize(width: Self.signatureSide, height: Self.signatureSide, depth: 1),
+            threadsPerThreadgroup: threadsPerThreadgroup
+        )
+        encoder.endEncoding()
+        let semaphore = DispatchSemaphore(value: 0)
+        commandBuffer.addCompletedHandler { _ in semaphore.signal() }
+        commandBuffer.commit()
+        semaphore.wait()
+        if commandBuffer.error != nil { return nil }
+
+        var result = [UInt8](repeating: 0, count: Self.signatureBytes)
+        result.withUnsafeMutableBufferPointer { ptr in
+            guard let base = ptr.baseAddress else { return }
+            staging.getBytes(
+                base,
+                bytesPerRow: Self.signatureSide,
+                from: MTLRegionMake2D(0, 0, Self.signatureSide, Self.signatureSide),
+                mipmapLevel: 0
+            )
+        }
+        return result
     }
 
     /// Wraps a Vision mask CVPixelBuffer as an `.r8Unorm` MTLTexture.
@@ -409,12 +583,66 @@ final class VisionHintEngine: @unchecked Sendable {
         PluginLog.notice("Vision hint staging sample (one-time): nonZero=\(nonZero)/\(bytes.count) (\(Double(nonZero) / Double(bytes.count) * 100)%), max=\(maxValue).")
     }
 
+    /// Issues a tiny throwaway Vision request to load the foreground-
+    /// instance model onto the Neural Engine before the first analyse
+    /// frame asks for it. The first `perform` of a session is the
+    /// expensive one (~50–100 ms cold) — every call after that is
+    /// ~10–30 ms steady-state. Priming during engine warmup hides
+    /// that one-shot cost from the user's first analyse frame.
+    /// Best-effort: any failure here is swallowed silently; the real
+    /// path will surface the error if it persists.
+    func prewarm() {
+        // 64×64 black RGB tile is enough to put Vision through its
+        // graph load + first inference. The result is discarded.
+        guard let buffer = makeSyntheticPixelBuffer(side: 64) else { return }
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else { return }
+        let ciImage = CIImage(cvPixelBuffer: buffer, options: [.colorSpace: colorSpace])
+        let handler = VNImageRequestHandler(ciImage: ciImage, options: [:])
+        let request = borrowRequest()
+        do {
+            try handler.perform([request])
+        } catch {
+            PluginLog.notice("Vision prewarm failed (non-fatal): \(error.localizedDescription)")
+        }
+    }
+
+    /// Allocates a tiny CVPixelBuffer of black RGB pixels. Used only
+    /// by `prewarm` to feed Vision a synthetic input.
+    private func makeSyntheticPixelBuffer(side: Int) -> CVPixelBuffer? {
+        var buffer: CVPixelBuffer?
+        let attrs: [CFString: Any] = [
+            kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary,
+        ]
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            side,
+            side,
+            kCVPixelFormatType_32BGRA,
+            attrs as CFDictionary,
+            &buffer
+        )
+        guard status == kCVReturnSuccess, let buffer else { return nil }
+        CVPixelBufferLockBaseAddress(buffer, [])
+        if let base = CVPixelBufferGetBaseAddress(buffer) {
+            memset(base, 0, CVPixelBufferGetBytesPerRow(buffer) * side)
+        }
+        CVPixelBufferUnlockBaseAddress(buffer, [])
+        return buffer
+    }
+
     /// Drops any cached request state. Called when the cache entry is
     /// torn down so Vision releases its compiled inference graph.
     func releaseCachedResources() {
         requestLock.lock()
         cachedRequest = nil
         requestLock.unlock()
+        memoisationLock.lock()
+        lastSignature = nil
+        lastMask = nil
+        lastSourceWidth = 0
+        lastSourceHeight = 0
+        signatureStagingTexture = nil
+        memoisationLock.unlock()
         CVMetalTextureCacheFlush(textureCache, 0)
     }
 

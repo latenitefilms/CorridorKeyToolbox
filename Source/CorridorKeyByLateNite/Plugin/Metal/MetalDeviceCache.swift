@@ -47,8 +47,24 @@ enum MetalDeviceCacheError: Error, CustomStringConvertible {
 final class CorridorKeyComputePipelines: Sendable {
     let combineAndNormalize: any MTLComputePipelineState
     let normalizeToBuffer: any MTLComputePipelineState
+    /// `half`-precision input writer used by the fp16 MLX bridge
+    /// variants. Same operation as `normalizeToBuffer` but stores the
+    /// normalised RGB + hint as `half` instead of `float`, halving the
+    /// per-frame input-buffer bandwidth at 4K inference.
+    let normalizeToHalfBuffer: any MTLComputePipelineState
     let alphaBufferToTexture: any MTLComputePipelineState
     let foregroundBufferToTexture: any MTLComputePipelineState
+    /// Fused MLX writeback. Single dispatch that reads both the alpha
+    /// and foreground output buffers and writes both destination
+    /// textures, replacing the prior two-encoder path.
+    let mlxWritebackFused: any MTLComputePipelineState
+    /// `half`-precision variant of `mlxWritebackFused` for fp16 MLX
+    /// bridges. Reads the half-precision tensors MLX returns and
+    /// writes them into the destination textures (`r32Float` for alpha
+    /// because the analyse path reads it back as `[Float]`,
+    /// `rgba16Float` for foreground because it only feeds the GPU
+    /// compose pass and fp16 is plenty for sigmoid-output RGB).
+    let mlxWritebackFusedHalf: any MTLComputePipelineState
     let despill: any MTLComputePipelineState
     let alphaLevelsGamma: any MTLComputePipelineState
     let morphologyHorizontal: any MTLComputePipelineState
@@ -86,6 +102,10 @@ final class CorridorKeyComputePipelines: Sendable {
     let foregroundPostProcess: any MTLComputePipelineState
     let temporalBlend: any MTLComputePipelineState
     let applyHintPoints: any MTLComputePipelineState
+    /// 8×8 luminance signature kernel used by `VisionHintEngine` to
+    /// short-circuit the Vision call when the source content is
+    /// near-identical to the previous frame.
+    let visionSignature: any MTLComputePipelineState
 
     init(device: any MTLDevice, library: any MTLLibrary) throws {
         func compute(_ name: String) throws -> any MTLComputePipelineState {
@@ -96,8 +116,11 @@ final class CorridorKeyComputePipelines: Sendable {
         }
         combineAndNormalize = try compute("corridorKeyCombineAndNormalizeKernel")
         normalizeToBuffer = try compute("corridorKeyNormalizeToBufferKernel")
+        normalizeToHalfBuffer = try compute("corridorKeyNormalizeToHalfBufferKernel")
         alphaBufferToTexture = try compute("corridorKeyAlphaBufferToTextureKernel")
         foregroundBufferToTexture = try compute("corridorKeyForegroundBufferToTextureKernel")
+        mlxWritebackFused = try compute("corridorKeyMLXWritebackFusedKernel")
+        mlxWritebackFusedHalf = try compute("corridorKeyMLXWritebackFusedHalfKernel")
         despill = try compute("corridorKeyDespillKernel")
         alphaLevelsGamma = try compute("corridorKeyAlphaLevelsGammaKernel")
         morphologyHorizontal = try compute("corridorKeyMorphologyHorizontalKernel")
@@ -123,6 +146,7 @@ final class CorridorKeyComputePipelines: Sendable {
         foregroundPostProcess = try compute("corridorKeyForegroundPostProcessKernel")
         temporalBlend = try compute("corridorKeyTemporalBlendKernel")
         applyHintPoints = try compute("corridorKeyApplyHintPointsKernel")
+        visionSignature = try compute("corridorKeyVisionSignatureKernel")
     }
 }
 
@@ -214,7 +238,11 @@ final class MetalDeviceCacheEntry: @unchecked Sendable {
     private var weightBuffers: [GaussianWeightsKey: any MTLBuffer] = [:]
 
     private let normalizedInputLock = NSLock()
-    private var normalizedInputBuffers: [Int: any MTLBuffer] = [:]
+    private struct NormalizedInputBufferKey: Hashable {
+        let rung: Int
+        let elementBytes: Int
+    }
+    private var normalizedInputBuffers: [NormalizedInputBufferKey: any MTLBuffer] = [:]
 
     private let mpsLock = NSLock()
     private var gaussianBlurs: [MPSGaussianKey: MPSImageGaussianBlur] = [:]
@@ -492,28 +520,40 @@ final class MetalDeviceCacheEntry: @unchecked Sendable {
     /// `MLXArray(rawPointer:)` can read it without a copy on Apple
     /// Silicon's unified memory.
     func normalizedInputBuffer(forRung rung: Int) -> (any MTLBuffer)? {
+        normalizedInputBuffer(forRung: rung, elementBytes: MemoryLayout<Float>.size)
+    }
+
+    /// Precision-aware variant. `elementBytes == 4` returns the legacy
+    /// fp32 buffer; `elementBytes == 2` returns a half-precision buffer
+    /// for the fp16 MLX bridges. Distinct buffers are cached per
+    /// precision so flipping a single project between fp16 and fp32
+    /// rungs doesn't reallocate either one.
+    func normalizedInputBuffer(forRung rung: Int, elementBytes: Int) -> (any MTLBuffer)? {
         precondition(rung > 0, "rung must be positive")
+        precondition(elementBytes == 2 || elementBytes == 4, "elementBytes must be 2 (fp16) or 4 (fp32)")
+        let key = NormalizedInputBufferKey(rung: rung, elementBytes: elementBytes)
         normalizedInputLock.lock()
-        if let existing = normalizedInputBuffers[rung] {
+        if let existing = normalizedInputBuffers[key] {
             normalizedInputLock.unlock()
             return existing
         }
         normalizedInputLock.unlock()
 
-        let byteCount = rung * rung * 4 * MemoryLayout<Float>.size
+        let byteCount = rung * rung * 4 * elementBytes
         guard let buffer = device.makeBuffer(length: byteCount, options: .storageModeShared) else {
             return nil
         }
-        buffer.label = "CK Normalized Input \(rung)px"
+        let dtypeLabel = elementBytes == 2 ? "fp16" : "fp32"
+        buffer.label = "CK Normalized Input \(rung)px (\(dtypeLabel))"
 
         normalizedInputLock.lock()
         // Race: another thread may have just cached one. Keep theirs to
         // keep identity stable for callers.
-        if let existing = normalizedInputBuffers[rung] {
+        if let existing = normalizedInputBuffers[key] {
             normalizedInputLock.unlock()
             return existing
         }
-        normalizedInputBuffers[rung] = buffer
+        normalizedInputBuffers[key] = buffer
         normalizedInputLock.unlock()
         return buffer
     }

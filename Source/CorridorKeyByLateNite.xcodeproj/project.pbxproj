@@ -8,6 +8,18 @@
 
 /* Begin PBXBuildFile section */
 		221345E22F98BC6800CF734C /* corridorkey_mlx_bridge_512.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 221345DC2F98BC6800CF734C /* corridorkey_mlx_bridge_512.mlxfn */; };
+		22FB16E22F98BC6800CF734C /* corridorkey_mlx_bridge_512_fp16.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 22FB16DC2F98BC6800CF734C /* corridorkey_mlx_bridge_512_fp16.mlxfn */; };
+		22FB16E32F98BC6800CF734C /* corridorkey_mlx_bridge_768_fp16.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 22FB16DD2F98BC6800CF734C /* corridorkey_mlx_bridge_768_fp16.mlxfn */; };
+		22FB16E42F98BC6800CF734C /* corridorkey_mlx_bridge_1024_fp16.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 22FB16DE2F98BC6800CF734C /* corridorkey_mlx_bridge_1024_fp16.mlxfn */; };
+		22FB16E52F98BC6800CF734C /* corridorkey_mlx_bridge_1536_fp16.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 22FB16DF2F98BC6800CF734C /* corridorkey_mlx_bridge_1536_fp16.mlxfn */; };
+		22FB16E62F98BC6800CF734C /* corridorkey_mlx_bridge_2048_fp16.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 22FB16E02F98BC6800CF734C /* corridorkey_mlx_bridge_2048_fp16.mlxfn */; };
+		22FB16E72F98BC6800CF734C /* corridorkey_mlx_bridge_4096_fp16.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 22FB16E12F98BC6800CF734C /* corridorkey_mlx_bridge_4096_fp16.mlxfn */; };
+		22FB16F52F98BC6800CF734C /* corridorkeyblue_mlx_bridge_512_fp16.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 22FB16F02F98BC6800CF734C /* corridorkeyblue_mlx_bridge_512_fp16.mlxfn */; };
+		22FB16F62F98BC6800CF734C /* corridorkeyblue_mlx_bridge_768_fp16.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 22FB16F12F98BC6800CF734C /* corridorkeyblue_mlx_bridge_768_fp16.mlxfn */; };
+		22FB16F72F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1024_fp16.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 22FB16F22F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1024_fp16.mlxfn */; };
+		22FB16F82F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1536_fp16.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 22FB16F32F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1536_fp16.mlxfn */; };
+		22FB16F92F98BC6800CF734C /* corridorkeyblue_mlx_bridge_2048_fp16.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 22FB16F42F98BC6800CF734C /* corridorkeyblue_mlx_bridge_2048_fp16.mlxfn */; };
+		22FB16FA2F98BC6800CF734C /* corridorkeyblue_mlx_bridge_4096_fp16.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 22FB16F02F98BC6800CF734D /* corridorkeyblue_mlx_bridge_4096_fp16.mlxfn */; };
 		221345E32F98BC6800CF734C /* corridorkey_mlx_bridge_1536.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 221345DF2F98BC6800CF734C /* corridorkey_mlx_bridge_1536.mlxfn */; };
 		221345E42F98BC6800CF734C /* corridorkey_mlx_bridge_768.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 221345DD2F98BC6800CF734C /* corridorkey_mlx_bridge_768.mlxfn */; };
 		221345E52F98BC6800CF734C /* corridorkey_mlx_bridge_1024.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 221345DE2F98BC6800CF734C /* corridorkey_mlx_bridge_1024.mlxfn */; };
@@ -182,6 +194,18 @@
 
 /* Begin PBXFileReference section */
 		221345DC2F98BC6800CF734C /* corridorkey_mlx_bridge_512.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_512.mlxfn; sourceTree = "<group>"; };
+		22FB16DC2F98BC6800CF734C /* corridorkey_mlx_bridge_512_fp16.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_512_fp16.mlxfn; sourceTree = "<group>"; };
+		22FB16DD2F98BC6800CF734C /* corridorkey_mlx_bridge_768_fp16.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_768_fp16.mlxfn; sourceTree = "<group>"; };
+		22FB16DE2F98BC6800CF734C /* corridorkey_mlx_bridge_1024_fp16.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_1024_fp16.mlxfn; sourceTree = "<group>"; };
+		22FB16DF2F98BC6800CF734C /* corridorkey_mlx_bridge_1536_fp16.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_1536_fp16.mlxfn; sourceTree = "<group>"; };
+		22FB16E02F98BC6800CF734C /* corridorkey_mlx_bridge_2048_fp16.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_2048_fp16.mlxfn; sourceTree = "<group>"; };
+		22FB16E12F98BC6800CF734C /* corridorkey_mlx_bridge_4096_fp16.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_4096_fp16.mlxfn; sourceTree = "<group>"; };
+		22FB16F02F98BC6800CF734C /* corridorkeyblue_mlx_bridge_512_fp16.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkeyblue_mlx_bridge_512_fp16.mlxfn; sourceTree = "<group>"; };
+		22FB16F12F98BC6800CF734C /* corridorkeyblue_mlx_bridge_768_fp16.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkeyblue_mlx_bridge_768_fp16.mlxfn; sourceTree = "<group>"; };
+		22FB16F22F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1024_fp16.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkeyblue_mlx_bridge_1024_fp16.mlxfn; sourceTree = "<group>"; };
+		22FB16F32F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1536_fp16.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkeyblue_mlx_bridge_1536_fp16.mlxfn; sourceTree = "<group>"; };
+		22FB16F42F98BC6800CF734C /* corridorkeyblue_mlx_bridge_2048_fp16.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkeyblue_mlx_bridge_2048_fp16.mlxfn; sourceTree = "<group>"; };
+		22FB16F02F98BC6800CF734D /* corridorkeyblue_mlx_bridge_4096_fp16.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkeyblue_mlx_bridge_4096_fp16.mlxfn; sourceTree = "<group>"; };
 		221345DD2F98BC6800CF734C /* corridorkey_mlx_bridge_768.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_768.mlxfn; sourceTree = "<group>"; };
 		221345DE2F98BC6800CF734C /* corridorkey_mlx_bridge_1024.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_1024.mlxfn; sourceTree = "<group>"; };
 		221345DF2F98BC6800CF734C /* corridorkey_mlx_bridge_1536.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_1536.mlxfn; sourceTree = "<group>"; };
@@ -339,15 +363,27 @@
 			isa = PBXGroup;
 			children = (
 				221345DC2F98BC6800CF734C /* corridorkey_mlx_bridge_512.mlxfn */,
+				22FB16DC2F98BC6800CF734C /* corridorkey_mlx_bridge_512_fp16.mlxfn */,
 				221345DD2F98BC6800CF734C /* corridorkey_mlx_bridge_768.mlxfn */,
+				22FB16DD2F98BC6800CF734C /* corridorkey_mlx_bridge_768_fp16.mlxfn */,
 				221345DE2F98BC6800CF734C /* corridorkey_mlx_bridge_1024.mlxfn */,
+				22FB16DE2F98BC6800CF734C /* corridorkey_mlx_bridge_1024_fp16.mlxfn */,
 				221345DF2F98BC6800CF734C /* corridorkey_mlx_bridge_1536.mlxfn */,
+				22FB16DF2F98BC6800CF734C /* corridorkey_mlx_bridge_1536_fp16.mlxfn */,
 				221345E02F98BC6800CF734C /* corridorkey_mlx_bridge_2048.mlxfn */,
+				22FB16E02F98BC6800CF734C /* corridorkey_mlx_bridge_2048_fp16.mlxfn */,
+				22FB16E12F98BC6800CF734C /* corridorkey_mlx_bridge_4096_fp16.mlxfn */,
 				221345F02F98BC6800CF734C /* corridorkeyblue_mlx_bridge_512.mlxfn */,
+				22FB16F02F98BC6800CF734C /* corridorkeyblue_mlx_bridge_512_fp16.mlxfn */,
 				221345F12F98BC6800CF734C /* corridorkeyblue_mlx_bridge_768.mlxfn */,
+				22FB16F12F98BC6800CF734C /* corridorkeyblue_mlx_bridge_768_fp16.mlxfn */,
 				221345F22F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1024.mlxfn */,
+				22FB16F22F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1024_fp16.mlxfn */,
 				221345F32F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1536.mlxfn */,
+				22FB16F32F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1536_fp16.mlxfn */,
 				221345F42F98BC6800CF734C /* corridorkeyblue_mlx_bridge_2048.mlxfn */,
+				22FB16F42F98BC6800CF734C /* corridorkeyblue_mlx_bridge_2048_fp16.mlxfn */,
+				22FB16F02F98BC6800CF734D /* corridorkeyblue_mlx_bridge_4096_fp16.mlxfn */,
 			);
 			name = "MLX Models";
 			path = "CorridorKeyByLateNite/Plugin/Resources/MLX Models";
@@ -725,6 +761,12 @@
 			buildActionMask = 2147483647;
 			files = (
 				221345E22F98BC6800CF734C /* corridorkey_mlx_bridge_512.mlxfn in Resources */,
+				22FB16E22F98BC6800CF734C /* corridorkey_mlx_bridge_512_fp16.mlxfn in Resources */,
+				22FB16E32F98BC6800CF734C /* corridorkey_mlx_bridge_768_fp16.mlxfn in Resources */,
+				22FB16E42F98BC6800CF734C /* corridorkey_mlx_bridge_1024_fp16.mlxfn in Resources */,
+				22FB16E52F98BC6800CF734C /* corridorkey_mlx_bridge_1536_fp16.mlxfn in Resources */,
+				22FB16E62F98BC6800CF734C /* corridorkey_mlx_bridge_2048_fp16.mlxfn in Resources */,
+				22FB16E72F98BC6800CF734C /* corridorkey_mlx_bridge_4096_fp16.mlxfn in Resources */,
 				221345E32F98BC6800CF734C /* corridorkey_mlx_bridge_1536.mlxfn in Resources */,
 				221345E42F98BC6800CF734C /* corridorkey_mlx_bridge_768.mlxfn in Resources */,
 				221345E52F98BC6800CF734C /* corridorkey_mlx_bridge_1024.mlxfn in Resources */,
@@ -734,6 +776,12 @@
 				221345F72F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1024.mlxfn in Resources */,
 				221345F82F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1536.mlxfn in Resources */,
 				221345F92F98BC6800CF734C /* corridorkeyblue_mlx_bridge_2048.mlxfn in Resources */,
+				22FB16F52F98BC6800CF734C /* corridorkeyblue_mlx_bridge_512_fp16.mlxfn in Resources */,
+				22FB16F62F98BC6800CF734C /* corridorkeyblue_mlx_bridge_768_fp16.mlxfn in Resources */,
+				22FB16F72F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1024_fp16.mlxfn in Resources */,
+				22FB16F82F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1536_fp16.mlxfn in Resources */,
+				22FB16F92F98BC6800CF734C /* corridorkeyblue_mlx_bridge_2048_fp16.mlxfn in Resources */,
+				22FB16FA2F98BC6800CF734C /* corridorkeyblue_mlx_bridge_4096_fp16.mlxfn in Resources */,
 				CK0100000000000000000014 /* InfoPlist.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -758,7 +806,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "mkdir -p \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nrsync --archive --links --whole-file --no-owner --no-group --checksum --exclude='Headers' \"/Library/Developer/Frameworks/PluginManager.framework/\" \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/PluginManager.framework/\"\nif [ \"$?\" -ne 0 ]; then echo \"error: rsync failed; couldn't embed PluginManager.framework\"; exit 1; fi\ncodesign --force --timestamp --options runtime --sign \"${CODE_SIGN_IDENTITY}\" \"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/PluginManager.framework\"\n";
+			shellScript = "mkdir -p \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nrsync --archive --links --whole-file --no-owner --no-group --checksum --exclude='Headers' \"/Library/Developer/Frameworks/PluginManager.framework/\" \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/PluginManager.framework/\"\nif [ \"$?\" -ne 0 ]; then echo \"error: rsync failed; couldn't embed PluginManager.framework\"; exit 1; fi\nSIGN_ID=\"${EXPANDED_CODE_SIGN_IDENTITY:-$CODE_SIGN_IDENTITY}\"\nif [ -z \"$SIGN_ID\" ]; then SIGN_ID=\"-\"; fi\ncodesign --force --timestamp --options runtime --sign \"$SIGN_ID\" \"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/PluginManager.framework\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

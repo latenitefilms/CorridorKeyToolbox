@@ -152,6 +152,35 @@ kernel void corridorKeyNormalizeToBufferKernel(
     output[baseOffset + 3u] = hintValue;
 }
 
+/// Identical layout to `corridorKeyNormalizeToBufferKernel` but writes
+/// `half` values into the output buffer. Used by the fp16 MLX bridge
+/// variants to halve per-frame input bandwidth on Apple Silicon's
+/// unified memory. Normalised RGB values stay within [-3, 3] in
+/// practice (ImageNet mean/stddev applied to 0..1 RGB), so fp16 has
+/// plenty of headroom — no clamp or scale needed.
+kernel void corridorKeyNormalizeToHalfBufferKernel(
+    texture2d<float, access::sample> source [[texture(CKTextureIndexSource)]],
+    texture2d<float, access::sample> hint [[texture(CKTextureIndexHint)]],
+    device half *output [[buffer(0)]],
+    constant CKNormalizeParams &params [[buffer(CKBufferIndexNormalizeParams)]],
+    constant uint2 &dims [[buffer(1)]],
+    uint2 gid [[thread_position_in_grid]]
+) {
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    constexpr sampler areaSampler(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
+    float2 uv = (float2(gid) + 0.5) / float2(dims);
+    float4 rgba = source.sample(areaSampler, uv);
+    float hintValue = hint.sample(areaSampler, uv).r;
+    float3 rec709 = params.workingToRec709 * rgba.rgb;
+    float3 normalized = (rec709 - params.mean) * params.invStdDev;
+    uint pixelIndex = gid.y * dims.x + gid.x;
+    uint baseOffset = pixelIndex * 4u;
+    output[baseOffset + 0u] = half(normalized.x);
+    output[baseOffset + 1u] = half(normalized.y);
+    output[baseOffset + 2u] = half(normalized.z);
+    output[baseOffset + 3u] = half(hintValue);
+}
+
 /// Reads MLX's 1-channel alpha output buffer (layout `[1, H, W, 1]`) and
 /// writes it into an `r32Float` texture. Flips y so the y-up bridge
 /// layout matches the y-down texture convention the compose pass
@@ -187,6 +216,61 @@ kernel void corridorKeyForegroundBufferToTextureKernel(
     uint baseOffset = pixelIndex * 3u;
     float3 rgb = float3(input[baseOffset], input[baseOffset + 1u], input[baseOffset + 2u]);
     destination.write(float4(rgb, 1.0), gid);
+}
+
+/// Fused MLX writeback. Reads both the 1-channel alpha and 3-channel
+/// foreground output buffers and writes them into the corresponding
+/// destination textures in a single dispatch. Replaces the previous
+/// pair of encoders (`corridorKeyAlphaBufferToTextureKernel` +
+/// `corridorKeyForegroundBufferToTextureKernel`) — fusing into one
+/// encoder saves an encoder boundary per frame, which on Apple GPUs
+/// otherwise forces a barrier flush between the two passes.
+kernel void corridorKeyMLXWritebackFusedKernel(
+    device const float *alphaInput [[buffer(0)]],
+    device const float *foregroundInput [[buffer(1)]],
+    texture2d<float, access::write> alphaDestination [[texture(0)]],
+    texture2d<float, access::write> foregroundDestination [[texture(1)]],
+    uint2 gid [[thread_position_in_grid]]
+) {
+    uint2 dims = uint2(alphaDestination.get_width(), alphaDestination.get_height());
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    uint srcY = dims.y - 1u - gid.y;
+    uint pixelIndex = srcY * dims.x + gid.x;
+    float alpha = alphaInput[pixelIndex];
+    alphaDestination.write(float4(alpha, 0.0, 0.0, 1.0), gid);
+    uint fgBase = pixelIndex * 3u;
+    float3 rgb = float3(foregroundInput[fgBase], foregroundInput[fgBase + 1u], foregroundInput[fgBase + 2u]);
+    foregroundDestination.write(float4(rgb, 1.0), gid);
+}
+
+/// fp16 variant of `corridorKeyMLXWritebackFusedKernel`. Reads the
+/// alpha and foreground MLX output buffers as `half` (the fp16
+/// bridges return half-precision tensors) and writes the destination
+/// textures as the same `float` formats as before. The `r32Float` and
+/// `rgba32Float` destination types stay because everything downstream
+/// of the model — refiner, compose, despill — still runs in fp32 for
+/// edge stability; the fp16 saving is purely on the MLX-to-texture
+/// hand-off.
+kernel void corridorKeyMLXWritebackFusedHalfKernel(
+    device const half *alphaInput [[buffer(0)]],
+    device const half *foregroundInput [[buffer(1)]],
+    texture2d<float, access::write> alphaDestination [[texture(0)]],
+    texture2d<float, access::write> foregroundDestination [[texture(1)]],
+    uint2 gid [[thread_position_in_grid]]
+) {
+    uint2 dims = uint2(alphaDestination.get_width(), alphaDestination.get_height());
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    uint srcY = dims.y - 1u - gid.y;
+    uint pixelIndex = srcY * dims.x + gid.x;
+    float alpha = float(alphaInput[pixelIndex]);
+    alphaDestination.write(float4(alpha, 0.0, 0.0, 1.0), gid);
+    uint fgBase = pixelIndex * 3u;
+    float3 rgb = float3(
+        float(foregroundInput[fgBase]),
+        float(foregroundInput[fgBase + 1u]),
+        float(foregroundInput[fgBase + 2u])
+    );
+    foregroundDestination.write(float4(rgb, 1.0), gid);
 }
 
 // MARK: - Normalisation (texture output — used only by golden tests)
@@ -984,6 +1068,32 @@ kernel void corridorKeySourcePassthroughKernel(
     float3 src = sourceRGB.read(gid).rgb;
     float3 blended = m * src + (1.0 - m) * fg;
     destination.write(float4(blended, 1.0), gid);
+}
+
+// MARK: - Vision-hint signature
+
+/// Tile-averaged luminance signature. Downsamples `source` to whatever
+/// (small) destination resolution is supplied — the Vision-hint
+/// memoisation path uses 8×8 — by area-sampling and folding the result
+/// into an `.r8Unorm` byte. The result is read back to the CPU and
+/// compared (MAE) against the previous frame's signature so the
+/// engine can skip a fresh Vision call when the source content is
+/// effectively unchanged.
+kernel void corridorKeyVisionSignatureKernel(
+    texture2d<float, access::sample> source [[texture(CKTextureIndexSource)]],
+    texture2d<float, access::write> destination [[texture(CKTextureIndexOutput)]],
+    uint2 gid [[thread_position_in_grid]]
+) {
+    uint2 dims = uint2(destination.get_width(), destination.get_height());
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    constexpr sampler areaSampler(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
+    float2 uv = (float2(gid) + 0.5) / float2(dims);
+    float4 rgba = source.sample(areaSampler, uv);
+    // BT.709 luma keeps the signature meaningful across the working
+    // colour spaces FxPlug delivers: any reasonable RGB encoding maps
+    // similar scenes to similar luma.
+    float luma = saturate(dot(rgba.rgb, float3(0.2126, 0.7152, 0.0722)));
+    destination.write(float4(luma, 0.0, 0.0, 1.0), gid);
 }
 
 // MARK: - Resample (bilinear fallback; MPS Lanczos handles Quality = Lanczos)

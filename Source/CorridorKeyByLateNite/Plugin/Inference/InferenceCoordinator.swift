@@ -81,11 +81,21 @@ final class InferenceCoordinator: @unchecked Sendable {
     private var trackedRung: Int = 0
     private var trackedScreenColor: ScreenColor = .green
 
-    /// Single-frame cache of the latest MLX inference output. Used so a
-    /// post-process slider tweak at the same play-head doesn't re-run
-    /// the model — see `cachedOutput(for:)`.
-    private var cachedMLXKey: InferenceCacheKey?
-    private var cachedMLXOutput: KeyingInferenceOutput?
+    /// Small LRU of recent MLX inference outputs. The single-entry
+    /// cache covered the slider-tweak case at the same play-head, but
+    /// scrubbing back over a window the user has already analysed used
+    /// to miss every frame even though the work was a moment ago. With
+    /// the LRU, short-range scrubbing inside the window stays free
+    /// until the cache evicts. Capacity is small on purpose: each entry
+    /// pins an alpha (`r32Float`) + foreground (`rgba16Float`) texture
+    /// at the inference resolution, so 8 × 2048 ≈ 640 MB upper bound on
+    /// the maxed-out tier — well within the unified-memory budget the
+    /// bridge LRU already accounts for.
+    private static let cacheCapacity = 8
+    private var cacheEntriesByKey: [InferenceCacheKey: KeyingInferenceOutput] = [:]
+    /// Insertion order for LRU eviction. Most-recently used appears at
+    /// the end; the head is dropped when the cache is full.
+    private var cacheLRUOrder: [InferenceCacheKey] = []
 
     /// Human-readable backend summary for diagnostics.
     var backendDescription: String {
@@ -216,8 +226,8 @@ final class InferenceCoordinator: @unchecked Sendable {
     /// memory back to baseline once the user is done analysing.
     func releaseCacheBetweenSessions() {
         stateLock.lock()
-        cachedMLXKey = nil
-        cachedMLXOutput = nil
+        cacheEntriesByKey.removeAll()
+        cacheLRUOrder.removeAll()
         let deviceRegistryID = trackedDeviceRegistryID
         let rung = trackedRung
         let color = trackedScreenColor
@@ -238,16 +248,27 @@ final class InferenceCoordinator: @unchecked Sendable {
     private func cachedOutput(for key: InferenceCacheKey) -> KeyingInferenceOutput? {
         stateLock.lock()
         defer { stateLock.unlock() }
-        guard cachedMLXKey == key, let cached = cachedMLXOutput else {
-            return nil
+        guard let cached = cacheEntriesByKey[key] else { return nil }
+        // Bump recency on hit so an entry the user keeps revisiting
+        // doesn't get evicted by a one-off scrub elsewhere.
+        if let index = cacheLRUOrder.firstIndex(of: key) {
+            cacheLRUOrder.remove(at: index)
         }
+        cacheLRUOrder.append(key)
         return cached
     }
 
     private func storeCachedOutput(_ output: KeyingInferenceOutput, for key: InferenceCacheKey) {
         stateLock.lock()
-        cachedMLXKey = key
-        cachedMLXOutput = output
+        if let index = cacheLRUOrder.firstIndex(of: key) {
+            cacheLRUOrder.remove(at: index)
+        }
+        cacheEntriesByKey[key] = output
+        cacheLRUOrder.append(key)
+        while cacheLRUOrder.count > Self.cacheCapacity {
+            let evicted = cacheLRUOrder.removeFirst()
+            cacheEntriesByKey.removeValue(forKey: evicted)
+        }
         stateLock.unlock()
     }
 
@@ -258,8 +279,11 @@ final class InferenceCoordinator: @unchecked Sendable {
         if trackedDeviceRegistryID != deviceRegistryID
             || trackedRung != rung
             || trackedScreenColor != screenColor {
-            cachedMLXKey = nil
-            cachedMLXOutput = nil
+            // Switching device, rung, or screen colour invalidates the
+            // entire cache — entries are pinned to the prior tracked
+            // bridge and the textures are sized for that rung.
+            cacheEntriesByKey.removeAll()
+            cacheLRUOrder.removeAll()
         }
         trackedDeviceRegistryID = deviceRegistryID
         trackedRung = rung
@@ -281,10 +305,15 @@ final class InferenceCoordinator: @unchecked Sendable {
         ) else {
             throw KeyingInferenceError.deviceUnavailable
         }
+        // Foreground rides through the compose pass as `texture2d<float>`,
+        // which auto-converts the underlying half-precision storage to
+        // float for the shader. fp16 here halves bandwidth on the
+        // writeback + compose without any precision impact (foreground
+        // RGB is sigmoid output in [0,1], well within fp16 range).
         guard let foreground = cacheEntry.makeIntermediateTexture(
             width: request.inferenceResolution,
             height: request.inferenceResolution,
-            pixelFormat: .rgba32Float,
+            pixelFormat: .rgba16Float,
             storageMode: .shared
         ) else {
             throw KeyingInferenceError.deviceUnavailable
