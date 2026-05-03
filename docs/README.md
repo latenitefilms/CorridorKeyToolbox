@@ -16,7 +16,7 @@ This is **NOT** a fork. We've taken the blue and green CorridorKey models, conve
 [Download](/download) on **TestFlight** and find the source code on [GitHub](https://github.com/latenitefilms/CorridorKeyByLateNite)!
 !!!
 
-Whilst there are already some great fork's of CorridorKey, such as [EZ-CorridorKey](https://github.com/edenaion/EZ-CorridorKey), none of them are purposely build for Mac & Apple Silicon.
+Whilst there are already some great fork's of CorridorKey, such as [EZ-CorridorKey](https://github.com/edenaion/EZ-CorridorKey), none of them are purposely build for **Mac & Apple Silicon**.
 
 **CorridorKey by LateNite** brings an Effect directly into **Final Cut Pro**, as well as a **Standalone Editor** - optimised for **ProRes** in and out. 🏎️
 
@@ -24,7 +24,7 @@ Whilst there are already some great fork's of CorridorKey, such as [EZ-CorridorK
 
 ## Built for Final Cut Pro
 
-**CorridorKey by LateNite** has been built for Final Cut Pro editors.
+**CorridorKey by LateNite** has been built for **Final Cut Pro** editors.
 
 It gives you all the power of CorridorKey, directly in your Final Cut Pro timeline.
 
@@ -34,9 +34,9 @@ It gives you all the power of CorridorKey, directly in your Final Cut Pro timeli
 
 ## Standalone Editor
 
-**CorridorKey by LateNite** has been built for Apple Silicon Mac's.
+**CorridorKey by LateNite** has been built for **Apple Silicon Mac's**.
 
-It makes full use of the GPU, Neural Engine, Metal and MPX - pushing the hardware to the max.
+It makes full use of the GPU, Neural Engine, Metal and MPX - pushing the hardware to the max. 🔥
 
 If you're working with ProRes or HEVC, it makes use of Apple Silicon's hardware encoders and decoders.
 
