@@ -412,15 +412,11 @@ final class MLXKeyingEngine: KeyingInferenceEngine, @unchecked Sendable {
         }
         commandBuffer.label = "CorridorKey by LateNite MLX Writeback"
 
-        try RenderStages.writeAlphaBufferToTexture(
-            buffer: alphaMLXBuffer,
-            destination: output.alphaTexture,
-            entry: cacheEntry,
-            commandBuffer: commandBuffer
-        )
-        try RenderStages.writeForegroundBufferToTexture(
-            buffer: foregroundMLXBuffer,
-            destination: output.foregroundTexture,
+        try RenderStages.writeMLXOutputsFused(
+            alphaBuffer: alphaMLXBuffer,
+            foregroundBuffer: foregroundMLXBuffer,
+            alphaDestination: output.alphaTexture,
+            foregroundDestination: output.foregroundTexture,
             entry: cacheEntry,
             commandBuffer: commandBuffer
         )

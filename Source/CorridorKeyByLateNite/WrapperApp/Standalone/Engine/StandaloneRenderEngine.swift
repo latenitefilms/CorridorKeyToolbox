@@ -170,7 +170,7 @@ final class StandaloneRenderEngine: @unchecked Sendable {
             readbackSource: state.temporalStabilityEnabled
         )
         // The pipeline's alpha output is y-flipped because of the
-        // `corridorKeyAlphaBufferToTextureKernel` step that was
+        // `corridorKeyMLXWritebackFusedKernel` step that was
         // added to match Final Cut Pro's bottom-left FxPlug
         // coordinate system. AVFoundation gives the standalone
         // editor source frames in top-left convention; if we

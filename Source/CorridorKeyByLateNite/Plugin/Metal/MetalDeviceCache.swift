@@ -47,8 +47,11 @@ enum MetalDeviceCacheError: Error, CustomStringConvertible {
 final class CorridorKeyComputePipelines: Sendable {
     let combineAndNormalize: any MTLComputePipelineState
     let normalizeToBuffer: any MTLComputePipelineState
-    let alphaBufferToTexture: any MTLComputePipelineState
-    let foregroundBufferToTexture: any MTLComputePipelineState
+    /// Fused MLX writeback. Reads MLX's alpha (1-channel) and foreground
+    /// (3-channel) output buffers in a single dispatch and writes them
+    /// into the destination `r32Float` and `rgba32Float` textures —
+    /// halving the per-frame encoder count vs the prior split kernels.
+    let mlxWritebackFused: any MTLComputePipelineState
     let despill: any MTLComputePipelineState
     let alphaLevelsGamma: any MTLComputePipelineState
     let morphologyHorizontal: any MTLComputePipelineState
@@ -96,8 +99,7 @@ final class CorridorKeyComputePipelines: Sendable {
         }
         combineAndNormalize = try compute("corridorKeyCombineAndNormalizeKernel")
         normalizeToBuffer = try compute("corridorKeyNormalizeToBufferKernel")
-        alphaBufferToTexture = try compute("corridorKeyAlphaBufferToTextureKernel")
-        foregroundBufferToTexture = try compute("corridorKeyForegroundBufferToTextureKernel")
+        mlxWritebackFused = try compute("corridorKeyMLXWritebackFusedKernel")
         despill = try compute("corridorKeyDespillKernel")
         alphaLevelsGamma = try compute("corridorKeyAlphaLevelsGammaKernel")
         morphologyHorizontal = try compute("corridorKeyMorphologyHorizontalKernel")

@@ -11,7 +11,7 @@
 //  background underneath.
 //
 //  These tests pin the contract: the alpha bytes that come back from
-//  `MLXKeyingEngine.run` (after `writeAlphaBufferToTexture` flips them
+//  `MLXKeyingEngine.run` (after `writeMLXOutputsFused` flips them
 //  into y-down) must already match the source's pixel orientation,
 //  with row 0 = visual top. No further row-reversal anywhere
 //  downstream.

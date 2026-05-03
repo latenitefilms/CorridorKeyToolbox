@@ -153,40 +153,35 @@ kernel void corridorKeyNormalizeToBufferKernel(
 }
 
 /// Reads MLX's 1-channel alpha output buffer (layout `[1, H, W, 1]`) and
-/// writes it into an `r32Float` texture. Flips y so the y-up bridge
-/// layout matches the y-down texture convention the compose pass
-/// samples with — identical to what `uploadCachedAlpha` does on CPU for
-/// the analysed-cache path.
-kernel void corridorKeyAlphaBufferToTextureKernel(
-    device const float *input [[buffer(0)]],
-    texture2d<float, access::write> destination [[texture(CKTextureIndexOutput)]],
+/// 3-channel foreground output buffer (layout `[1, H, W, 3]`) in a single
+/// dispatch and writes them into the supplied destination textures.
+/// Flips y so the y-up bridge layout matches the y-down texture
+/// convention the compose pass samples with — identical to what
+/// `uploadCachedAlpha` does on CPU for the analysed-cache path. Channel
+/// expansion (RGB → RGBA, alpha = 1) happens inline so the foreground
+/// output remains a single GPU pass.
+kernel void corridorKeyMLXWritebackFusedKernel(
+    device const float *alphaInput [[buffer(0)]],
+    device const float *foregroundInput [[buffer(1)]],
+    texture2d<float, access::write> alphaDestination [[texture(CKTextureIndexMatte)]],
+    texture2d<float, access::write> foregroundDestination [[texture(CKTextureIndexForeground)]],
     uint2 gid [[thread_position_in_grid]]
 ) {
-    uint2 dims = uint2(destination.get_width(), destination.get_height());
+    uint2 dims = uint2(alphaDestination.get_width(), alphaDestination.get_height());
     if (gid.x >= dims.x || gid.y >= dims.y) { return; }
     uint srcY = dims.y - 1u - gid.y;
     uint pixelIndex = srcY * dims.x + gid.x;
-    float alpha = input[pixelIndex];
-    destination.write(float4(alpha, 0.0, 0.0, 1.0), gid);
-}
 
-/// Reads MLX's 3-channel foreground output buffer (layout `[1, H, W, 3]`)
-/// and writes it into an `rgba32Float` texture with alpha = 1. Flips y
-/// for the same reason as the alpha kernel. Replaces the old CPU-side
-/// `cblas_scopy` RGB→RGBA interleave — now the channel expansion
-/// happens on the GPU in the same pass as the buffer read.
-kernel void corridorKeyForegroundBufferToTextureKernel(
-    device const float *input [[buffer(0)]],
-    texture2d<float, access::write> destination [[texture(CKTextureIndexOutput)]],
-    uint2 gid [[thread_position_in_grid]]
-) {
-    uint2 dims = uint2(destination.get_width(), destination.get_height());
-    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
-    uint srcY = dims.y - 1u - gid.y;
-    uint pixelIndex = srcY * dims.x + gid.x;
-    uint baseOffset = pixelIndex * 3u;
-    float3 rgb = float3(input[baseOffset], input[baseOffset + 1u], input[baseOffset + 2u]);
-    destination.write(float4(rgb, 1.0), gid);
+    float alpha = alphaInput[pixelIndex];
+    alphaDestination.write(float4(alpha, 0.0, 0.0, 1.0), gid);
+
+    uint foregroundBase = pixelIndex * 3u;
+    float3 rgb = float3(
+        foregroundInput[foregroundBase],
+        foregroundInput[foregroundBase + 1u],
+        foregroundInput[foregroundBase + 2u]
+    );
+    foregroundDestination.write(float4(rgb, 1.0), gid);
 }
 
 // MARK: - Normalisation (texture output — used only by golden tests)

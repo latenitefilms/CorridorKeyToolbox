@@ -2,13 +2,12 @@
 //  ZeroCopyKernelTests.swift
 //  CorridorKeyToolboxMetalStagesTests
 //
-//  Verifies the three zero-copy MLX I/O kernels:
+//  Verifies the two zero-copy MLX I/O kernels:
 //    * `corridorKeyNormalizeToBufferKernel` — source + hint → NHWC
 //      float buffer that MLX wraps with `init(rawPointer:)`.
-//    * `corridorKeyAlphaBufferToTextureKernel` — MLX alpha output buffer
-//      (y-up) → `r32Float` texture (y-down).
-//    * `corridorKeyForegroundBufferToTextureKernel` — MLX foreground RGB
-//      buffer (y-up) → `rgba32Float` texture (y-down) with alpha = 1.
+//    * `corridorKeyMLXWritebackFusedKernel` — MLX alpha + foreground
+//      output buffers (y-up) → `r32Float` + `rgba32Float` textures
+//      (y-down) in a single dispatch, with RGB → RGBA expansion inline.
 //
 //  Each test runs the kernel on a real MTLDevice and checks the output
 //  pixel-by-pixel against an analytically-derived expectation, so a
@@ -93,63 +92,99 @@ struct ZeroCopyKernelTests {
         }
     }
 
-    // MARK: - Alpha buffer → texture
+    // MARK: - MLX writeback (fused alpha + foreground)
 
-    @Test("Alpha buffer → texture copies values with y-flip")
-    func alphaBufferToTextureFlipsY() async throws {
+    @Test("MLX writeback fuses alpha + foreground with y-flip and RGB → RGBA expansion")
+    func mlxWritebackFusedFlipsAndExpands() async throws {
         let entry: MetalDeviceCacheEntry
         do { entry = try TestHarness.makeEntry() } catch { throw XCTSkipError("\(error)") }
 
-        // 4×4 gradient: row 0 = 0.0, row 1 = 0.25, row 2 = 0.5, row 3 = 0.75.
-        // After y-flip, row 0 in the output should be the last row of input (0.75),
-        // row 3 should be 0.0.
+        // 4×4 inputs. Alpha gradient: row y = y * 0.25. Foreground gradient:
+        // row y = (y*0.1, y*0.2, y*0.3). After y-flip, output row 0 should
+        // be the last input row in both buffers.
         let width = 4
         let height = 4
         let pixelCount = width * height
-        var sourceData = [Float](repeating: 0, count: pixelCount)
-        for y in 0..<height {
-            for x in 0..<width {
-                sourceData[y * width + x] = Float(y) * 0.25
+
+        var alphaSourceData = [Float](repeating: 0, count: pixelCount)
+        var foregroundSourceData = [Float](repeating: 0, count: pixelCount * 3)
+        for rowIndex in 0..<height {
+            for columnIndex in 0..<width {
+                alphaSourceData[rowIndex * width + columnIndex] = Float(rowIndex) * 0.25
+                let base = (rowIndex * width + columnIndex) * 3
+                foregroundSourceData[base + 0] = Float(rowIndex) * 0.1
+                foregroundSourceData[base + 1] = Float(rowIndex) * 0.2
+                foregroundSourceData[base + 2] = Float(rowIndex) * 0.3
             }
         }
 
-        guard let sourceBuffer = entry.device.makeBuffer(
+        guard let alphaSourceBuffer = entry.device.makeBuffer(
             length: pixelCount * MemoryLayout<Float>.size,
             options: .storageModeShared
         ) else {
-            Issue.record("Could not allocate source buffer.")
+            Issue.record("Could not allocate alpha source buffer.")
             return
         }
-        sourceData.withUnsafeBufferPointer { pointer in
+        alphaSourceData.withUnsafeBufferPointer { pointer in
             if let base = pointer.baseAddress {
-                sourceBuffer.contents().copyMemory(from: base, byteCount: pixelCount * MemoryLayout<Float>.size)
+                alphaSourceBuffer.contents().copyMemory(
+                    from: base,
+                    byteCount: pixelCount * MemoryLayout<Float>.size
+                )
             }
         }
 
-        guard let destination = entry.texturePool.acquire(
+        guard let foregroundSourceBuffer = entry.device.makeBuffer(
+            length: pixelCount * 3 * MemoryLayout<Float>.size,
+            options: .storageModeShared
+        ) else {
+            Issue.record("Could not allocate foreground source buffer.")
+            return
+        }
+        foregroundSourceData.withUnsafeBufferPointer { pointer in
+            if let base = pointer.baseAddress {
+                foregroundSourceBuffer.contents().copyMemory(
+                    from: base,
+                    byteCount: pixelCount * 3 * MemoryLayout<Float>.size
+                )
+            }
+        }
+
+        guard let alphaDestination = entry.texturePool.acquire(
             width: width, height: height, pixelFormat: .r32Float, storageMode: .shared
         ) else {
-            Issue.record("Could not allocate destination texture.")
+            Issue.record("Could not allocate alpha destination texture.")
+            return
+        }
+        guard let foregroundDestination = entry.texturePool.acquire(
+            width: width, height: height, pixelFormat: .rgba32Float, storageMode: .shared
+        ) else {
+            alphaDestination.returnManually()
+            Issue.record("Could not allocate foreground destination texture.")
             return
         }
 
         let commandQueue = try makeCommandQueue(entry: entry)
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            alphaDestination.returnManually()
+            foregroundDestination.returnManually()
             Issue.record("Could not create command buffer.")
             return
         }
-        try RenderStages.writeAlphaBufferToTexture(
-            buffer: sourceBuffer,
-            destination: destination.texture,
+        try RenderStages.writeMLXOutputsFused(
+            alphaBuffer: alphaSourceBuffer,
+            foregroundBuffer: foregroundSourceBuffer,
+            alphaDestination: alphaDestination.texture,
+            foregroundDestination: foregroundDestination.texture,
             entry: entry,
             commandBuffer: commandBuffer
         )
         try commitAndWait(commandBuffer)
 
-        var result = [Float](repeating: 0, count: pixelCount)
-        result.withUnsafeMutableBufferPointer { pointer in
+        var alphaResult = [Float](repeating: 0, count: pixelCount)
+        alphaResult.withUnsafeMutableBufferPointer { pointer in
             if let base = pointer.baseAddress {
-                destination.texture.getBytes(
+                alphaDestination.texture.getBytes(
                     base,
                     bytesPerRow: width * MemoryLayout<Float>.size,
                     from: MTLRegionMake2D(0, 0, width, height),
@@ -157,78 +192,10 @@ struct ZeroCopyKernelTests {
                 )
             }
         }
-        destination.returnManually()
-
-        // y-flipped: output row 0 should be input row 3 = 0.75.
-        for x in 0..<width {
-            #expect(abs(result[0 * width + x] - 0.75) < 1e-3)
-            #expect(abs(result[1 * width + x] - 0.50) < 1e-3)
-            #expect(abs(result[2 * width + x] - 0.25) < 1e-3)
-            #expect(abs(result[3 * width + x] - 0.00) < 1e-3)
-        }
-    }
-
-    // MARK: - Foreground buffer → texture
-
-    @Test("Foreground buffer → texture expands RGB to RGBA with y-flip")
-    func foregroundBufferToTextureExpandsAndFlips() async throws {
-        let entry: MetalDeviceCacheEntry
-        do { entry = try TestHarness.makeEntry() } catch { throw XCTSkipError("\(error)") }
-
-        let width = 4
-        let height = 4
-        let pixelCount = width * height
-        // Pack RGB floats for each pixel. Row `y` gets colour `(y*0.1, y*0.2, y*0.3)`.
-        var sourceData = [Float](repeating: 0, count: pixelCount * 3)
-        for y in 0..<height {
-            for x in 0..<width {
-                let base = (y * width + x) * 3
-                sourceData[base + 0] = Float(y) * 0.1
-                sourceData[base + 1] = Float(y) * 0.2
-                sourceData[base + 2] = Float(y) * 0.3
-            }
-        }
-
-        guard let sourceBuffer = entry.device.makeBuffer(
-            length: pixelCount * 3 * MemoryLayout<Float>.size,
-            options: .storageModeShared
-        ) else {
-            Issue.record("Could not allocate source buffer.")
-            return
-        }
-        sourceData.withUnsafeBufferPointer { pointer in
+        var foregroundResult = [SIMD4<Float>](repeating: .zero, count: pixelCount)
+        foregroundResult.withUnsafeMutableBufferPointer { pointer in
             if let base = pointer.baseAddress {
-                sourceBuffer.contents().copyMemory(
-                    from: base,
-                    byteCount: pixelCount * 3 * MemoryLayout<Float>.size
-                )
-            }
-        }
-
-        guard let destination = entry.texturePool.acquire(
-            width: width, height: height, pixelFormat: .rgba32Float, storageMode: .shared
-        ) else {
-            Issue.record("Could not allocate destination texture.")
-            return
-        }
-
-        let commandQueue = try makeCommandQueue(entry: entry)
-        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
-            Issue.record("Could not create command buffer.")
-            return
-        }
-        try RenderStages.writeForegroundBufferToTexture(
-            buffer: sourceBuffer,
-            destination: destination.texture,
-            entry: entry,
-            commandBuffer: commandBuffer
-        )
-        try commitAndWait(commandBuffer)
-
-        var result = [SIMD4<Float>](repeating: .zero, count: pixelCount)
-        result.withUnsafeMutableBufferPointer { pointer in
-            if let base = pointer.baseAddress {
-                destination.texture.getBytes(
+                foregroundDestination.texture.getBytes(
                     base,
                     bytesPerRow: width * MemoryLayout<SIMD4<Float>>.size,
                     from: MTLRegionMake2D(0, 0, width, height),
@@ -236,22 +203,31 @@ struct ZeroCopyKernelTests {
                 )
             }
         }
-        destination.returnManually()
+        alphaDestination.returnManually()
+        foregroundDestination.returnManually()
 
-        // y-flipped: output row 0 came from input row 3 = (0.3, 0.6, 0.9, 1.0).
+        // Alpha: y-flipped — output row 0 should be input row 3 = 0.75.
         for x in 0..<width {
-            let pixel = result[0 * width + x]
-            #expect(abs(pixel.x - 0.3) < 1e-3)
-            #expect(abs(pixel.y - 0.6) < 1e-3)
-            #expect(abs(pixel.z - 0.9) < 1e-3)
-            #expect(abs(pixel.w - 1.0) < 1e-3, "Alpha should be 1.0, got \(pixel.w)")
+            #expect(abs(alphaResult[0 * width + x] - 0.75) < 1e-3)
+            #expect(abs(alphaResult[1 * width + x] - 0.50) < 1e-3)
+            #expect(abs(alphaResult[2 * width + x] - 0.25) < 1e-3)
+            #expect(abs(alphaResult[3 * width + x] - 0.00) < 1e-3)
         }
+
+        // Foreground: y-flipped — output row 0 came from input row 3
+        // = (0.3, 0.6, 0.9, 1.0). Output row 3 came from input row 0 = (0,0,0,1).
         for x in 0..<width {
-            let pixel = result[3 * width + x]
-            #expect(abs(pixel.x - 0.0) < 1e-3)
-            #expect(abs(pixel.y - 0.0) < 1e-3)
-            #expect(abs(pixel.z - 0.0) < 1e-3)
-            #expect(abs(pixel.w - 1.0) < 1e-3)
+            let topRow = foregroundResult[0 * width + x]
+            #expect(abs(topRow.x - 0.3) < 1e-3)
+            #expect(abs(topRow.y - 0.6) < 1e-3)
+            #expect(abs(topRow.z - 0.9) < 1e-3)
+            #expect(abs(topRow.w - 1.0) < 1e-3, "Alpha should be 1.0, got \(topRow.w)")
+
+            let bottomRow = foregroundResult[3 * width + x]
+            #expect(abs(bottomRow.x - 0.0) < 1e-3)
+            #expect(abs(bottomRow.y - 0.0) < 1e-3)
+            #expect(abs(bottomRow.z - 0.0) < 1e-3)
+            #expect(abs(bottomRow.w - 1.0) < 1e-3)
         }
     }
 

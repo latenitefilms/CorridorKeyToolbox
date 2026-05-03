@@ -349,52 +349,33 @@ enum RenderStages {
         return normalised
     }
 
-    /// Encodes a compute pass that pulls MLX's 1-channel alpha output
-    /// buffer into the supplied `r32Float` texture, flipping y to the
-    /// Metal top-left origin the compose shader expects.
-    static func writeAlphaBufferToTexture(
-        buffer: any MTLBuffer,
-        destination: any MTLTexture,
+    /// Encodes a single compute pass that pulls MLX's 1-channel alpha
+    /// output buffer and 3-channel foreground output buffer into the
+    /// supplied `r32Float` and `rgba32Float` textures. Flips y to the
+    /// Metal top-left origin the compose shader expects, and expands
+    /// RGB → RGBA (alpha = 1) inline.
+    static func writeMLXOutputsFused(
+        alphaBuffer: any MTLBuffer,
+        foregroundBuffer: any MTLBuffer,
+        alphaDestination: any MTLTexture,
+        foregroundDestination: any MTLTexture,
         entry: MetalDeviceCacheEntry,
         commandBuffer: any MTLCommandBuffer
     ) throws {
         guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
             throw MetalDeviceCacheError.commandEncoderCreationFailed
         }
-        encoder.label = "CorridorKey by LateNite Alpha Buffer → Texture"
-        encoder.setComputePipelineState(entry.computePipelines.alphaBufferToTexture)
-        encoder.setBuffer(buffer, offset: 0, index: 0)
-        encoder.setTexture(destination, index: Int(CKTextureIndexOutput.rawValue))
+        encoder.label = "CorridorKey by LateNite MLX Writeback (fused)"
+        encoder.setComputePipelineState(entry.computePipelines.mlxWritebackFused)
+        encoder.setBuffer(alphaBuffer, offset: 0, index: 0)
+        encoder.setBuffer(foregroundBuffer, offset: 0, index: 1)
+        encoder.setTexture(alphaDestination, index: Int(CKTextureIndexMatte.rawValue))
+        encoder.setTexture(foregroundDestination, index: Int(CKTextureIndexForeground.rawValue))
         dispatch(
             encoder: encoder,
-            pipeline: entry.computePipelines.alphaBufferToTexture,
-            width: destination.width,
-            height: destination.height
-        )
-        encoder.endEncoding()
-    }
-
-    /// Encodes a compute pass that pulls MLX's 3-channel foreground
-    /// output buffer into the supplied `rgba32Float` texture (alpha = 1),
-    /// flipping y and expanding RGB → RGBA in the same pass.
-    static func writeForegroundBufferToTexture(
-        buffer: any MTLBuffer,
-        destination: any MTLTexture,
-        entry: MetalDeviceCacheEntry,
-        commandBuffer: any MTLCommandBuffer
-    ) throws {
-        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
-            throw MetalDeviceCacheError.commandEncoderCreationFailed
-        }
-        encoder.label = "CorridorKey by LateNite Foreground Buffer → Texture"
-        encoder.setComputePipelineState(entry.computePipelines.foregroundBufferToTexture)
-        encoder.setBuffer(buffer, offset: 0, index: 0)
-        encoder.setTexture(destination, index: Int(CKTextureIndexOutput.rawValue))
-        dispatch(
-            encoder: encoder,
-            pipeline: entry.computePipelines.foregroundBufferToTexture,
-            width: destination.width,
-            height: destination.height
+            pipeline: entry.computePipelines.mlxWritebackFused,
+            width: alphaDestination.width,
+            height: alphaDestination.height
         )
         encoder.endEncoding()
     }

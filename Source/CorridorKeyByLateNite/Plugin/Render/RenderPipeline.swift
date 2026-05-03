@@ -1344,7 +1344,7 @@ final class RenderPipeline: @unchecked Sendable {
         // is effectively a memcpy through the Metal driver. The y
         // orientation of the cached bytes already matches the texture
         // convention (the analyse pass wrote them via
-        // `corridorKeyAlphaBufferToTextureKernel` which performs the
+        // `corridorKeyMLXWritebackFusedKernel` which performs the
         // y-flip; we read those flipped bytes back and store them, so
         // the cache is byte-for-byte y-down).
         let bytesPerRow = width * MemoryLayout<Float>.size
