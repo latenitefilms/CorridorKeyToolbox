@@ -12,14 +12,15 @@
 		221345E42F98BC6800CF734C /* corridorkey_mlx_bridge_768.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 221345DD2F98BC6800CF734C /* corridorkey_mlx_bridge_768.mlxfn */; };
 		221345E52F98BC6800CF734C /* corridorkey_mlx_bridge_1024.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 221345DE2F98BC6800CF734C /* corridorkey_mlx_bridge_1024.mlxfn */; };
 		221345E62F98BC6800CF734C /* corridorkey_mlx_bridge_2048.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 221345E02F98BC6800CF734C /* corridorkey_mlx_bridge_2048.mlxfn */; };
+		221345E82F99948900CF734C /* VFX Toolbox.icon in Resources */ = {isa = PBXBuildFile; fileRef = 221345E72F99948900CF734C /* VFX Toolbox.icon */; };
 		221345F52F98BC6800CF734C /* corridorkeyblue_mlx_bridge_512.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 221345F02F98BC6800CF734C /* corridorkeyblue_mlx_bridge_512.mlxfn */; };
 		221345F62F98BC6800CF734C /* corridorkeyblue_mlx_bridge_768.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 221345F12F98BC6800CF734C /* corridorkeyblue_mlx_bridge_768.mlxfn */; };
 		221345F72F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1024.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 221345F22F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1024.mlxfn */; };
 		221345F82F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1536.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 221345F32F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1536.mlxfn */; };
 		221345F92F98BC6800CF734C /* corridorkeyblue_mlx_bridge_2048.mlxfn in Resources */ = {isa = PBXBuildFile; fileRef = 221345F42F98BC6800CF734C /* corridorkeyblue_mlx_bridge_2048.mlxfn */; };
-		221345E82F99948900CF734C /* VFX Toolbox.icon in Resources */ = {isa = PBXBuildFile; fileRef = 221345E72F99948900CF734C /* VFX Toolbox.icon */; };
 		22D097FF2F9887BD0096E749 /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = 22D097FE2F9887BD0096E749 /* Credits.rtf */; };
 		22D0980E2F988FB70096E749 /* Motion Template in Resources */ = {isa = PBXBuildFile; fileRef = 22D0980D2F988FB70096E749 /* Motion Template */; };
+		22D7DAEC2FA7403600D828FB /* Background.png in Resources */ = {isa = PBXBuildFile; fileRef = 22D7DAEB2FA7403600D828FB /* Background.png */; };
 		CK0100000000000000000001 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000001 /* main.swift */; };
 		CK0100000000000000000002 /* CorridorKeyByLateNitePlugIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000002 /* CorridorKeyByLateNitePlugIn.swift */; };
 		CK0100000000000000000003 /* CorridorKeyByLateNitePlugIn+Parameters.swift in Sources */ = {isa = PBXBuildFile; fileRef = CK0200000000000000000003 /* CorridorKeyByLateNitePlugIn+Parameters.swift */; };
@@ -83,9 +84,6 @@
 		SB0000000000000000000003 /* StandaloneRenderEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR0000000000000000000003 /* StandaloneRenderEngine.swift */; };
 		SB0000000000000000000004 /* AnalysisRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR0000000000000000000004 /* AnalysisRunner.swift */; };
 		SB0000000000000000000005 /* ProResExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR0000000000000000000005 /* ProResExporter.swift */; };
-		SB0000000000000000000030 /* BackdropImageLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR000000000000000000000D /* BackdropImageLoader.swift */; };
-		SB0000000000000000000031 /* ScreenColorAutoDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR000000000000000000000E /* ScreenColorAutoDetector.swift */; };
-		SB0000000000000000000032 /* EditorPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR000000000000000000000F /* EditorPreferences.swift */; };
 		SB0000000000000000000006 /* ParameterRanges.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR0000000000000000000006 /* ParameterRanges.swift */; };
 		SB0000000000000000000007 /* EditorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR0000000000000000000007 /* EditorViewModel.swift */; };
 		SB0000000000000000000008 /* MetalPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR0000000000000000000008 /* MetalPreviewView.swift */; };
@@ -128,6 +126,9 @@
 		SB000000000000000000002D /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = SF0000000000000000000005 /* CoreVideo.framework */; };
 		SB000000000000000000002E /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = SP0000000000000000000001 /* MLX */; };
 		SB000000000000000000002F /* MLXNN in Frameworks */ = {isa = PBXBuildFile; productRef = SP0000000000000000000002 /* MLXNN */; };
+		SB0000000000000000000030 /* BackdropImageLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR000000000000000000000D /* BackdropImageLoader.swift */; };
+		SB0000000000000000000031 /* ScreenColorAutoDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR000000000000000000000E /* ScreenColorAutoDetector.swift */; };
+		SB0000000000000000000032 /* EditorPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR000000000000000000000F /* EditorPreferences.swift */; };
 		TP0400000000000000000001 /* TransportPolishTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TP0300000000000000000001 /* TransportPolishTests.swift */; };
 		VH0100000000000000000001 /* VisionHintEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = VH0200000000000000000001 /* VisionHintEngine.swift */; };
 		WB0000000000000000000002 /* SyntheticVideoFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = WR0000000000000000000002 /* SyntheticVideoFixture.swift */; };
@@ -186,14 +187,15 @@
 		221345DE2F98BC6800CF734C /* corridorkey_mlx_bridge_1024.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_1024.mlxfn; sourceTree = "<group>"; };
 		221345DF2F98BC6800CF734C /* corridorkey_mlx_bridge_1536.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_1536.mlxfn; sourceTree = "<group>"; };
 		221345E02F98BC6800CF734C /* corridorkey_mlx_bridge_2048.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkey_mlx_bridge_2048.mlxfn; sourceTree = "<group>"; };
+		221345E72F99948900CF734C /* VFX Toolbox.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; name = "VFX Toolbox.icon"; path = "CorridorKeyByLateNite/WrapperApp/VFX Toolbox.icon"; sourceTree = "<group>"; };
 		221345F02F98BC6800CF734C /* corridorkeyblue_mlx_bridge_512.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkeyblue_mlx_bridge_512.mlxfn; sourceTree = "<group>"; };
 		221345F12F98BC6800CF734C /* corridorkeyblue_mlx_bridge_768.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkeyblue_mlx_bridge_768.mlxfn; sourceTree = "<group>"; };
 		221345F22F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1024.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkeyblue_mlx_bridge_1024.mlxfn; sourceTree = "<group>"; };
 		221345F32F98BC6800CF734C /* corridorkeyblue_mlx_bridge_1536.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkeyblue_mlx_bridge_1536.mlxfn; sourceTree = "<group>"; };
 		221345F42F98BC6800CF734C /* corridorkeyblue_mlx_bridge_2048.mlxfn */ = {isa = PBXFileReference; lastKnownFileType = file; path = corridorkeyblue_mlx_bridge_2048.mlxfn; sourceTree = "<group>"; };
-		221345E72F99948900CF734C /* VFX Toolbox.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; name = "VFX Toolbox.icon"; path = "CorridorKeyByLateNite/WrapperApp/VFX Toolbox.icon"; sourceTree = "<group>"; };
 		22D097FE2F9887BD0096E749 /* Credits.rtf */ = {isa = PBXFileReference; lastKnownFileType = text.rtf; name = Credits.rtf; path = CorridorKeyByLateNite/WrapperApp/Credits.rtf; sourceTree = "<group>"; };
 		22D0980D2F988FB70096E749 /* Motion Template */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "Motion Template"; path = "CorridorKeyByLateNite/WrapperApp/Resources/Motion Template"; sourceTree = "<group>"; };
+		22D7DAEB2FA7403600D828FB /* Background.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = Background.png; path = CorridorKeyByLateNite/WrapperApp/Resources/Background.png; sourceTree = "<group>"; };
 		CK0200000000000000000001 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = main.swift; path = CorridorKeyByLateNite/Plugin/main.swift; sourceTree = "<group>"; };
 		CK0200000000000000000002 /* CorridorKeyByLateNitePlugIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CorridorKeyByLateNitePlugIn.swift; path = CorridorKeyByLateNite/Plugin/CorridorKeyByLateNitePlugIn.swift; sourceTree = "<group>"; };
 		CK0200000000000000000003 /* CorridorKeyByLateNitePlugIn+Parameters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CorridorKeyByLateNitePlugIn+Parameters.swift"; path = "CorridorKeyByLateNite/Plugin/Parameters/CorridorKeyByLateNitePlugIn+Parameters.swift"; sourceTree = "<group>"; };
@@ -268,9 +270,6 @@
 		SR0000000000000000000003 /* StandaloneRenderEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StandaloneRenderEngine.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Engine/StandaloneRenderEngine.swift; sourceTree = "<group>"; };
 		SR0000000000000000000004 /* AnalysisRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AnalysisRunner.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Engine/AnalysisRunner.swift; sourceTree = "<group>"; };
 		SR0000000000000000000005 /* ProResExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ProResExporter.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Engine/ProResExporter.swift; sourceTree = "<group>"; };
-		SR000000000000000000000D /* BackdropImageLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BackdropImageLoader.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Engine/BackdropImageLoader.swift; sourceTree = "<group>"; };
-		SR000000000000000000000E /* ScreenColorAutoDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ScreenColorAutoDetector.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Engine/ScreenColorAutoDetector.swift; sourceTree = "<group>"; };
-		SR000000000000000000000F /* EditorPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EditorPreferences.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Model/EditorPreferences.swift; sourceTree = "<group>"; };
 		SR0000000000000000000006 /* ParameterRanges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ParameterRanges.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Model/ParameterRanges.swift; sourceTree = "<group>"; };
 		SR0000000000000000000007 /* EditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EditorViewModel.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Model/EditorViewModel.swift; sourceTree = "<group>"; };
 		SR0000000000000000000008 /* MetalPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MetalPreviewView.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Views/MetalPreviewView.swift; sourceTree = "<group>"; };
@@ -278,6 +277,9 @@
 		SR000000000000000000000A /* TransportBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TransportBar.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Views/TransportBar.swift; sourceTree = "<group>"; };
 		SR000000000000000000000B /* ExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ExportSheet.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Views/ExportSheet.swift; sourceTree = "<group>"; };
 		SR000000000000000000000C /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EditorView.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Views/EditorView.swift; sourceTree = "<group>"; };
+		SR000000000000000000000D /* BackdropImageLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BackdropImageLoader.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Engine/BackdropImageLoader.swift; sourceTree = "<group>"; };
+		SR000000000000000000000E /* ScreenColorAutoDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ScreenColorAutoDetector.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Engine/ScreenColorAutoDetector.swift; sourceTree = "<group>"; };
+		SR000000000000000000000F /* EditorPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EditorPreferences.swift; path = CorridorKeyByLateNite/WrapperApp/Standalone/Model/EditorPreferences.swift; sourceTree = "<group>"; };
 		TP0300000000000000000001 /* TransportPolishTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TransportPolishTests.swift; path = Tests/WrapperAppTests/TransportPolishTests.swift; sourceTree = "<group>"; };
 		VH0200000000000000000001 /* VisionHintEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VisionHintEngine.swift; path = CorridorKeyByLateNite/Plugin/Inference/VisionHintEngine.swift; sourceTree = "<group>"; };
 		WR0000000000000000000002 /* SyntheticVideoFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SyntheticVideoFixture.swift; path = Tests/WrapperAppTests/SyntheticVideoFixture.swift; sourceTree = "<group>"; };
@@ -432,6 +434,7 @@
 				CK0200000000000000000021 /* Info.plist */,
 				CK0200000000000000000023 /* WrapperApp.entitlements */,
 				CK0200000000000000000017 /* InfoPlist.strings */,
+				22D7DAEB2FA7403600D828FB /* Background.png */,
 			);
 			name = WrapperApp;
 			sourceTree = "<group>";
@@ -713,6 +716,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				22D7DAEC2FA7403600D828FB /* Background.png in Resources */,
 				22D097FF2F9887BD0096E749 /* Credits.rtf in Resources */,
 				22D0980E2F988FB70096E749 /* Motion Template in Resources */,
 				CK0100000000000000000017 /* InfoPlist.strings in Resources */,

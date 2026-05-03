@@ -38,7 +38,12 @@ struct MetalPreviewView: NSViewRepresentable {
     /// `.customColor`. Ignored otherwise.
     let customColor: BackdropColor
     /// User-imported texture drawn behind the keyed image when
-    /// `backdrop` is `.customImage`. Ignored otherwise.
+    /// `backdrop` is `.customImage`. Ignored otherwise. On first
+    /// launch the editor view model pre-loads the bundled
+    /// `Background.png` (Castle Gate sample) into this slot so a
+    /// freshly-launched session previews over a believable backdrop;
+    /// the rendering path is the same one a user-imported image
+    /// uses, so there's nothing to special-case here.
     let customImageTexture: (any MTLTexture)?
 
     func makeCoordinator() -> Coordinator {

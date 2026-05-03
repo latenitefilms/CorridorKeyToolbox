@@ -109,13 +109,36 @@ struct TransportPolishTests {
         #expect(viewModel.isPlaying == false)
     }
 
-    @Test("preview backdrop defaults to checkerboard and round-trips through PreviewBackdropMenu cases")
+    @Test("preview backdrop pre-loads the bundled Sample image into the custom-image slot when available, otherwise defaults to checkerboard, and round-trips through every case")
     @MainActor
-    func previewBackdropDefaultsToCheckerboardAndRoundTrips() async throws {
+    func previewBackdropPreloadsBundledSampleAndRoundTrips() async throws {
+        // Test isolation: the editor view model persists the saved
+        // backdrop selection through the shared `UserDefaults`. When
+        // the previous run left a non-`.customImage` selection, the
+        // init's saved-selection branch wins regardless of whether
+        // the bundled image loaded. Wipe the slate before this test
+        // so the first-launch path is exercised cleanly.
+        UserDefaults.standard.removeObject(forKey: BackdropPreferences.selectedKey)
+        UserDefaults.standard.removeObject(forKey: BackdropPreferences.imageBookmarkKey)
         let engine = try StandaloneRenderEngine()
         let viewModel = EditorViewModel(renderEngine: engine)
-        #expect(viewModel.previewBackdrop == .checkerboard,
-                "Preview backdrop should default to checkerboard so the matte transparency is visible without configuration.")
+        // Production launch: `Bundle.main` resolves to the wrapper
+        // app, `Background.png` decodes into `customBackdropTexture`,
+        // and the launch default lands on `.customImage` so the
+        // user sees the keyer composited over the sample backdrop
+        // immediately. Under XCTest / Swift Testing `Bundle.main`
+        // is the test runner; the decode returns nil and the launch
+        // default stays on the declared `.checkerboard`. Either is
+        // correct — assert the pair stays consistent.
+        if viewModel.customBackdropTexture != nil {
+            #expect(viewModel.previewBackdrop == .customImage,
+                    "Bundled Sample loaded into the custom-image slot — launch default should land on `.customImage` so users see a believable backdrop on first run.")
+            #expect(viewModel.customBackdropImageName == EditorViewModel.bundledBackdropImageName,
+                    "Pre-loaded starter should expose its friendly name in the popover.")
+        } else {
+            #expect(viewModel.previewBackdrop == .checkerboard,
+                    "Bundled Sample unavailable — launch default should stay on `.checkerboard` so the user never lands on an unrenderable case.")
+        }
         for backdrop in PreviewBackdrop.allCases {
             viewModel.previewBackdrop = backdrop
             #expect(viewModel.previewBackdrop == backdrop)

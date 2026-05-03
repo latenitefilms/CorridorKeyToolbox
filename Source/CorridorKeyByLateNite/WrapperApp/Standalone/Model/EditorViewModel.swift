@@ -67,13 +67,17 @@ enum EditorExportStatus: @unchecked Sendable, Equatable {
 }
 
 /// Backdrop the preview surface composites the keyed image over.
-/// Defaults to a transparency-aware checkerboard so users can read
-/// the matte at a glance, with solid-colour options for alternate
-/// reference looks. The two final cases — `.customColor` and
-/// `.customImage` — pair with `EditorViewModel.customBackdropColor`
-/// and `customBackdropTexture` respectively; the enum identity is
-/// what the Picker selects on, while the supporting data lives on
-/// the view model so the inline radio rows still get a stable tag.
+/// `.customImage` is the launch default: the editor pre-loads the
+/// bundled `Background.png` (a Castle Gate sample) into the
+/// custom-image slot on first launch so a freshly-launched session
+/// previews the keyer over a believable backdrop instead of a flat
+/// checkerboard. The remaining cases cover the transparency-aware
+/// checkerboard, four solid reference colours, and a user-picked
+/// solid colour. `.customColor` and `.customImage` pair with
+/// `EditorViewModel.customBackdropColor` and `customBackdropTexture`
+/// respectively; the enum identity is what the Picker selects on,
+/// while the supporting data lives on the view model so the inline
+/// radio rows still get a stable tag.
 enum PreviewBackdrop: Hashable, Sendable, CaseIterable, Identifiable {
     case checkerboard
     case white
@@ -288,13 +292,17 @@ final class EditorViewModel {
             renderPreview(at: playheadTime)
         }
     }
-    /// Backdrop drawn behind the keyed preview image. Defaults to
-    /// the transparency-aware checkerboard pattern; right-clicking
-    /// the preview surfaces the picker. Persisted across editor
-    /// sessions via `BackdropPreferences` so the user's pick (Yellow,
-    /// Custom Colour, etc.) survives a quit-and-relaunch — losing the
-    /// backdrop on every launch was a recurring papercut. Initial
-    /// value is restored in `init`.
+    /// Backdrop drawn behind the keyed preview image. The declared
+    /// default is `.checkerboard`; `init` upgrades to `.customImage`
+    /// on first launch by pre-loading the bundled `Background.png`
+    /// (Castle Gate sample) into `customBackdropTexture`, so a
+    /// freshly-launched editor composites its first clip over a
+    /// believable scene rather than a flat checkerboard. The
+    /// Background popover lets the user replace or clear that
+    /// starter image, or pick a solid colour / checkerboard; that
+    /// pick is persisted via `BackdropPreferences` and restored on
+    /// the next launch — losing the backdrop on every launch was a
+    /// recurring papercut.
     var previewBackdrop: PreviewBackdrop = .checkerboard {
         didSet {
             guard previewBackdrop != oldValue else { return }
@@ -380,27 +388,60 @@ final class EditorViewModel {
     init(renderEngine: StandaloneRenderEngine) {
         self.renderEngine = renderEngine
         self.customBackdropColor = BackdropPreferences.loadCustomColor() ?? .default
-        // Restore the user's last backdrop pick. `.customImage` is
-        // deferred until the texture loads — switching to it before
-        // the texture is available would flash the user with a blank
-        // preview surface for the few hundred milliseconds of decode
-        // latency. Solid colours and the checkerboard apply
-        // immediately because they have no async dependency. Any
-        // assignment via `=` skips the property's `didSet`, so this
-        // restoration doesn't write the value straight back to
-        // UserDefaults — the on-disk record stays exactly as the user
-        // left it.
-        if let savedSelection = BackdropPreferences.loadSelected(),
-           savedSelection != .customImage {
-            self.previewBackdrop = savedSelection
+
+        let savedSelection = BackdropPreferences.loadSelected()
+        let bookmarkData = BackdropPreferences.loadImageBookmark()
+
+        // Pre-load the bundled `Background.png` (Castle Gate sample)
+        // into the custom-image slot whenever the user hasn't
+        // imported their own. Covers the first-ever launch (no
+        // saved selection, no bookmark) AND every subsequent launch
+        // where the user kept the bundled starter — the decoded
+        // texture isn't persisted across launches, so we re-decode
+        // it each time. Skipped when a user bookmark exists; the
+        // async restore path below will install their image into
+        // the same slot.
+        if bookmarkData == nil,
+           let bundledTexture = Self.loadBundledBackdropTexture(device: renderEngine.device) {
+            self.customBackdropTexture = bundledTexture
+            self.customBackdropImageName = Self.bundledBackdropImageName
         }
+
+        // Restore the user's last backdrop pick. `.customImage` is
+        // honoured immediately when we have either the bundled
+        // starter (just loaded above) or a user bookmark queued for
+        // async restore; otherwise we fall back to checkerboard so
+        // the user doesn't land on an unrenderable case. Other
+        // saved selections apply directly. First launch with the
+        // bundled image loaded defaults to `.customImage` so the
+        // user sees the keyer composited over the sample backdrop
+        // immediately. Any assignment via `=` skips the property's
+        // `didSet`, so this restoration doesn't write the value
+        // straight back to UserDefaults — the on-disk record stays
+        // exactly as the user left it. The first-launch upgrade is
+        // saved explicitly via `BackdropPreferences.saveSelected`
+        // so subsequent launches restore it through the regular
+        // saved-selection path.
+        if let savedSelection {
+            if savedSelection == .customImage,
+               self.customBackdropTexture == nil,
+               bookmarkData == nil {
+                self.previewBackdrop = .checkerboard
+            } else {
+                self.previewBackdrop = savedSelection
+            }
+        } else if self.customBackdropTexture != nil {
+            self.previewBackdrop = .customImage
+            BackdropPreferences.saveSelected(.customImage)
+        }
+
         EditorWorkRegistry.shared.register(self)
         // Restore the user's last imported image asynchronously so
         // the editor window appears immediately. If the bookmark is
         // stale (file moved / deleted) we silently fall back to
         // checkerboard rather than surfacing an error on launch.
-        if let bookmarkData = BackdropPreferences.loadImageBookmark() {
-            let restoreToImageBackdrop = BackdropPreferences.loadSelected() == .customImage
+        if let bookmarkData {
+            let restoreToImageBackdrop = savedSelection == .customImage
             Task { [weak self, device = renderEngine.device] in
                 await Self.restoreCustomBackdropImage(
                     bookmarkData: bookmarkData,
@@ -411,6 +452,13 @@ final class EditorViewModel {
             }
         }
     }
+
+    /// Friendly display name surfaced in the Background popover when
+    /// the editor falls back to the bundled `Background.png` starter.
+    /// Reads more naturally than the literal filename ("Background.png")
+    /// while still telling the user this is a built-in image they can
+    /// replace or clear.
+    static let bundledBackdropImageName = "Sample"
 
     // MARK: - Custom backdrop import
 
@@ -443,13 +491,24 @@ final class EditorViewModel {
         self.customBackdropTexture = texture
         self.customBackdropImageName = url.lastPathComponent
         BackdropPreferences.saveImageBookmark(bookmarkData)
+        // Replacing the bundled starter image leaves `previewBackdrop`
+        // already on `.customImage`, so the property's `didSet`
+        // would short-circuit before saving the selection. Save it
+        // explicitly here so subsequent launches restore the user's
+        // image instead of falling back to the checkerboard while
+        // the bookmark loads silently in the background.
         self.previewBackdrop = .customImage
+        BackdropPreferences.saveSelected(.customImage)
         renderPreview(at: playheadTime)
     }
 
-    /// Drops the imported image and falls back to the checkerboard
-    /// backdrop. Clears the persisted bookmark too — next launch
-    /// won't try to re-load a file the user just removed.
+    /// Drops the imported (or bundled-starter) image and falls back
+    /// to the checkerboard backdrop. Clears the persisted bookmark
+    /// too — next launch won't try to re-load a file the user just
+    /// removed. Once cleared, the bundled starter doesn't return on
+    /// the next launch either: the saved selection now reads
+    /// `.checkerboard`, which the init's saved-selection path
+    /// honours directly.
     func clearBackdropImage() {
         customBackdropTexture = nil
         customBackdropImageName = nil
@@ -458,6 +517,20 @@ final class EditorViewModel {
             previewBackdrop = .checkerboard
             renderPreview(at: playheadTime)
         }
+    }
+
+    /// Loads the bundled `Background.png` (the Castle Gate sample)
+    /// from the wrapper app's `Resources` group into a Metal texture.
+    /// Returns `nil` when the resource isn't present in `Bundle.main`
+    /// — the test runner's bundle, for example — or when the decode
+    /// fails. Callers fall back to the checkerboard backdrop in that
+    /// case so the user never lands on an unrenderable selection.
+    private static func loadBundledBackdropTexture(device: any MTLDevice) -> (any MTLTexture)? {
+        guard let url = Bundle.main.url(forResource: "Background", withExtension: "png"),
+              let data = try? Data(contentsOf: url) else {
+            return nil
+        }
+        return try? BackdropImageLoader.makeTexture(from: data, device: device)
     }
 
     /// Resolves a security-scoped bookmark and pushes the resulting
