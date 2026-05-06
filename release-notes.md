@@ -5,6 +5,8 @@
 **🎉 Released:**
 - 4th May 2026
 
+This is the first release on the Mac App Store! 🥳
+
 **🔨 Improvements:**
 - We now have a new icon, designed by the amazing [Matthew Skiles](http://matthewskiles.com)!
 - Now runs on macOS Sonoma 14.6 or later (on Apple Silicon only).
