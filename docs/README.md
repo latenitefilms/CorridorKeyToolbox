@@ -2,14 +2,10 @@
 
 **CorridorKey by LateNite** brings [Corridor Digital's](https://www.corridordigital.com) [CorridorKey](https://github.com/nikopueringer/CorridorKey) to Final Cut Pro. 🥳
 
-!!!primary
-We're currently in a **public beta testing phase**. 👷
-!!!
-
 This is **NOT** a fork. We've taken the blue and green CorridorKey models, converted them to MLX and built a completely new Swift & Swift UI engine powered by modern Apple frameworks. 🔥
 
 !!!success
-[Download](/download) on **TestFlight** and find the source code on [GitHub](https://github.com/latenitefilms/CorridorKeyByLateNite)!
+[Download](/download) for free on the Mac App Store and find the source code on [GitHub](https://github.com/latenitefilms/CorridorKeyByLateNite)!
 !!!
 
 Whilst there are already some great fork's of CorridorKey, such as [EZ-CorridorKey](https://github.com/edenaion/EZ-CorridorKey), none of them are purposely build for **Mac & Apple Silicon**.

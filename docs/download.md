@@ -1,16 +1,6 @@
 # Download
 
-!!!primary
-We're currently in a **public beta testing phase** on Apple's TestFlight.
-!!!
-
-You can download the latest **CorridorKey by LateNite** beta on [Apple's TestFlight](https://testflight.apple.com/join/2Xq4uckM).
-
-If you've never used TestFlight before, it's basically Apple's Mac App Store equivalent for pre-release/beta applications.
-
-Once you download TestFlight to your computer, the above link will open CorridorKey by LateNite in the TestFlight application.
-
-You can learn more about TestFlight on [Apple's TestFlight website](https://testflight.apple.com).
+You can download the latest **CorridorKey by LateNite** on the [Mac App Store](https://apps.apple.com/app/corridorkey-by-latenite/id6763244520) for free.
 
 ---
 
@@ -23,6 +13,18 @@ You can find all the source code on [GitHub](https://github.com/latenitefilms/Co
 The CorridorKey models however have a [CC BY-NC-SA 4.0](https://github.com/nikopueringer/CorridorKey/blob/main/LICENSE) license.
 
 We use MLX versions of the [green screen model](https://huggingface.co/nikopueringer/CorridorKey_v1.0) and [blue screen model](https://huggingface.co/nikopueringer/CorridorKeyBlue_1.0).
+
+---
+
+## TestFlight
+
+When we're working on new features or bug fixes, we'll share them on TestFlight for early feedback.
+
+You can find the TestFlight links on the [FCP Cafe Discord](https://ltnt.tv/discord).
+
+TestFlight builds are valid for **90 days** from the date they are uploaded to App Store Connect.
+
+After 90 days, the build expires and becomes unavailable for testing.
 
 ---
 
