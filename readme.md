@@ -12,7 +12,7 @@ Whilst there are already some great fork's of CorridorKey, such as [EZ-CorridorK
 
 **CorridorKey by LateNite** brings an Effect directly into **Final Cut Pro**, as well as a **Standalone Editor**.
 
-Optimised for **ProRes** in and out with hardware encoding. 🏎️
+Optimised for **ProRes** in and out with hardware decoding and encoding. 🏎️
 
 ---
 
